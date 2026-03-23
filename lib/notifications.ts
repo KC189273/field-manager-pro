@@ -16,7 +16,7 @@ export async function sendEmail(to: string | string[], subject: string, html: st
 }
 
 export function welcomeEmailHtml(fullName: string, username: string, password: string, role: string): string {
-  const appUrl = process.env.APP_URL ?? 'https://field-manager-pro-juo3-sg2425231-2580s-projects.vercel.app'
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
   const roleLabel = role === 'manager' ? 'Manager' : role === 'ops_manager' ? 'Ops Manager' : 'Employee'
   return `
     <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">

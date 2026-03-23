@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { getSession, isManager } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { sendEmail, welcomeEmailHtml } from '@/lib/notifications'
 
 export async function GET() {
   const session = await getSession()
@@ -67,6 +68,13 @@ export async function POST(req: NextRequest) {
      VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
     [username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(), finalManagerId, session.id]
   )
+
+  await sendEmail(
+    email.trim(),
+    'Welcome to Field Manager Pro',
+    welcomeEmailHtml(fullName.trim(), username.trim().toLowerCase(), password, finalRole)
+  )
+
   return NextResponse.json({ ok: true, id: user!.id })
 }
 

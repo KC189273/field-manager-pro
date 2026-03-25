@@ -84,7 +84,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, isActive, password, fullName, email, managerId } = await req.json()
+  const { userId, isActive, password, fullName, email, managerId, role } = await req.json()
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -95,6 +95,22 @@ export async function PATCH(req: NextRequest) {
     if (!target || target.manager_id !== session.id) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+  }
+
+  // Role change validation
+  if (role !== undefined) {
+    const allowedRoles = session.role === 'developer'
+      ? ['employee', 'manager', 'ops_manager']
+      : ['employee', 'manager', 'ops_manager'] // managers can promote/demote within non-developer roles
+    if (!allowedRoles.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
+    }
+    // When promoting to manager, clear their manager_id (managers don't report to managers)
+    const clearManagerId = role === 'manager' || role === 'ops_manager'
+    await query(
+      `UPDATE users SET role = $1${clearManagerId ? ', manager_id = NULL' : ''} WHERE id = $2`,
+      [role, userId]
+    )
   }
 
   if (isActive !== undefined) {

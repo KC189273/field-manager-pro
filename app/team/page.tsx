@@ -27,7 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '' }
+const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '' }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -72,7 +72,7 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '' })
+    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role })
     setShowCreate(false)
   }
 
@@ -104,6 +104,7 @@ export default function TeamPage() {
     if (editForm.password) body.password = editForm.password
     if (editForm.fullName !== editUser.full_name) body.fullName = editForm.fullName
     if (editForm.email !== editUser.email) body.email = editForm.email
+    if (editForm.role !== editUser.role) body.role = editForm.role
     if (isDev) body.managerId = editForm.managerId || null
 
     const res = await fetch('/api/team/users', {
@@ -232,7 +233,19 @@ export default function TeamPage() {
             <input placeholder="New password (leave blank to keep)" type="password" value={editForm.password}
               onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            {isDev && editUser.role === 'employee' && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Role</label>
+              <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="employee">Employee</option>
+                <option value="manager">Manager</option>
+                <option value="ops_manager">Ops Manager</option>
+              </select>
+              {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
+                <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
+              )}
+            </div>
+            {isDev && editForm.role === 'employee' && managers.length > 0 && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
                 <select value={editForm.managerId}

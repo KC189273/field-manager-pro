@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 const COOKIE = 'fmp-session'
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 
-export type Role = 'employee' | 'manager' | 'ops_manager' | 'developer'
+export type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
 
 export interface SessionPayload {
   id: string
@@ -12,6 +12,7 @@ export interface SessionPayload {
   fullName: string
   email: string
   role: Role
+  org_id?: string | null
 }
 
 export async function createSession(payload: SessionPayload): Promise<string> {
@@ -62,6 +63,22 @@ export function isDeveloper(role: Role): boolean {
   return role === 'developer'
 }
 
+export function isOwner(role: Role): boolean {
+  return role === 'owner'
+}
+
 export function canManageTime(role: Role): boolean {
-  return isManager(role) || isDeveloper(role)
+  return isManager(role) || isOwner(role) || isDeveloper(role)
+}
+
+export function canSubmitExpense(role: Role): boolean {
+  return role !== 'employee'
+}
+
+export function canApproveExpense(role: Role): boolean {
+  return role === 'owner' || role === 'developer'
+}
+
+export function canViewTeam(role: Role): boolean {
+  return isManager(role) || isOwner(role) || isDeveloper(role)
 }

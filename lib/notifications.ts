@@ -101,3 +101,109 @@ export function manualTimeEntryHtml(employeeName: string, date: string, clockIn:
     </div>
   `
 }
+
+export function expenseSubmittedHtml(submitterName: string, amount: string, category: string, description: string, date: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">New Expense Submitted</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:20px 24px;">
+        <p style="font-size:15px;color:#1c1c1e;margin:0 0 16px;"><strong>${submitterName}</strong> has submitted an expense for your review.</p>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:110px;">Date</td><td style="padding:5px 0;color:#1c1c1e;">${date}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Category</td><td style="padding:5px 0;color:#1c1c1e;">${category}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Amount</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;font-size:16px;">$${amount}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Notes</td><td style="padding:5px 0;color:#1c1c1e;">${description || '—'}</td></tr>
+          </table>
+        </div>
+        <a href="${appUrl}/expenses" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">Review Expense</a>
+      </div>
+    </div>
+  `
+}
+
+export function expenseApprovedHtml(recipientName: string, amount: string, category: string, date: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Expense Approved</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:20px 24px;">
+        <div style="background:#e8f5e9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
+          <p style="font-size:16px;font-weight:700;color:#2e7d32;margin:0 0 4px;">Expense Approved</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${recipientName}, your expense has been approved.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:110px;">Date</td><td style="padding:5px 0;color:#1c1c1e;">${date}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Category</td><td style="padding:5px 0;color:#1c1c1e;">${category}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Amount</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;font-size:16px;">$${amount}</td></tr>
+          </table>
+        </div>
+        <p style="font-size:13px;color:#8e8e93;margin:0;">You will receive another notification once payment is processed. <a href="${appUrl}/expenses" style="color:#7c3aed;">View in FMP</a></p>
+      </div>
+    </div>
+  `
+}
+
+export function expenseRejectedHtml(recipientName: string, amount: string, category: string, date: string, reason: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Expense Not Approved</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:20px 24px;">
+        <div style="background:#fbe9e7;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
+          <p style="font-size:16px;font-weight:700;color:#bf360c;margin:0 0 4px;">Expense Not Approved</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${recipientName}, your expense submission was not approved.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:16px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:110px;">Date</td><td style="padding:5px 0;color:#1c1c1e;">${date}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Category</td><td style="padding:5px 0;color:#1c1c1e;">${category}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Amount</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;">$${amount}</td></tr>
+          </table>
+        </div>
+        <div style="background:#fff3e0;border-radius:8px;padding:12px 14px;margin-bottom:20px;">
+          <p style="font-size:13px;font-weight:600;color:#e65100;margin:0 0 4px;">Reason:</p>
+          <p style="font-size:14px;color:#555;margin:0;">${reason}</p>
+        </div>
+        <a href="${appUrl}/expenses" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View in FMP</a>
+      </div>
+    </div>
+  `
+}
+
+export function expensePaidHtml(recipientName: string, amount: string, category: string, date: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Expense Paid</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:20px 24px;">
+        <div style="background:#e8f5e9;border-radius:10px;padding:14px 18px;margin-bottom:20px;">
+          <p style="font-size:16px;font-weight:700;color:#2e7d32;margin:0 0 4px;">Payment Processed</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${recipientName}, your expense reimbursement has been marked as paid.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:110px;">Date</td><td style="padding:5px 0;color:#1c1c1e;">${date}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Category</td><td style="padding:5px 0;color:#1c1c1e;">${category}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Amount</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;font-size:16px;">$${amount}</td></tr>
+          </table>
+        </div>
+        <a href="${appUrl}/expenses" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View in FMP</a>
+      </div>
+    </div>
+  `
+}

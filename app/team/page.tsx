@@ -3,10 +3,12 @@
 import { useState, useEffect, FormEvent } from 'react'
 import NavBar from '@/components/NavBar'
 
+interface Org { id: string; name: string }
+
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
 }
 
 interface User {
@@ -23,15 +25,17 @@ const ROLE_LABELS: Record<string, string> = {
   employee: 'Employee',
   manager: 'Manager',
   ops_manager: 'Ops Manager',
+  owner: 'Owner',
   developer: 'Developer',
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '' }
+const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '' }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [users, setUsers] = useState<User[]>([])
+  const [orgs, setOrgs] = useState<Org[]>([])
   const [showCreate, setShowCreate] = useState(false)
   const [createFor, setCreateFor] = useState<'employee' | 'manager'>('employee')
   const [editUser, setEditUser] = useState<User | null>(null)
@@ -40,9 +44,15 @@ export default function TeamPage() {
   const [editForm, setEditForm] = useState(emptyEdit)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' }>({ text: '', type: 'success' })
+  const [storePanel, setStorePanel] = useState<string | null>(null) // manager id whose panel is open
+  const [allLocations, setAllLocations] = useState<{ id: string; address: string; active: boolean }[]>([])
+  const [assignedStoreIds, setAssignedStoreIds] = useState<Set<string>>(new Set())
+  const [savingStores, setSavingStores] = useState(false)
 
   const isDev = session?.role === 'developer'
-  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager')
+  const isOwner = session?.role === 'owner'
+  const isDevOrOwner = isDev || isOwner
+  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner')
   const employees = users.filter(u => u.role === 'employee')
 
   async function loadUsers() {
@@ -54,7 +64,12 @@ export default function TeamPage() {
   }
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.json()).then(setSession)
+    fetch('/api/auth/me').then(r => r.json()).then(s => {
+      setSession(s)
+      if (s?.role === 'developer') {
+        fetch('/api/orgs').then(r => r.json()).then(d => setOrgs(d.orgs ?? []))
+      }
+    })
     loadUsers()
   }, [])
 
@@ -72,7 +87,7 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role })
+    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '' })
     setShowCreate(false)
   }
 
@@ -105,7 +120,8 @@ export default function TeamPage() {
     if (editForm.fullName !== editUser.full_name) body.fullName = editForm.fullName
     if (editForm.email !== editUser.email) body.email = editForm.email
     if (editForm.role !== editUser.role) body.role = editForm.role
-    if (isDev) body.managerId = editForm.managerId || null
+    if (editForm.role !== 'developer' && editForm.role !== 'owner') body.managerId = editForm.managerId || null
+    if (isDev) body.orgId = editForm.orgId || null
 
     const res = await fetch('/api/team/users', {
       method: 'PATCH',
@@ -149,6 +165,40 @@ export default function TeamPage() {
       const data = await res.json()
       showMsg(data.error || 'Delete failed', 'error')
     }
+  }
+
+  async function openStorePanel(managerId: string) {
+    if (storePanel === managerId) { setStorePanel(null); return }
+    setStorePanel(managerId)
+    // Load all locations + current assignments in parallel
+    const [locRes, assignRes] = await Promise.all([
+      fetch('/api/dm-store-locations').then(r => r.json()),
+      fetch(`/api/dm-manager-stores?managerId=${managerId}`).then(r => r.json()),
+    ])
+    setAllLocations(locRes.locations ?? [])
+    setAssignedStoreIds(new Set(assignRes.storeIds ?? []))
+  }
+
+  function toggleStoreAssignment(storeId: string) {
+    setAssignedStoreIds(prev => {
+      const next = new Set(prev)
+      if (next.has(storeId)) next.delete(storeId)
+      else next.add(storeId)
+      return next
+    })
+  }
+
+  async function saveStoreAssignments() {
+    if (!storePanel) return
+    setSavingStores(true)
+    await fetch('/api/dm-manager-stores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ managerId: storePanel, storeIds: [...assignedStoreIds] }),
+    })
+    setSavingStores(false)
+    showMsg('Store assignments saved')
+    setStorePanel(null)
   }
 
   function getManagerName(managerId: string | null): string {
@@ -198,14 +248,18 @@ export default function TeamPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
+                {isDev && <option value="owner">Owner</option>}
               </select>
             )}
-            {createFor === 'employee' && isDev && managers.length > 0 && (
-              <select value={form.managerId} onChange={e => setForm(p => ({ ...p, managerId: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="">No manager assigned</option>
-                {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-              </select>
+            {isDevOrOwner && managers.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
+                <select value={form.managerId} onChange={e => setForm(p => ({ ...p, managerId: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                  <option value="">No manager assigned</option>
+                  {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                </select>
+              </div>
             )}
             <div className="flex gap-2">
               <button type="submit" disabled={loading}
@@ -240,12 +294,13 @@ export default function TeamPage() {
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
+                {isDev && <option value="owner">Owner</option>}
               </select>
               {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
                 <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
               )}
             </div>
-            {isDev && editForm.role === 'employee' && managers.length > 0 && (
+            {isDevOrOwner && editForm.role !== 'developer' && editForm.role !== 'owner' && managers.length > 0 && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
                 <select value={editForm.managerId}
@@ -253,6 +308,17 @@ export default function TeamPage() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                   <option value="">Unassigned</option>
                   {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                </select>
+              </div>
+            )}
+            {isDev && orgs.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Organization</label>
+                <select value={editForm.orgId}
+                  onChange={e => setEditForm(p => ({ ...p, orgId: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                  <option value="">Unassigned</option>
+                  {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
                 </select>
               </div>
             )}
@@ -287,8 +353,8 @@ export default function TeamPage() {
           </div>
         )}
 
-        {/* DEVELOPER VIEW */}
-        {isDev && (
+        {/* DEVELOPER / OWNER VIEW */}
+        {isDevOrOwner && (
           <>
             {/* Managers section */}
             <div className="mb-6">
@@ -304,14 +370,75 @@ export default function TeamPage() {
               ) : (
                 <div className="space-y-2">
                   {managers.map(user => (
-                    <UserCard
-                      key={user.id}
-                      user={user}
-                      subtitle={`${ROLE_LABELS[user.role]} · ${user.email}`}
-                      onEdit={() => openEdit(user)}
-                      onToggle={() => toggleActive(user)}
-                      onDelete={() => setConfirmDelete(user)}
-                    />
+                    <div key={user.id}>
+                      <UserCard
+                        user={user}
+                        subtitle={`${ROLE_LABELS[user.role]} · ${user.email}`}
+                        onEdit={() => openEdit(user)}
+                        onToggle={() => toggleActive(user)}
+                        onDelete={() => setConfirmDelete(user)}
+                        onStores={user.role === 'manager' ? () => openStorePanel(user.id) : undefined}
+                        storesPanelOpen={storePanel === user.id}
+                      />
+                      {/* Store assignment panel */}
+                      {storePanel === user.id && (
+                        <div className="bg-gray-900 border border-gray-700 border-t-0 rounded-b-2xl px-4 pb-4 -mt-2 pt-4">
+                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                            Assign Stores — {user.full_name}
+                            <span className="ml-2 text-gray-600 normal-case font-normal">({assignedStoreIds.size} selected)</span>
+                          </p>
+                          {allLocations.length === 0 ? (
+                            <p className="text-gray-600 text-sm">No store locations found. Add stores in DM Store Visit → Manage Stores.</p>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-3 mb-2">
+                                <button
+                                  onClick={() => {
+                                    const activeIds = allLocations.filter(l => l.active).map(l => l.id)
+                                    const allSelected = activeIds.every(id => assignedStoreIds.has(id))
+                                    setAssignedStoreIds(allSelected ? new Set() : new Set(activeIds))
+                                  }}
+                                  className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+                                >
+                                  {allLocations.filter(l => l.active).every(l => assignedStoreIds.has(l.id))
+                                    ? 'Deselect All'
+                                    : 'Select All'}
+                                </button>
+                                <span className="text-xs text-gray-600">
+                                  {assignedStoreIds.size} of {allLocations.filter(l => l.active).length} selected
+                                </span>
+                              </div>
+                              <div className="max-h-64 overflow-y-auto space-y-1 mb-3 pr-1">
+                                {allLocations.map(loc => (
+                                  <label key={loc.id} className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-colors ${
+                                    assignedStoreIds.has(loc.id) ? 'bg-violet-600/15' : 'hover:bg-gray-800'
+                                  } ${!loc.active ? 'opacity-40' : ''}`}>
+                                    <input
+                                      type="checkbox"
+                                      checked={assignedStoreIds.has(loc.id)}
+                                      onChange={() => toggleStoreAssignment(loc.id)}
+                                      className="accent-violet-500 w-4 h-4 flex-shrink-0"
+                                    />
+                                    <span className="text-sm text-gray-200">{loc.address}</span>
+                                    {!loc.active && <span className="text-xs text-gray-600 ml-auto">Inactive</span>}
+                                  </label>
+                                ))}
+                              </div>
+                              <div className="flex gap-2">
+                                <button onClick={saveStoreAssignments} disabled={savingStores}
+                                  className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-xl transition-colors">
+                                  {savingStores ? 'Saving…' : 'Save Assignments'}
+                                </button>
+                                <button onClick={() => setStorePanel(null)}
+                                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-semibold py-2 rounded-xl transition-colors">
+                                  Cancel
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -347,7 +474,7 @@ export default function TeamPage() {
         )}
 
         {/* MANAGER VIEW */}
-        {!isDev && session && (
+        {!isDevOrOwner && session && (
           <div>
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">My Team</p>
@@ -385,15 +512,19 @@ function UserCard({
   onEdit,
   onToggle,
   onDelete,
+  onStores,
+  storesPanelOpen,
 }: {
   user: User
   subtitle: string
   onEdit: () => void
   onToggle: () => void
   onDelete: () => void
+  onStores?: () => void
+  storesPanelOpen?: boolean
 }) {
   return (
-    <div className={`bg-gray-900 border rounded-2xl px-4 py-3 ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'}`}>
+    <div className={`bg-gray-900 border px-4 py-3 ${storesPanelOpen ? 'rounded-t-2xl border-gray-700' : 'rounded-2xl'} ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -406,11 +537,20 @@ function UserCard({
           </div>
           <p className="text-xs text-gray-500 mt-0.5 truncate">@{user.username} · {subtitle}</p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
           <button onClick={onEdit}
             className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
             Edit
           </button>
+          {onStores && (
+            <>
+              <span className="text-gray-700">·</span>
+              <button onClick={onStores}
+                className={`text-xs font-semibold transition-colors ${storesPanelOpen ? 'text-violet-300' : 'text-blue-400 hover:text-blue-300'}`}>
+                Stores
+              </button>
+            </>
+          )}
           <span className="text-gray-700">·</span>
           <button onClick={onToggle}
             className={`text-xs font-semibold transition-colors ${user.is_active ? 'text-amber-400 hover:text-amber-300' : 'text-green-400 hover:text-green-300'}`}>

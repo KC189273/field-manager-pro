@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import NavBar from '@/components/NavBar'
+import { startNativeTracking, stopNativeTracking } from '@/lib/gps-native'
 
 interface Session {
   id: string
@@ -25,6 +26,7 @@ export default function ClockPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [elapsed, setElapsed] = useState('')
   const [locating, setLocating] = useState(false)
+  const [gpsStatus, setGpsStatus] = useState<'unknown' | 'granted' | 'denied' | 'unavailable'>('unknown')
 
   const fetchStatus = useCallback(async () => {
     const [meRes, statusRes] = await Promise.all([
@@ -36,6 +38,16 @@ export default function ClockPage() {
   }, [])
 
   useEffect(() => { fetchStatus() }, [fetchStatus])
+
+  useEffect(() => {
+    if (!navigator.geolocation) { setGpsStatus('unavailable'); return }
+    navigator.permissions?.query({ name: 'geolocation' as PermissionName })
+      .then(result => {
+        setGpsStatus(result.state === 'granted' ? 'granted' : result.state === 'denied' ? 'denied' : 'unknown')
+        result.onchange = () => setGpsStatus(result.state === 'granted' ? 'granted' : result.state === 'denied' ? 'denied' : 'unknown')
+      })
+      .catch(() => {})
+  }, [])
 
   // Update elapsed timer
   useEffect(() => {
@@ -71,7 +83,7 @@ export default function ClockPage() {
         }).catch(() => {})
       })
     }
-    const id = setInterval(sendBreadcrumb, 15 * 60 * 1000)
+    const id = setInterval(sendBreadcrumb, 3 * 60 * 1000)
     return () => clearInterval(id)
   }, [status?.activeShift])
 
@@ -104,6 +116,8 @@ export default function ClockPage() {
       } else {
         setMessage({ text: 'Clocked in successfully', type: 'success' })
         await fetchStatus()
+        // Start native background GPS tracking (no-op in browser)
+        if (data.shiftId) startNativeTracking(data.shiftId)
       }
     } catch {
       setMessage({ text: 'Network error', type: 'error' })
@@ -129,6 +143,7 @@ export default function ClockPage() {
         setMessage({ text: data.error || 'Failed to clock out', type: 'error' })
       } else {
         setMessage({ text: 'Clocked out successfully', type: 'success' })
+        stopNativeTracking()
         await fetchStatus()
       }
     } catch {
@@ -175,6 +190,19 @@ export default function ClockPage() {
             message.type === 'success' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'
           }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* GPS Status */}
+        {gpsStatus === 'denied' && (
+          <div className="w-full mb-4 px-4 py-3 rounded-xl bg-amber-900/40 border border-amber-700 text-amber-300 text-sm">
+            <p className="font-semibold mb-1">⚠️ Location access is blocked</p>
+            <p className="text-xs text-amber-400">GPS tracking is required for shift tracking. To fix: open your browser settings, find this site under Permissions, and set Location to Allow.</p>
+          </div>
+        )}
+        {gpsStatus === 'unavailable' && (
+          <div className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 text-sm">
+            <p className="text-xs">GPS is not available on this device.</p>
           </div>
         )}
 

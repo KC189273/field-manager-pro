@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, isManager } from '@/lib/auth'
+import { getSession, isManager, isOwner, type Role } from '@/lib/auth'
+import { getOrgFilter, appendOrgFilter } from '@/lib/org'
+
+const canManageShifts = (role: Role) => isManager(role) || isOwner(role) || role === 'developer'
 import { query } from '@/lib/db'
 import { sendEmail, manualTimeEntryHtml } from '@/lib/notifications'
 
@@ -8,11 +11,44 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const userId = searchParams.get('userId') ?? session.id
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const team = searchParams.get('team') === 'true'
 
-  if (userId !== session.id && !isManager(session.role)) {
+  // Team view: all employees reporting to this manager/owner/developer
+  if (team) {
+    if (!canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const params: unknown[] = []
+    let sql = `
+      SELECT s.*, u.full_name, u.username,
+        mb.full_name as manual_by_name,
+        EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) as duration_seconds
+      FROM shifts s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN users mb ON mb.id = s.manual_by
+      WHERE u.role != 'developer'
+    `
+
+    if (isManager(session.role)) {
+      params.push(session.id)
+      sql += ` AND u.manager_id = $${params.length}`
+    } else {
+      const orgFilter = await getOrgFilter(session)
+      sql += appendOrgFilter(orgFilter, params, 'u')
+    }
+
+    if (from) { params.push(from); sql += ` AND s.clock_in_at >= $${params.length}` }
+    if (to) { params.push(to); sql += ` AND s.clock_in_at <= $${params.length}` }
+    sql += ` ORDER BY u.full_name, s.clock_in_at`
+
+    const shifts = await query(sql, params)
+    return NextResponse.json({ shifts })
+  }
+
+  const userId = searchParams.get('userId') ?? session.id
+
+  if (userId !== session.id && !canManageShifts(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -37,7 +73,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || !isManager(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session || !canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { userId, clockIn, clockOut, note } = await req.json()
   if (!userId || !clockIn || !note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -69,7 +105,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
-  if (!session || !isManager(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session || !canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { shiftId, clockIn, clockOut, note } = await req.json()
   if (!shiftId || !note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })

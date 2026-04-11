@@ -222,8 +222,11 @@ export default function ExpensesPage() {
   }
 
   const canApprove = session?.role === 'owner' || session?.role === 'developer'
+  const canViewDetail = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'developer'
   const canSubmit = session && session.role !== 'employee'
   const canOnBehalf = session?.role === 'owner' || session?.role === 'developer'
+
+  const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
 
   const filtered = filter === 'all' ? expenses : expenses.filter((e) => e.status === filter)
 
@@ -342,7 +345,11 @@ export default function ExpensesPage() {
             <div className="text-center text-gray-500 py-12">No expenses found</div>
           ) : (
             filtered.map((exp) => (
-              <div key={exp.id} className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+              <div
+                key={exp.id}
+                className={`bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden ${canViewDetail ? 'cursor-pointer hover:border-gray-700 transition-colors' : ''}`}
+                onClick={() => canViewDetail && setDetailExpense(exp)}
+              >
                 <div className="p-4">
                   <div className="flex items-start justify-between gap-2 mb-3">
                     <div>
@@ -369,8 +376,8 @@ export default function ExpensesPage() {
                       {exp.status}
                     </span>
 
-                    <div className="flex items-center gap-2">
-                      {exp.receipt_url && (
+                    <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                      {exp.receipt_url && !canViewDetail && (
                         <a
                           href={exp.receipt_url}
                           target="_blank"
@@ -407,6 +414,10 @@ export default function ExpensesPage() {
                         >
                           Mark Paid
                         </button>
+                      )}
+
+                      {canViewDetail && (
+                        <span className="text-xs text-gray-600">Tap to view</span>
                       )}
                     </div>
                   </div>
@@ -543,6 +554,126 @@ export default function ExpensesPage() {
               >
                 {submitting ? 'Submitting...' : 'Submit Expense'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Detail modal */}
+      {detailExpense && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDetailExpense(null)}>
+          <div
+            className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg border border-gray-800 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-5 border-b border-gray-800">
+              <h2 className="font-bold text-lg">Expense Detail</h2>
+              <button onClick={() => setDetailExpense(null)} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Receipt image */}
+              {detailExpense.receipt_url && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Receipt</p>
+                  <img
+                    src={detailExpense.receipt_url}
+                    alt="Receipt"
+                    className="w-full rounded-xl bg-gray-800 object-contain max-h-72"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.display = 'none'
+                    }}
+                  />
+                  <a
+                    href={detailExpense.receipt_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2"
+                  >
+                    Open full size
+                  </a>
+                </div>
+              )}
+
+              {/* Details grid */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Employee</p>
+                  <p className="text-sm text-white font-medium">{detailExpense.user_full_name}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Date</p>
+                  <p className="text-sm text-white font-medium">{detailExpense.date}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Category</p>
+                  <p className="text-sm text-white font-medium">{detailExpense.category}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Amount</p>
+                  <p className="text-sm text-white font-bold">${parseFloat(detailExpense.amount).toFixed(2)}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3 col-span-2">
+                  <p className="text-xs text-gray-500 mb-1">Status</p>
+                  <span className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${STATUS_COLORS[detailExpense.status]}`}>
+                    {detailExpense.status}
+                  </span>
+                </div>
+                {detailExpense.submitter_full_name !== detailExpense.user_full_name && (
+                  <div className="bg-gray-800 rounded-xl p-3 col-span-2">
+                    <p className="text-xs text-gray-500 mb-1">Submitted By</p>
+                    <p className="text-sm text-white">{detailExpense.submitter_full_name}</p>
+                  </div>
+                )}
+                {detailExpense.description && (
+                  <div className="bg-gray-800 rounded-xl p-3 col-span-2">
+                    <p className="text-xs text-gray-500 mb-1">Description</p>
+                    <p className="text-sm text-white">{detailExpense.description}</p>
+                  </div>
+                )}
+                {detailExpense.approver_full_name && (
+                  <div className="bg-gray-800 rounded-xl p-3 col-span-2">
+                    <p className="text-xs text-gray-500 mb-1">
+                      {detailExpense.status === 'rejected' ? 'Rejected By' : 'Approved By'}
+                    </p>
+                    <p className="text-sm text-white">{detailExpense.approver_full_name}</p>
+                  </div>
+                )}
+                {detailExpense.status === 'rejected' && detailExpense.rejection_reason && (
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 col-span-2">
+                    <p className="text-xs text-red-400 font-semibold mb-1">Rejection Reason</p>
+                    <p className="text-sm text-gray-300">{detailExpense.rejection_reason}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Approve/reject/pay actions */}
+              {canApprove && detailExpense.status === 'pending' && (
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={async () => { await handleAction(detailExpense.id, 'approve'); setDetailExpense(null) }}
+                    disabled={!!actionLoading}
+                    className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => { setDetailExpense(null); setRejectId(detailExpense.id); setRejectReason('') }}
+                    className="flex-1 bg-red-600/20 hover:bg-red-600/40 text-red-400 font-semibold py-3 rounded-xl transition-colors border border-red-600/30"
+                  >
+                    Reject
+                  </button>
+                </div>
+              )}
+              {canApprove && detailExpense.status === 'approved' && (
+                <button
+                  onClick={async () => { await handleAction(detailExpense.id, 'pay'); setDetailExpense(null) }}
+                  disabled={!!actionLoading}
+                  className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors"
+                >
+                  Mark Paid
+                </button>
+              )}
             </div>
           </div>
         </div>

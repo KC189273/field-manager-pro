@@ -7,7 +7,6 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lat, lng, address } = await req.json()
-  if (!lat || !lng) return NextResponse.json({ error: 'GPS coordinates required' }, { status: 400 })
 
   // Check if already clocked in
   const active = await queryOne(
@@ -22,12 +21,14 @@ export async function POST(req: NextRequest) {
     [session.id, lat, lng, address ?? null]
   )
 
-  // Record first breadcrumb
-  await query(
-    `INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at)
-     VALUES ($1, $2, $3, $4, NOW())`,
-    [shift!.id, session.id, lat, lng]
-  )
+  // Record first breadcrumb if coordinates available
+  if (lat && lng) {
+    await query(
+      `INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [shift!.id, session.id, lat, lng]
+    )
+  }
 
   return NextResponse.json({ ok: true, shiftId: shift!.id })
 }

@@ -116,11 +116,23 @@ export default function ExpensesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
       })
+      if (!urlRes.ok) {
+        const err = await urlRes.json()
+        alert('Receipt upload failed: ' + (err.error ?? urlRes.status))
+        setUploading(false)
+        return
+      }
       const { url, key } = await urlRes.json()
-      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      if (!s3Res.ok) {
+        const text = await s3Res.text()
+        alert('S3 upload failed (' + s3Res.status + '): ' + text.slice(0, 200))
+        setUploading(false)
+        return
+      }
       setReceiptKey(key)
-    } catch {
-      alert('Receipt upload failed. Please try again.')
+    } catch (err) {
+      alert('Receipt upload failed: ' + String(err))
     }
     setUploading(false)
   }

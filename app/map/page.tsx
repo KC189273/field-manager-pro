@@ -165,12 +165,25 @@ export default function MapPage() {
 
     const matchedPaths = await Promise.all(empWithCoords.map(async emp => {
       const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id && !b.is_gap)
-      const raw = ([
-        ...crumbs.map(c => [Number(c.lng), Number(c.lat)] as [number, number]),
-        [emp.lng, emp.lat] as [number, number],
-      ] as [number, number][]).filter(([lng, lat]) => isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0) as [number, number][]
+      const allPts = ([
+        ...crumbs.map(c => ({ lng: Number(c.lng), lat: Number(c.lat), t: new Date(c.recorded_at).getTime() })),
+        { lng: emp.lng, lat: emp.lat, t: new Date(emp.last_seen_at).getTime() },
+      ]).filter(p => isFinite(p.lat) && isFinite(p.lng) && p.lat !== 0 && p.lng !== 0)
 
-      const coords = raw.length >= 2 ? await snapToRoads(raw) : raw
+      // Filter out points requiring >200 km/h from the previous point
+      const filtered: [number, number][] = []
+      for (const pt of allPts) {
+        if (filtered.length === 0) { filtered.push([pt.lng, pt.lat]); continue }
+        const prev = filtered[filtered.length - 1]
+        const R = 6371
+        const dLat = (pt.lat - prev[1]) * Math.PI / 180
+        const dLng = (pt.lng - prev[0]) * Math.PI / 180
+        const a = Math.sin(dLat/2)**2 + Math.cos(prev[1]*Math.PI/180)*Math.cos(pt.lat*Math.PI/180)*Math.sin(dLng/2)**2
+        const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        if (dist <= 100) filtered.push([pt.lng, pt.lat])
+      }
+
+      const coords = filtered.length >= 2 ? await snapToRoads(filtered) : filtered
       return { emp, coords }
     }))
 

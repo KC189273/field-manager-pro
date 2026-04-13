@@ -74,9 +74,9 @@ async function snapToRoads(coords: [number, number][]): Promise<[number, number]
         ? Array.from({ length: MAX }, (_, i) => coords[Math.round(i * (coords.length - 1) / (MAX - 1))])
         : coords
       const coordStr = pts.map(([lng, lat]) => `${lng},${lat}`).join(';')
-      const radiuses = pts.map(() => '50').join(';')
+      const radiuses = pts.map(() => '100').join(';')
       const res = await fetch(
-        `https://api.mapbox.com/matching/v5/mapbox/driving/${coordStr}?access_token=${token}&geometries=geojson&radiuses=${radiuses}&overview=full`
+        `https://api.mapbox.com/matching/v5/mapbox/driving/${coordStr}?access_token=${token}&geometries=geojson&radiuses=${radiuses}&overview=full&tidy=true`
       )
       if (res.ok) {
         const data = await res.json()
@@ -87,6 +87,16 @@ async function snapToRoads(coords: [number, number][]): Promise<[number, number]
           }
           if (all.length >= 2) return all
         }
+      }
+      // Map Matching failed — fall back to Directions API between first and last point
+      const [first, last] = [pts[0], pts[pts.length - 1]]
+      const fallback = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${first[0]},${first[1]};${last[0]},${last[1]}?access_token=${token}&geometries=geojson&overview=full`
+      )
+      if (fallback.ok) {
+        const fData = await fallback.json()
+        const route = fData.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
+        if (route && route.length >= 2) return route
       }
     }
   } catch { /* fall back to straight lines */ }

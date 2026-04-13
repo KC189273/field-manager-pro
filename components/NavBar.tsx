@@ -30,6 +30,14 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   const [activeOrg, setActiveOrg] = useState<string>('')
   const [menuOpen, setMenuOpen] = useState(false)
 
+  // Silently refresh session every 10 minutes to prevent mobile logout
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch('/api/auth/refresh', { method: 'POST' }).catch(() => {})
+    }, 10 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   useEffect(() => {
     if (role !== 'developer') return
     fetch('/api/dev/org')

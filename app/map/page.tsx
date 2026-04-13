@@ -164,7 +164,7 @@ export default function MapPage() {
       .filter(emp => isFinite(emp.lat) && isFinite(emp.lng) && emp.lat !== 0 && emp.lng !== 0)
 
     const matchedPaths = await Promise.all(empWithCoords.map(async emp => {
-      const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id)
+      const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id && !b.is_gap)
       const raw = ([
         ...crumbs.map(c => [Number(c.lng), Number(c.lat)] as [number, number]),
         [emp.lng, emp.lat] as [number, number],

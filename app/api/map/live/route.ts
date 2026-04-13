@@ -36,15 +36,15 @@ export async function GET() {
       u.full_name,
       s.clock_in_at::text,
       COALESCE(
-        (SELECT b.lat FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL ORDER BY b.recorded_at DESC LIMIT 1),
+        (SELECT b.lat FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
         s.clock_in_lat
       ) AS lat,
       COALESCE(
-        (SELECT b.lng FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lng IS NOT NULL ORDER BY b.recorded_at DESC LIMIT 1),
+        (SELECT b.lng FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lng IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
         s.clock_in_lng
       ) AS lng,
       COALESCE(
-        (SELECT b.recorded_at::text FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL ORDER BY b.recorded_at DESC LIMIT 1),
+        (SELECT b.recorded_at::text FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
         s.clock_in_at::text
       ) AS last_seen_at
     FROM shifts s

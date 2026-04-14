@@ -165,7 +165,7 @@ export default function MapPage() {
     if (!res.ok) return
     const { employees, breadcrumbs }: {
       employees: LiveEmployee[]
-      breadcrumbs: { shift_id: string; lat: number; lng: number; recorded_at: string }[]
+      breadcrumbs: Breadcrumb[]
     } = await res.json()
 
     // Build road-matched paths for each employee in parallel
@@ -174,7 +174,7 @@ export default function MapPage() {
       .filter(emp => isFinite(emp.lat) && isFinite(emp.lng) && emp.lat !== 0 && emp.lng !== 0)
 
     const matchedPaths = await Promise.all(empWithCoords.map(async emp => {
-      const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id)
+      const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id && !b.is_gap)
       const allPts = ([
         ...crumbs.map(c => ({ lng: Number(c.lng), lat: Number(c.lat), t: new Date(c.recorded_at).getTime() })),
         { lng: emp.lng, lat: emp.lat, t: new Date(emp.last_seen_at).getTime() },

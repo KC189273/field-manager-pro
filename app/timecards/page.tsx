@@ -69,12 +69,14 @@ function fmtDuration(seconds: number) {
 }
 
 function getWeekMonday(offsetWeeks = 0): Date {
-  const d = new Date()
-  const day = d.getDay()
-  const diff = day === 0 ? -6 : 1 - day
-  d.setDate(d.getDate() + diff + offsetWeeks * 7)
-  d.setHours(0, 0, 0, 0)
-  return d
+  // Derive today's calendar date in CST/CDT so server (UTC) and client agree
+  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: CST })
+  const [y, m, d] = todayStr.split('-').map(Number)
+  // Use noon so toLocalDateStr conversions never cross a day boundary
+  const today = new Date(y, m - 1, d, 12, 0, 0)
+  const dow = today.getDay()
+  const diff = dow === 0 ? -6 : 1 - dow
+  return new Date(y, m - 1, d + diff + offsetWeeks * 7, 12, 0, 0)
 }
 
 function addDays(date: Date, n: number): Date {

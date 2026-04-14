@@ -163,10 +163,10 @@ export default function MapPage() {
 
     const res = await fetch('/api/map/live')
     if (!res.ok) return
-    const { employees, breadcrumbs }: {
+    const { employees, breadcrumbs } = await res.json() as {
       employees: LiveEmployee[]
       breadcrumbs: Breadcrumb[]
-    } = await res.json()
+    }
 
     // Build road-matched paths for each employee in parallel
     const empWithCoords = employees

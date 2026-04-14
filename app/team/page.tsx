@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent } from 'react'
 import NavBar from '@/components/NavBar'
 
 interface Org { id: string; name: string }
@@ -49,9 +49,18 @@ export default function TeamPage() {
   const [assignedStoreIds, setAssignedStoreIds] = useState<Set<string>>(new Set())
   const [savingStores, setSavingStores] = useState(false)
 
+  // Bulk import state
+  const [showBulkImport, setShowBulkImport] = useState(false)
+  const [bulkOrgId, setBulkOrgId] = useState('')
+  const [bulkFile, setBulkFile] = useState<File | null>(null)
+  const [bulkLoading, setBulkLoading] = useState(false)
+  const [bulkResults, setBulkResults] = useState<{ created: number; errors: number; results: { row: number; username: string; fullName: string; status: 'created' | 'error'; reason?: string }[] } | null>(null)
+  const bulkFileRef = useRef<HTMLInputElement>(null)
+
   const isDev = session?.role === 'developer'
   const isOwner = session?.role === 'owner'
   const isDevOrOwner = isDev || isOwner
+  const canBulkImport = isDev || isOwner || session?.role === 'ops_manager'
   const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner')
   const employees = users.filter(u => u.role === 'employee')
 
@@ -207,12 +216,40 @@ export default function TeamPage() {
     return mgr?.full_name ?? 'Unknown'
   }
 
+  async function submitBulkImport() {
+    if (!bulkFile) return
+    setBulkLoading(true)
+    setBulkResults(null)
+    const fd = new FormData()
+    fd.append('file', bulkFile)
+    if (bulkOrgId) fd.append('orgId', bulkOrgId)
+    const res = await fetch('/api/team/bulk-import', { method: 'POST', body: fd })
+    const data = await res.json()
+    setBulkLoading(false)
+    if (res.ok) {
+      setBulkResults(data)
+      await loadUsers()
+    } else {
+      showMsg(data.error || 'Import failed', 'error')
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 pb-20 pt-14">
       {session && <NavBar role={session.role} fullName={session.fullName} />}
 
       <div className="px-4 pt-6 max-w-lg mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-6">Team</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold text-white">Team</h1>
+          {canBulkImport && (
+            <button
+              onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkFile(null) }}
+              className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
+            >
+              Bulk Import
+            </button>
+          )}
+        </div>
 
         {/* Toast message */}
         {message.text && (
@@ -222,6 +259,103 @@ export default function TeamPage() {
               : 'bg-green-900/40 border border-green-700 text-green-300'
           }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* Bulk import modal */}
+        {showBulkImport && (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold text-white">Bulk Import Employees</h2>
+              <button onClick={() => setShowBulkImport(false)} className="text-gray-500 hover:text-gray-300 text-xs">✕ Close</button>
+            </div>
+
+            <div className="bg-gray-800/60 rounded-xl px-4 py-3 text-xs text-gray-400 space-y-1">
+              <p className="font-semibold text-gray-300 mb-1">Excel format (columns in order):</p>
+              <p><span className="text-white font-medium">A</span> — Full Name (required)</p>
+              <p><span className="text-white font-medium">B</span> — Username (required)</p>
+              <p><span className="text-white font-medium">C</span> — Password (optional, defaults to <span className="text-violet-300 font-medium">Metro</span>)</p>
+              <p><span className="text-white font-medium">D</span> — Manager Name (optional, must match a manager in this org)</p>
+              <p className="text-gray-500 mt-1">Row 1 is treated as a header and skipped automatically.</p>
+            </div>
+
+            {isDev && orgs.length > 0 && (
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Organization</label>
+                <select value={bulkOrgId} onChange={e => setBulkOrgId(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                  <option value="">No org (unassigned)</option>
+                  {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Excel File (.xlsx)</label>
+              <input
+                ref={bulkFileRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={e => { setBulkFile(e.target.files?.[0] ?? null); setBulkResults(null) }}
+                className="w-full text-sm text-gray-300 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-violet-600 file:text-white hover:file:bg-violet-500 file:cursor-pointer cursor-pointer"
+              />
+            </div>
+
+            {!bulkResults && (
+              <div className="flex gap-2">
+                <button
+                  onClick={submitBulkImport}
+                  disabled={bulkLoading || !bulkFile}
+                  className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  {bulkLoading ? 'Importing…' : 'Import'}
+                </button>
+                <button onClick={() => setShowBulkImport(false)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {bulkResults && (
+              <div className="space-y-3">
+                <div className="flex gap-3">
+                  <div className="flex-1 bg-green-900/30 border border-green-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-2xl font-bold text-green-400">{bulkResults.created}</p>
+                    <p className="text-xs text-green-600">Created</p>
+                  </div>
+                  <div className="flex-1 bg-red-900/30 border border-red-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-2xl font-bold text-red-400">{bulkResults.errors}</p>
+                    <p className="text-xs text-red-600">Errors</p>
+                  </div>
+                </div>
+
+                {bulkResults.errors > 0 && (
+                  <div className="space-y-1 max-h-48 overflow-y-auto">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Failed rows</p>
+                    {bulkResults.results.filter(r => r.status === 'error').map(r => (
+                      <div key={r.row} className="bg-red-950/40 border border-red-900/50 rounded-xl px-3 py-2">
+                        <p className="text-xs text-white font-medium">{r.fullName || r.username} <span className="text-gray-500">(@{r.username})</span></p>
+                        <p className="text-xs text-red-400 mt-0.5">{r.reason}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setBulkResults(null); setBulkFile(null); if (bulkFileRef.current) bulkFileRef.current.value = '' }}
+                    className="flex-1 bg-violet-600 hover:bg-violet-500 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                  >
+                    Import Another File
+                  </button>
+                  <button onClick={() => setShowBulkImport(false)}
+                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                    Done
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

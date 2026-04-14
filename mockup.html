@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Field Manager Pro — App Mockup</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; min-height: 100vh; }
+
+  .page-title {
+    text-align: center;
+    color: #a78bfa;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 32px 0 24px;
+  }
+
+  .screens-row {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    padding: 0 32px 48px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .screen-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .screen-label {
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* iPhone shell */
+  .phone {
+    width: 280px;
+    height: 580px;
+    background: #0f0f0f;
+    border-radius: 44px;
+    border: 6px solid #2d2d2d;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), inset 0 0 0 1px #3a3a3a;
+  }
+
+  /* Dynamic island */
+  .phone::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90px;
+    height: 24px;
+    background: #0f0f0f;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  .screen {
+    width: 100%;
+    height: 100%;
+    background: #030712;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 20px 6px;
+    flex-shrink: 0;
+  }
+  .status-time { color: white; font-size: 13px; font-weight: 600; }
+  .status-icons { display: flex; gap: 5px; align-items: center; }
+  .status-icons svg { width: 14px; height: 14px; fill: white; }
+
+  /* Top nav */
+  .top-nav {
+    height: 44px;
+    background: #030712;
+    border-bottom: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+  .top-nav-brand { display: flex; align-items: center; gap: 6px; }
+  .brand-icon {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .brand-icon svg { width: 13px; height: 13px; stroke: white; fill: none; }
+  .brand-text { color: white; font-size: 13px; font-weight: 600; }
+  .top-nav-user { color: #6b7280; font-size: 11px; }
+
+  /* Content area */
+  .content { flex: 1; overflow-y: auto; padding: 16px 14px; }
+
+  /* Bottom bar */
+  .bottom-bar {
+    height: 54px;
+    background: #030712;
+    border-top: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .current-page {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .current-page svg { width: 14px; height: 14px; stroke: #a78bfa; fill: none; flex-shrink: 0; }
+  .current-page span { color: #a78bfa; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: #1f2937; border-radius: 10px;
+    padding: 6px 12px; flex-shrink: 0;
+  }
+  .menu-btn svg { width: 13px; height: 13px; stroke: #d1d5db; fill: none; }
+  .menu-btn span { color: #d1d5db; font-size: 11px; font-weight: 500; }
+
+  /* Home bar */
+  .home-indicator {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .home-bar {
+    width: 100px; height: 4px;
+    background: #374151;
+    border-radius: 4px;
+  }
+
+  /* ---- Screen-specific styles ---- */
+
+  /* Clock screen */
+  .clock-header { text-align: center; padding: 12px 0 16px; }
+  .clock-name { color: white; font-size: 15px; font-weight: 700; }
+  .clock-role { color: #6b7280; font-size: 11px; margin-top: 2px; }
+
+  .clock-status-card {
+    background: #10b981;
+    border-radius: 16px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .clock-status-card.clocked-out { background: #1f2937; }
+  .clock-status-label { color: rgba(255,255,255,0.7); font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+  .clock-status-value { color: white; font-size: 18px; font-weight: 700; margin-top: 3px; }
+  .clock-status-sub { color: rgba(255,255,255,0.6); font-size: 10px; margin-top: 2px; }
+
+  .clock-btn {
+    width: 100%;
+    padding: 13px;
+    border-radius: 14px;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  .clock-btn.out { background: #dc2626; color: white; }
+  .clock-btn.in { background: #7c3aed; color: white; }
+
+  .location-pill {
+    display: flex; align-items: center; gap: 5px;
+    background: #111827; border-radius: 10px;
+    padding: 8px 10px; margin-bottom: 10px;
+  }
+  .location-pill svg { width: 12px; height: 12px; stroke: #6b7280; fill: none; flex-shrink: 0; }
+  .location-pill span { color: #6b7280; font-size: 10px; }
+
+  .info-row {
+    display: flex; gap: 8px; margin-bottom: 10px;
+  }
+  .info-card {
+    flex: 1; background: #111827; border-radius: 12px; padding: 10px 12px;
+  }
+  .info-card-label { color: #6b7280; font-size: 9px; font-weight: 600; text-transform: uppercase; }
+  .info-card-value { color: white; font-size: 13px; font-weight: 700; margin-top: 2px; }
+
+  /* Expenses screen */
+  .filter-tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; }
+  .filter-tab {
+    padding: 5px 10px; border-radius: 20px;
+    font-size: 10px; font-weight: 600;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .filter-tab.active { background: #7c3aed; color: white; }
+  .filter-tab.inactive { background: #1f2937; color: #6b7280; }
+
+  .summary-row { display: flex; gap: 6px; margin-bottom: 14px; }
+  .summary-card {
+    flex: 1; background: #111827; border-radius: 12px; padding: 9px 10px;
+    text-align: center;
+  }
+  .summary-card-label { color: #6b7280; font-size: 8px; font-weight: 600; text-transform: uppercase; }
+  .summary-card-value { color: white; font-size: 13px; font-weight: 700; margin-top: 2px; }
+  .summary-card-value.yellow { color: #fbbf24; }
+  .summary-card-value.green { color: #34d399; }
+
+  .expense-card {
+    background: #111827; border-radius: 14px; padding: 12px;
+    margin-bottom: 8px;
+  }
+  .expense-card-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+  .expense-category { color: white; font-size: 12px; font-weight: 600; }
+  .expense-amount { color: white; font-size: 13px; font-weight: 700; }
+  .expense-meta { color: #6b7280; font-size: 10px; }
+  .expense-badge {
+    display: inline-block;
+    padding: 2px 8px; border-radius: 20px;
+    font-size: 9px; font-weight: 600; margin-top: 6px;
+  }
+  .badge-pending { background: #78350f30; color: #fbbf24; border: 1px solid #78350f60; }
+  .badge-approved { background: #06452230; color: #34d399; border: 1px solid #06452260; }
+  .badge-paid { background: #1e3a8a30; color: #60a5fa; border: 1px solid #1e3a8a60; }
+
+  .fab {
+    position: absolute;
+    bottom: 66px;
+    right: 14px;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(124,58,237,0.5);
+  }
+  .fab svg { width: 16px; height: 16px; stroke: white; fill: none; }
+
+  /* Map screen */
+  .map-bg {
+    flex: 1;
+    background: linear-gradient(135deg, #0f1b2d 0%, #111827 50%, #0a1628 100%);
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .map-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(124,58,237,0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.05) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .map-road {
+    position: absolute;
+    background: #1f2937;
+    border-radius: 2px;
+  }
+  .map-path {
+    position: absolute;
+    border: 1.5px dashed rgba(129,140,248,0.7);
+    border-radius: 50%;
+  }
+  .map-dot {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid white;
+    box-shadow: 0 0 6px rgba(0,0,0,0.6);
+  }
+  .map-dot.green { background: #22c55e; width: 10px; height: 10px; }
+  .map-dot.red { background: #ef4444; width: 10px; height: 10px; }
+  .map-dot.purple { background: #a855f7; width: 7px; height: 7px; border-width: 1.5px; }
+
+  .map-filter-bar {
+    background: #030712;
+    border-bottom: 1px solid #1f2937;
+    padding: 8px 10px;
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .map-select {
+    background: #1f2937;
+    border: 1px solid #374151;
+    border-radius: 8px;
+    padding: 4px 8px;
+    color: white;
+    font-size: 10px;
+    flex: 1;
+  }
+  .map-load-btn {
+    background: #7c3aed;
+    border-radius: 8px;
+    padding: 4px 10px;
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .map-legend {
+    background: #030712;
+    border-top: 1px solid #1f2937;
+    padding: 6px 10px;
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .legend-item { display: flex; align-items: center; gap: 4px; }
+  .legend-dot { border-radius: 50%; border: 1.5px solid white; flex-shrink: 0; }
+  .legend-dot.green { background: #22c55e; width: 9px; height: 9px; }
+  .legend-dot.red { background: #ef4444; width: 9px; height: 9px; }
+  .legend-dot.purple { background: #a855f7; width: 7px; height: 7px; }
+  .legend-line { width: 18px; height: 2px; background: #818cf8; border-radius: 2px; }
+  .legend-text { color: #6b7280; font-size: 8px; }
+
+  /* Menu overlay screen */
+  .menu-overlay-bg {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    z-index: 50;
+  }
+  .menu-sheet {
+    background: #111827;
+    border-radius: 20px 20px 0 0;
+    overflow: hidden;
+  }
+  .menu-handle-row {
+    display: flex; justify-content: center; padding: 10px 0 6px;
+  }
+  .menu-handle {
+    width: 36px; height: 4px;
+    background: #374151; border-radius: 4px;
+  }
+  .menu-sheet-header {
+    padding: 10px 16px 10px;
+    border-bottom: 1px solid #1f2937;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .menu-user-name { color: white; font-size: 13px; font-weight: 600; }
+  .menu-user-role { color: #6b7280; font-size: 10px; }
+  .menu-close-btn svg { width: 16px; height: 16px; stroke: #6b7280; fill: none; }
+
+  .menu-section-label {
+    padding: 12px 16px 4px;
+    color: #4b5563;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .menu-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 16px;
+    transition: background 0.15s;
+  }
+  .menu-item.active { background: rgba(124,58,237,0.15); }
+  .menu-item-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .menu-item-icon svg { width: 16px; height: 16px; stroke: #a78bfa; fill: none; }
+  .menu-item-icon.gray svg { stroke: #9ca3af; }
+  .menu-item-label { font-size: 11px; font-weight: 500; }
+  .menu-item.active .menu-item-label { color: #a78bfa; }
+  .menu-item:not(.active) .menu-item-label { color: #d1d5db; }
+  .menu-check { margin-left: auto; }
+  .menu-check svg { width: 12px; height: 12px; fill: #a78bfa; }
+
+  .menu-signout {
+    border-top: 1px solid #1f2937;
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px;
+  }
+  .menu-signout svg { width: 16px; height: 16px; stroke: #f87171; fill: none; }
+  .menu-signout span { color: #f87171; font-size: 11px; font-weight: 500; }
+
+  /* Schedule screen */
+  .week-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+  .week-tab {
+    flex: 1; padding: 6px 4px; border-radius: 10px;
+    font-size: 9px; font-weight: 600; text-align: center;
+  }
+  .week-tab.active { background: #7c3aed; color: white; }
+  .week-tab.inactive { background: #1f2937; color: #6b7280; }
+
+  .day-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 12px;
+    margin-bottom: 6px;
+    background: #111827;
+  }
+  .day-row.selected { background: rgba(124,58,237,0.15); border: 1px solid rgba(124,58,237,0.4); }
+  .day-check {
+    width: 18px; height: 18px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .day-check.checked { background: #7c3aed; }
+  .day-check.unchecked { border: 2px solid #374151; }
+  .day-check svg { width: 10px; height: 10px; stroke: white; fill: none; }
+  .day-name { color: #d1d5db; font-size: 11px; font-weight: 500; flex: 1; }
+  .day-date { color: #6b7280; font-size: 10px; }
+
+  .submit-btn {
+    width: 100%;
+    background: #7c3aed;
+    border-radius: 14px;
+    padding: 11px;
+    color: white;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: center;
+    margin-top: 12px;
+  }
+
+  /* Dev notes */
+  .notes-section {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 32px 48px;
+  }
+  .notes-title {
+    color: #a78bfa;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .notes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .note-card {
+    background: #0f1728;
+    border: 1px solid #1f2937;
+    border-radius: 16px;
+    padding: 18px 20px;
+  }
+  .note-card-title { color: white; font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .note-card-title .tag {
+    font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+    background: rgba(124,58,237,0.25); color: #a78bfa;
+    letter-spacing: 0.04em;
+  }
+  .note-card ul { list-style: none; }
+  .note-card li { color: #9ca3af; font-size: 11px; line-height: 1.7; display: flex; gap: 6px; }
+  .note-card li::before { content: '→'; color: #4b5563; flex-shrink: 0; }
+  .note-card li strong { color: #d1d5db; }
+</style>
+</head>
+<body>
+
+<p class="page-title">Field Manager Pro — iOS / Android App Mockup</p>
+
+<div class="screens-row">
+
+  <!-- Clock In/Out Screen -->
+  <div class="screen-wrap">
+    <span class="screen-label">Clock In / Out</span>
+    <div class="phone">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0114.08 0M1.42 9a16 16 0 0121.16 0M8.53 16.11a6 6 0 016.95 0M12 20h.01"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="clock-header">
+            <div class="clock-name">John Davidson</div>
+            <div class="clock-role">Manager · North District</div>
+          </div>
+          <div class="clock-status-card">
+            <div class="clock-status-label">Clocked In</div>
+            <div class="clock-status-value">3h 42m</div>
+            <div class="clock-status-sub">Since 8:14 AM · Main St Store</div>
+          </div>
+          <div class="location-pill">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>1247 Main St, St. Louis, MO 63101</span>
+          </div>
+          <div class="clock-btn out">Clock Out</div>
+          <div class="info-row">
+            <div class="info-card">
+              <div class="info-card-label">Today's Hours</div>
+              <div class="info-card-value">3.7h</div>
+            </div>
+            <div class="info-card">
+              <div class="info-card-label">This Week</div>
+              <div class="info-card-value">22.4h</div>
+            </div>
+            <div class="info-card">
+              <div class="info-card-label">Shifts</div>
+              <div class="info-card-value">6</div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 3"/></svg>
+            <span>Clock In / Out</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu Open Screen -->
+  <div class="screen-wrap">
+    <span class="screen-label">Navigation Menu</span>
+    <div class="phone">
+      <div class="screen" style="position:relative;">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content" style="opacity:0.3;filter:blur(1px);"></div>
+
+        <!-- Menu overlay -->
+        <div class="menu-overlay-bg">
+          <div class="menu-sheet">
+            <div class="menu-handle-row"><div class="menu-handle"></div></div>
+            <div class="menu-sheet-header">
+              <div>
+                <div class="menu-user-name">John Davidson</div>
+                <div class="menu-user-role">Manager</div>
+              </div>
+              <div class="menu-close-btn">
+                <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+              </div>
+            </div>
+            <div class="menu-section-label">General</div>
+            <div class="menu-item">
+              <div class="menu-item-icon gray"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg></div>
+              <span class="menu-item-label" style="color:#d1d5db;">Home</span>
+            </div>
+            <div class="menu-item active">
+              <div class="menu-item-icon"><svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 3"/></svg></div>
+              <span class="menu-item-label">Clock In / Out</span>
+              <div class="menu-check"><svg viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg></div>
+            </div>
+            <div class="menu-item">
+              <div class="menu-item-icon gray"><svg viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+              <span class="menu-item-label" style="color:#d1d5db;">Schedule</span>
+            </div>
+            <div class="menu-item">
+              <div class="menu-item-icon gray"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div>
+              <span class="menu-item-label" style="color:#d1d5db;">Opening / Closing Checklist</span>
+            </div>
+            <div class="menu-section-label">Finance</div>
+            <div class="menu-item">
+              <div class="menu-item-icon gray"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg></div>
+              <span class="menu-item-label" style="color:#d1d5db;">Expenses</span>
+            </div>
+            <div class="menu-section-label">Management</div>
+            <div class="menu-item">
+              <div class="menu-item-icon gray"><svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <span class="menu-item-label" style="color:#d1d5db;">DM Store Visit</span>
+            </div>
+            <div class="menu-signout">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+              <span>Sign Out</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2" style="width:14px;height:14px;stroke:#a78bfa;fill:none;"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 3"/></svg>
+            <span>Clock In / Out</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            <span>Close</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Screen -->
+  <div class="screen-wrap">
+    <span class="screen-label">Map</span>
+    <div class="phone">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="map-filter-bar">
+          <div class="map-select">All Employees ▾</div>
+          <div class="map-select">From ▾</div>
+          <div class="map-select">To ▾</div>
+          <div class="map-load-btn">Load</div>
+        </div>
+        <div class="map-bg">
+          <div class="map-grid"></div>
+          <!-- Roads -->
+          <div class="map-road" style="width:3px;height:100%;left:35%;top:0;opacity:0.6;"></div>
+          <div class="map-road" style="height:3px;width:100%;top:45%;opacity:0.6;"></div>
+          <div class="map-road" style="width:2px;height:60%;left:60%;top:20%;opacity:0.4;"></div>
+          <div class="map-road" style="height:2px;width:50%;left:25%;top:70%;opacity:0.4;"></div>
+          <!-- Path line (simulated) -->
+          <svg style="position:absolute;inset:0;width:100%;height:100%;" viewBox="0 0 268 350" preserveAspectRatio="none">
+            <path d="M60 80 Q 100 120 130 155 Q 160 190 190 210 Q 210 225 220 260" stroke="rgba(129,140,248,0.7)" stroke-width="1.5" fill="none" stroke-dasharray="4 2"/>
+          </svg>
+          <!-- Dots -->
+          <div class="map-dot green" style="left:58px;top:76px;margin:-5px;"></div>
+          <div class="map-dot purple" style="left:100px;top:118px;margin:-3.5px;"></div>
+          <div class="map-dot purple" style="left:130px;top:152px;margin:-3.5px;"></div>
+          <div class="map-dot purple" style="left:160px;top:188px;margin:-3.5px;"></div>
+          <div class="map-dot purple" style="left:190px;top:208px;margin:-3.5px;"></div>
+          <div class="map-dot red" style="left:218px;top:256px;margin:-5px;"></div>
+        </div>
+        <div class="map-legend">
+          <div class="legend-item"><div class="legend-dot green"></div><span class="legend-text">In</span></div>
+          <div class="legend-item"><div class="legend-dot red"></div><span class="legend-text">Out</span></div>
+          <div class="legend-item"><div class="legend-dot purple"></div><span class="legend-text">15-min</span></div>
+          <div class="legend-item"><div class="legend-line"></div><span class="legend-text">Path</span></div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2" style="width:14px;height:14px;stroke:#a78bfa;fill:none;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <span>Map</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expenses Screen -->
+  <div class="screen-wrap">
+    <span class="screen-label">Expenses</span>
+    <div class="phone">
+      <div class="screen" style="position:relative;">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="filter-tabs">
+            <div class="filter-tab active">All</div>
+            <div class="filter-tab inactive">Pending</div>
+            <div class="filter-tab inactive">Approved</div>
+            <div class="filter-tab inactive">Paid</div>
+            <div class="filter-tab inactive">Rejected</div>
+          </div>
+          <div class="summary-row">
+            <div class="summary-card">
+              <div class="summary-card-label">Pending</div>
+              <div class="summary-card-value yellow">$342</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-card-label">Approved</div>
+              <div class="summary-card-value green">$1,240</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-card-label">Paid</div>
+              <div class="summary-card-value" style="color:#60a5fa;">$890</div>
+            </div>
+          </div>
+          <div class="expense-card">
+            <div class="expense-card-row">
+              <div>
+                <div class="expense-category">Mileage</div>
+                <div class="expense-meta">Apr 8 · John Davidson</div>
+              </div>
+              <div class="expense-amount">$78.40</div>
+            </div>
+            <div class="expense-badge badge-pending">Pending</div>
+          </div>
+          <div class="expense-card">
+            <div class="expense-card-row">
+              <div>
+                <div class="expense-category">Meals</div>
+                <div class="expense-meta">Apr 7 · Sarah Kim</div>
+              </div>
+              <div class="expense-amount">$43.20</div>
+            </div>
+            <div class="expense-badge badge-approved">Approved</div>
+          </div>
+          <div class="expense-card">
+            <div class="expense-card-row">
+              <div>
+                <div class="expense-category">Supplies</div>
+                <div class="expense-meta">Apr 5 · Mike Torres</div>
+              </div>
+              <div class="expense-amount">$126.00</div>
+            </div>
+            <div class="expense-badge badge-paid">Paid</div>
+          </div>
+        </div>
+        <div class="fab">
+          <svg viewBox="0 0 24 24" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2" style="width:14px;height:14px;stroke:#a78bfa;fill:none;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/></svg>
+            <span>Expenses</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Schedule Screen -->
+  <div class="screen-wrap">
+    <span class="screen-label">Schedule</span>
+    <div class="phone">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="week-tabs">
+            <div class="week-tab active">This Week</div>
+            <div class="week-tab inactive">Next Week</div>
+            <div class="week-tab inactive">+2 Weeks</div>
+          </div>
+          <div style="color:#6b7280;font-size:10px;margin-bottom:10px;">Apr 7 – Apr 13, 2026</div>
+          <div class="day-row selected">
+            <div class="day-check checked"><svg viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <span class="day-name">Monday</span>
+            <span class="day-date">Apr 7</span>
+          </div>
+          <div class="day-row selected">
+            <div class="day-check checked"><svg viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <span class="day-name">Tuesday</span>
+            <span class="day-date">Apr 8</span>
+          </div>
+          <div class="day-row">
+            <div class="day-check unchecked"></div>
+            <span class="day-name">Wednesday</span>
+            <span class="day-date">Apr 9</span>
+          </div>
+          <div class="day-row selected">
+            <div class="day-check checked"><svg viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <span class="day-name">Thursday</span>
+            <span class="day-date">Apr 10</span>
+          </div>
+          <div class="day-row selected">
+            <div class="day-check checked"><svg viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <span class="day-name">Friday</span>
+            <span class="day-date">Apr 11</span>
+          </div>
+          <div class="day-row">
+            <div class="day-check unchecked"></div>
+            <span class="day-name">Saturday</span>
+            <span class="day-date">Apr 12</span>
+          </div>
+          <div class="day-row">
+            <div class="day-check unchecked"></div>
+            <span class="day-name">Sunday</span>
+            <span class="day-date">Apr 13</span>
+          </div>
+          <div class="submit-btn">Update Schedule</div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2" style="width:14px;height:14px;stroke:#a78bfa;fill:none;"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span>Schedule</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end screens-row -->
+
+<!-- Dev roadmap notes -->
+<div class="notes-section">
+  <div class="notes-title">App Store Conversion Roadmap</div>
+  <div class="notes-grid">
+    <div class="note-card">
+      <div class="note-card-title">Framework <span class="tag">React Native / Expo</span></div>
+      <ul>
+        <li>Current web app is Next.js — screens would port cleanly to <strong>Expo Router</strong> (file-based routing, same mental model)</li>
+        <li>Tailwind → <strong>NativeWind</strong> (Tailwind classes compiled to StyleSheet — minimal rewrite)</li>
+        <li>Most business logic (API calls, auth, state) is reusable 1:1 — only UI primitives change</li>
+        <li>Mapbox has a React Native SDK (<strong>@rnmapbox/maps</strong>) — same tile styles &amp; tokens</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <div class="note-card-title">Native Upgrades <span class="tag">Key Wins</span></div>
+      <ul>
+        <li><strong>Background GPS</strong> — expo-location with background task for continuous breadcrumb logging (currently browser-dependent)</li>
+        <li><strong>Push Notifications</strong> — Expo Push / Firebase FCM replacing email for expense alerts and flag alerts</li>
+        <li><strong>Camera</strong> — expo-camera / expo-image-picker for receipt capture (better UX than file input)</li>
+        <li><strong>Biometric Auth</strong> — Face ID / fingerprint via expo-local-authentication</li>
+        <li><strong>Offline Mode</strong> — queue clock events locally when no signal, sync on reconnect</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <div class="note-card-title">Backend <span class="tag">Minimal Changes</span></div>
+      <ul>
+        <li>All existing Next.js API routes remain as-is — the mobile app just calls the same <strong>fieldmanagerpro.app/api/*</strong> endpoints</li>
+        <li>Auth moves from httpOnly cookie → <strong>SecureStore JWT</strong> (expo-secure-store)</li>
+        <li>S3 presigned URLs work identically in mobile fetch()</li>
+        <li>Supabase DB, Resend, Vercel Crons — no changes needed</li>
+      </ul>
+    </div>
+    <div class="note-card">
+      <div class="note-card-title">Store Submission <span class="tag">Timeline Est.</span></div>
+      <ul>
+        <li><strong>iOS (TestFlight → App Store)</strong> — requires Apple Developer account ($99/yr), Xcode build, App Store review ~1–3 days</li>
+        <li><strong>Android (Play Console)</strong> — Google Play account ($25 one-time), APK/AAB build, review ~1–7 days for new apps</li>
+        <li>Expo EAS Build handles both iOS &amp; Android cloud builds — no local Xcode/Android Studio required</li>
+        <li>Estimated dev time to MVP app: <strong>4–6 weeks</strong> (screen porting + native features + store setup)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

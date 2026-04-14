@@ -1,14 +1,29 @@
 'use client'
 
-import { useState, FormEvent } from 'react'
+import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+
+const REMEMBER_KEY = 'fmp-remember'
 
 export default function LoginPage() {
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBER_KEY)
+      if (saved) {
+        const { username: u, password: p } = JSON.parse(saved)
+        if (u) setUsername(u)
+        if (p) setPassword(p)
+        setRememberMe(true)
+      }
+    } catch {}
+  }, [])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -24,6 +39,11 @@ export default function LoginPage() {
       if (!res.ok) {
         setError(data.error || 'Login failed')
         return
+      }
+      if (rememberMe) {
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username, password }))
+      } else {
+        localStorage.removeItem(REMEMBER_KEY)
       }
       router.push('/dashboard')
     } catch {
@@ -77,6 +97,15 @@ export default function LoginPage() {
               placeholder="••••••••"
             />
           </div>
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={e => setRememberMe(e.target.checked)}
+              className="accent-violet-500 w-4 h-4"
+            />
+            <span className="text-sm text-gray-400">Remember username &amp; password</span>
+          </label>
           <button
             type="submit"
             disabled={loading}

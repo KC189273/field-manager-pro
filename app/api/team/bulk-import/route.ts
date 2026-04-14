@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
 
   const arrayBuffer = await file.arrayBuffer()
   const workbook = new ExcelJS.Workbook()
-  await workbook.xlsx.load(arrayBuffer as Buffer)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  await workbook.xlsx.load(arrayBuffer as any)
   const sheet = workbook.worksheets[0]
 
   if (!sheet) return NextResponse.json({ error: 'Excel file has no sheets' }, { status: 400 })

@@ -30,6 +30,17 @@ interface PayCodeRow {
   created_by_name: string | null
 }
 
+interface ExpenseRow {
+  user_id: string
+  full_name: string
+  org_id: string | null
+  org_name: string | null
+  date: string
+  category: string
+  amount: string
+  description: string | null
+}
+
 const CST = 'America/Chicago'
 
 function fmtTime(iso: string) {
@@ -43,7 +54,8 @@ function fmtDate(iso: string) {
 async function buildPayrollWorkbook(
   shifts: ShiftRow[],
   payCodes: PayCodeRow[],
-  weekLabel: string
+  weekLabel: string,
+  expenses: ExpenseRow[] = []
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook()
   workbook.creator = 'Field Manager Pro'
@@ -348,6 +360,82 @@ async function buildPayrollWorkbook(
     row.height = 18
   })
 
+  // ── Sheet 4: Expenses Paid ────────────────────────────────────────────────
+
+  const expSheet = workbook.addWorksheet('Expenses Paid')
+  expSheet.columns = [
+    { key: 'name', width: 24 },
+    { key: 'org', width: 18 },
+    { key: 'date', width: 14 },
+    { key: 'category', width: 14 },
+    { key: 'amount', width: 12 },
+    { key: 'description', width: 36 },
+  ]
+
+  expSheet.mergeCells('A1:F1')
+  const eTitle = expSheet.getCell('A1')
+  eTitle.value = `Expenses Paid — ${weekLabel}`
+  eTitle.font = { bold: true, size: 13, color: { argb: VIOLET } }
+  expSheet.getRow(1).height = 28
+
+  const expHeaders = ['Employee', 'Organization', 'Date', 'Category', 'Amount', 'Description']
+  const expHeaderRow = expSheet.getRow(2)
+  expHeaders.forEach((h, i) => {
+    const cell = expHeaderRow.getCell(i + 1)
+    cell.value = h
+    cell.font = headerFont
+    cell.fill = headerFill
+    cell.border = headerBorder
+    cell.alignment = { horizontal: i >= 2 ? 'center' : 'left', vertical: 'middle' }
+  })
+  expHeaderRow.height = 22
+
+  const sortedExpenses = [...expenses].sort((a, b) => a.full_name.localeCompare(b.full_name) || a.date.localeCompare(b.date))
+  let expTotal = 0
+
+  sortedExpenses.forEach((e, i) => {
+    const amt = parseFloat(e.amount)
+    expTotal += amt
+    const row = expSheet.getRow(i + 3)
+    row.getCell(1).value = e.full_name
+    row.getCell(2).value = e.org_name ?? 'Unassigned'
+    row.getCell(3).value = e.date
+    row.getCell(3).alignment = { horizontal: 'center' }
+    row.getCell(4).value = e.category
+    row.getCell(4).alignment = { horizontal: 'center' }
+    row.getCell(5).value = amt
+    row.getCell(5).numFmt = '"$"#,##0.00'
+    row.getCell(5).alignment = { horizontal: 'center' }
+    row.getCell(6).value = e.description ?? ''
+
+    if (i % 2 === 0) {
+      row.eachCell(cell => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: GRAY_BG } }
+      })
+    }
+    row.height = 18
+  })
+
+  if (sortedExpenses.length > 0) {
+    const totRow = expSheet.getRow(sortedExpenses.length + 3)
+    totRow.getCell(1).value = 'TOTAL'
+    totRow.getCell(1).font = { bold: true }
+    totRow.getCell(5).value = expTotal
+    totRow.getCell(5).numFmt = '"$"#,##0.00'
+    totRow.getCell(5).font = { bold: true, color: { argb: 'FF1D4ED8' } }
+    totRow.getCell(5).alignment = { horizontal: 'center' }
+    totRow.eachCell(cell => {
+      cell.border = { top: { style: 'medium', color: { argb: VIOLET } } }
+    })
+    totRow.height = 20
+  } else {
+    const emptyRow = expSheet.getRow(3)
+    expSheet.mergeCells(`A3:F3`)
+    emptyRow.getCell(1).value = 'No expenses paid this week'
+    emptyRow.getCell(1).font = { italic: true, color: { argb: 'FF6B7280' } }
+    emptyRow.height = 20
+  }
+
   const buf = await workbook.xlsx.writeBuffer()
   return Buffer.from(buf)
 }
@@ -415,11 +503,29 @@ export async function GET(req: NextRequest) {
     ORDER BY u.full_name, pc.date
   `, [monday.toISOString().slice(0, 10), sunday.toISOString().slice(0, 10)])
 
-  if (shifts.length === 0 && payCodes.length === 0) {
-    return NextResponse.json({ ok: true, skipped: true, reason: 'No shifts or pay codes last week' })
+  const expenses = await query<ExpenseRow>(`
+    SELECT
+      e.user_id,
+      u.full_name,
+      u.org_id,
+      o.name AS org_name,
+      e.date::text,
+      e.category,
+      e.amount::text,
+      e.description
+    FROM expenses e
+    JOIN users u ON u.id = e.user_id
+    LEFT JOIN organizations o ON o.id = u.org_id
+    WHERE e.status = 'paid'
+      AND e.paid_at >= $1 AND e.paid_at <= $2
+    ORDER BY u.full_name, e.date
+  `, [monday.toISOString(), sunday.toISOString()])
+
+  if (shifts.length === 0 && payCodes.length === 0 && expenses.length === 0) {
+    return NextResponse.json({ ok: true, skipped: true, reason: 'No shifts, pay codes, or expenses last week' })
   }
 
-  const buffer = await buildPayrollWorkbook(shifts, payCodes, label)
+  const buffer = await buildPayrollWorkbook(shifts, payCodes, label, expenses)
   const filename = `FMP_Payroll_${label.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
   const subject = `FMP Weekly Payroll — ${label}`
 
@@ -433,6 +539,7 @@ export async function GET(req: NextRequest) {
         <p style="color:#555;font-size:14px;">The weekly payroll spreadsheet is attached. Please open the <strong>Payroll Summary</strong> tab and fill in the <strong>Hourly Rate</strong> column (highlighted in yellow) for each employee — the estimated pre-tax pay will calculate automatically.</p>
         <p style="color:#555;font-size:14px;margin-top:12px;">Entries highlighted in <span style="background:#fef3c7;padding:1px 4px;border-radius:3px;color:#92400e;font-weight:600;">amber</span> on the Time Detail tab were manually corrected by a manager and require your review.</p>
         <p style="color:#555;font-size:14px;margin-top:12px;">PTO and sick day entries are on the <strong>PTO &amp; Sick</strong> tab.</p>
+        <p style="color:#555;font-size:14px;margin-top:12px;">Expenses that were paid out this week are on the <strong>Expenses Paid</strong> tab.</p>
         <p style="color:#8e8e93;font-size:12px;margin-top:16px;">Log in to Field Manager Pro to view full time history.</p>
       </div>
     </div>
@@ -451,8 +558,9 @@ export async function GET(req: NextRequest) {
   for (const owner of owners) {
     const orgShifts = shifts.filter(s => s.org_id === owner.org_id)
     const orgPayCodes = payCodes.filter(pc => pc.org_id === owner.org_id)
-    if (orgShifts.length === 0 && orgPayCodes.length === 0) continue
-    const buf = await buildPayrollWorkbook(orgShifts, orgPayCodes, label)
+    const orgExpenses = expenses.filter(e => e.org_id === owner.org_id)
+    if (orgShifts.length === 0 && orgPayCodes.length === 0 && orgExpenses.length === 0) continue
+    const buf = await buildPayrollWorkbook(orgShifts, orgPayCodes, label, orgExpenses)
     await resend.emails.send({
       from: process.env.REPORT_EMAIL_FROM!,
       to: [owner.email],
@@ -475,5 +583,5 @@ export async function GET(req: NextRequest) {
     sent.push(dev.email)
   }
 
-  return NextResponse.json({ ok: true, sent: sent.length, week: label, shifts: shifts.length })
+  return NextResponse.json({ ok: true, sent: sent.length, week: label, shifts: shifts.length, expenses: expenses.length })
 }

@@ -51,7 +51,8 @@ export default function ExpensesPage() {
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
-  const [filter, setFilter] = useState<string>('all')
+  const [filter, setFilter] = useState<string>('pending')
+  const [showHistory, setShowHistory] = useState(false)
 
   // Form state
   const [form, setForm] = useState({
@@ -240,7 +241,17 @@ export default function ExpensesPage() {
 
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
 
-  const filtered = filter === 'all' ? expenses : expenses.filter((e) => e.status === filter)
+  function toggleHistory() {
+    if (showHistory) {
+      setShowHistory(false)
+      setFilter('pending')
+    } else {
+      setShowHistory(true)
+      setFilter('paid')
+    }
+  }
+
+  const filtered = expenses.filter((e) => e.status === filter)
 
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
 
@@ -267,8 +278,22 @@ export default function ExpensesPage() {
       <div className="pt-14">
         <div className="px-4 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-xl font-bold">Expenses</h1>
-            {canSubmit && (
+            <div className="flex items-center gap-3">
+              <h1 className="text-xl font-bold">Expenses</h1>
+              {canViewDetail && (
+                <button
+                  onClick={toggleHistory}
+                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
+                    showHistory
+                      ? 'bg-gray-700 text-white border-gray-600'
+                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
+                  }`}
+                >
+                  {showHistory ? '← Active' : 'History'}
+                </button>
+              )}
+            </div>
+            {canSubmit && !showHistory && (
               <button
                 onClick={() => setShowForm(true)}
                 className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
@@ -280,12 +305,16 @@ export default function ExpensesPage() {
 
           {/* Summary cards — expandable */}
           <div className="space-y-2 mb-5">
-            {[
-              { key: 'pending', label: 'Pending', amount: totals.pending, color: 'text-yellow-400', border: 'border-yellow-500/20' },
-              { key: 'approved', label: 'Approved', amount: totals.approved, color: 'text-green-400', border: 'border-green-500/20' },
-              { key: 'paid', label: 'Paid', amount: totals.paid, color: 'text-blue-400', border: 'border-blue-500/20' },
-              { key: 'rejected', label: 'Rejected', amount: totals.rejected, color: 'text-red-400', border: 'border-red-500/20' },
-            ].map((s) => {
+            {(showHistory
+              ? [
+                  { key: 'paid', label: 'Paid', amount: totals.paid, color: 'text-blue-400', border: 'border-blue-500/20' },
+                  { key: 'approved', label: 'Approved (Unpaid)', amount: totals.approved, color: 'text-green-400', border: 'border-green-500/20' },
+                ]
+              : [
+                  { key: 'pending', label: 'Pending', amount: totals.pending, color: 'text-yellow-400', border: 'border-yellow-500/20' },
+                  { key: 'rejected', label: 'Rejected', amount: totals.rejected, color: 'text-red-400', border: 'border-red-500/20' },
+                ]
+            ).map((s) => {
               const isOpen = expandedCard === s.key
               const rows = byStatus[s.key] ?? []
               return (
@@ -335,7 +364,7 @@ export default function ExpensesPage() {
 
           {/* Filter tabs */}
           <div className="flex gap-2 overflow-x-auto pb-1 mb-4">
-            {['all', 'pending', 'approved', 'paid', 'rejected'].map((f) => (
+            {(showHistory ? ['paid', 'approved'] : ['pending', 'rejected']).map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}

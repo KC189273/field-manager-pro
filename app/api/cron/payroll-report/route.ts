@@ -8,6 +8,7 @@ const resend = new Resend(process.env.RESEND_API_KEY!)
 interface ShiftRow {
   user_id: string
   full_name: string
+  org_id: string | null
   org_name: string | null
   clock_in_at: string
   clock_out_at: string | null
@@ -20,6 +21,7 @@ interface ShiftRow {
 interface PayCodeRow {
   user_id: string
   full_name: string
+  org_id: string | null
   org_name: string | null
   date: string
   type: string
@@ -375,6 +377,7 @@ export async function GET(req: NextRequest) {
   const shifts = await query<ShiftRow>(`
     SELECT
       s.user_id,
+      u.org_id,
       u.full_name,
       o.name AS org_name,
       s.clock_in_at::text,
@@ -395,6 +398,7 @@ export async function GET(req: NextRequest) {
   const payCodes = await query<PayCodeRow>(`
     SELECT
       pc.user_id,
+      u.org_id,
       u.full_name,
       o.name AS org_name,
       pc.date::text,
@@ -445,13 +449,9 @@ export async function GET(req: NextRequest) {
   const sent: string[] = []
 
   for (const owner of owners) {
-    const orgShifts = owner.org_id
-      ? shifts.filter(s => {
-          // simplified: owners see all for now; org-scoped via separate query below
-          return true
-        })
-      : shifts
-    const orgPayCodes = owner.org_id ? payCodes : payCodes
+    const orgShifts = shifts.filter(s => s.org_id === owner.org_id)
+    const orgPayCodes = payCodes.filter(pc => pc.org_id === owner.org_id)
+    if (orgShifts.length === 0 && orgPayCodes.length === 0) continue
     const buf = await buildPayrollWorkbook(orgShifts, orgPayCodes, label)
     await resend.emails.send({
       from: process.env.REPORT_EMAIL_FROM!,

@@ -7,7 +7,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
 }
 
 interface Flag {
@@ -53,7 +53,7 @@ export default function FlagsPage() {
 
   useEffect(() => { loadFlags(showResolved) }, [showResolved])
 
-  const isManager = session && (session.role === 'manager' || session.role === 'ops_manager' || session.role === 'developer')
+  const isManager = session && (session.role === 'manager' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'developer')
 
   async function resolve(flagId: string) {
     setResolving(flagId)

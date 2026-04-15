@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, isManager } from '@/lib/auth'
+import { getSession, isManager, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
@@ -37,7 +37,9 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
-  if (!session || !isManager(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session || (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
 
   const { flagId } = await req.json()
   if (!flagId) return NextResponse.json({ error: 'Missing flagId' }, { status: 400 })

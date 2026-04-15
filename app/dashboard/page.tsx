@@ -8,12 +8,13 @@ export default async function DashboardPage() {
   const session = await getSession()
   if (!session) redirect('/login')
 
+  const isEmployee = session.role === 'employee'
   const canTeam = canViewTeam(session.role)
   const canExpenses = canSubmitExpense(session.role)
   const isDev = session.role === 'developer'
   const orgId = (!isDev && session.org_id) ? session.org_id : null
 
-  // Week start (Monday)
+  // Week start (Monday) — only needed for non-employees
   const now = new Date()
   const weekStart = new Date(now)
   weekStart.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))
@@ -21,7 +22,7 @@ export default async function DashboardPage() {
   const nextMon = nextWeekStart()
   const nextMonStr = nextMon.toISOString().split('T')[0]
 
-  // Run all queries in parallel
+  // Run queries in parallel — skip non-employee data for employees
   const [
     activeShift,
     weekShifts,
@@ -37,17 +38,21 @@ export default async function DashboardPage() {
       `SELECT id, clock_in_at, clock_in_address FROM shifts WHERE user_id = $1 AND clock_out_at IS NULL LIMIT 1`,
       [session.id]
     ),
-    // Own shifts this week
-    query<{ duration_seconds: number }>(
-      `SELECT EXTRACT(EPOCH FROM (COALESCE(clock_out_at, NOW()) - clock_in_at)) as duration_seconds
-       FROM shifts WHERE user_id = $1 AND clock_in_at >= $2 ORDER BY clock_in_at DESC`,
-      [session.id, weekStart.toISOString()]
-    ),
-    // Next week schedule
-    queryOne<{ days_working: number[] }>(
-      `SELECT days_working FROM schedules WHERE user_id = $1 AND week_start = $2`,
-      [session.id, nextMonStr]
-    ),
+    // Own shifts this week (skip for employees — not shown)
+    isEmployee
+      ? Promise.resolve([] as { duration_seconds: number }[])
+      : query<{ duration_seconds: number }>(
+          `SELECT EXTRACT(EPOCH FROM (COALESCE(clock_out_at, NOW()) - clock_in_at)) as duration_seconds
+           FROM shifts WHERE user_id = $1 AND clock_in_at >= $2 ORDER BY clock_in_at DESC`,
+          [session.id, weekStart.toISOString()]
+        ),
+    // Next week schedule (skip for employees — not shown)
+    isEmployee
+      ? Promise.resolve(null)
+      : queryOne<{ days_working: number[] }>(
+          `SELECT days_working FROM schedules WHERE user_id = $1 AND week_start = $2`,
+          [session.id, nextMonStr]
+        ),
     // Open flags (management)
     canTeam
       ? queryOne<{ count: string }>(
@@ -156,156 +161,168 @@ export default async function DashboardPage() {
           </div>
         </a>
 
-        {/* ── This week + Schedule (2-col) ── */}
-        <div className="grid grid-cols-2 gap-3">
-          <a
-            href="/timecards"
-            className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
-          >
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">This Week</p>
-            <p className="text-2xl font-bold text-white">
-              {totalHours}
-              <span className="text-sm font-normal text-gray-400 ml-1">hrs</span>
-            </p>
-            <p className="text-xs text-gray-600 mt-1">
-              {weekShifts.length} shift{weekShifts.length !== 1 ? 's' : ''}
-            </p>
-            <p className="text-xs text-violet-500 mt-3">Timecards →</p>
-          </a>
-
-          <a
-            href="/schedule"
-            className={`rounded-2xl p-4 border transition-colors ${
-              !scheduleSubmitted && scheduleOverdue
-                ? 'bg-red-950 border-red-800 hover:border-red-700'
-                : !scheduleSubmitted && daysLeft <= 2
-                ? 'bg-amber-950 border-amber-700 hover:border-amber-600'
-                : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-            }`}
-          >
-            <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Schedule</p>
-            {scheduleSubmitted ? (
-              <>
-                <p className="text-lg font-bold text-green-400">Submitted</p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {nextSchedule!.days_working.length} day{nextSchedule!.days_working.length !== 1 ? 's' : ''} selected
-                </p>
-              </>
-            ) : (
-              <>
-                <p className={`text-lg font-bold ${scheduleOverdue ? 'text-red-400' : daysLeft <= 2 ? 'text-amber-400' : 'text-white'}`}>
-                  {scheduleOverdue ? 'Overdue' : `${daysLeft}d left`}
-                </p>
-                <p className="text-xs text-gray-500 mt-1">{formatWeekRange(nextMon)}</p>
-              </>
-            )}
-            <p className="text-xs text-violet-500 mt-3">Schedule →</p>
-          </a>
-        </div>
-
-        {/* ── Expenses ── */}
-        {canExpenses && (
-          <a
-            href="/expenses"
-            className={`block rounded-2xl p-4 border transition-colors ${
-              (canTeam ? pendingExpCount : myPendingCount) > 0
-                ? 'bg-yellow-950/40 border-yellow-800/60 hover:border-yellow-700/60'
-                : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-            }`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Expenses</p>
-                {canTeam ? (
-                  pendingExpCount > 0 ? (
-                    <>
-                      <p className="text-xl font-bold text-yellow-400">
-                        {pendingExpCount} pending
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        ${pendingExpTotal.toFixed(2)} awaiting approval
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xl font-bold text-white">All clear</p>
-                      <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
-                    </>
-                  )
-                ) : (
-                  myPendingCount > 0 ? (
-                    <>
-                      <p className="text-xl font-bold text-yellow-400">
-                        {myPendingCount} pending
-                      </p>
-                      <p className="text-xs text-gray-500 mt-0.5">Awaiting approval</p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-xl font-bold text-white">All clear</p>
-                      <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
-                    </>
-                  )
-                )}
-              </div>
-              <p className="text-xs text-violet-500 mt-1">Expenses →</p>
-            </div>
-          </a>
-        )}
-
-        {/* ── Management section ── */}
-        {canTeam && (
+        {session.role === 'employee' ? (
           <>
-            {/* Flags + Live (2-col) */}
-            <div className="grid grid-cols-2 gap-3">
-              <a
-                href="/flags"
-                className={`rounded-2xl p-4 border transition-colors ${
-                  flagCount > 0
-                    ? 'bg-amber-950 border-amber-800 hover:border-amber-700'
-                    : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-                }`}
-              >
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Open Flags</p>
-                <p className={`text-2xl font-bold ${flagCount > 0 ? 'text-amber-400' : 'text-white'}`}>
-                  {flagCount}
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {flagCount === 0 ? 'All clear' : 'Need review'}
-                </p>
-                <p className="text-xs text-violet-500 mt-3">Flags →</p>
-              </a>
-
-              <a
-                href="/map"
-                className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
-              >
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Live</p>
-                <p className="text-2xl font-bold text-white">{clockedInCount}</p>
-                <p className="text-xs text-gray-600 mt-1">on the clock</p>
-                <p className="text-xs text-violet-500 mt-3">Live Map →</p>
-              </a>
-            </div>
-
-            {/* Team */}
+            {/* ── Employee: checklist link ── */}
             <a
-              href="/team"
-              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+              href="/checklist"
+              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-5 transition-colors"
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Team</p>
-                  <p className="text-xl font-bold text-white">
-                    {teamCount}
-                    <span className="text-sm font-normal text-gray-400 ml-1">active members</span>
-                  </p>
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    {clockedInCount} clocked in now
-                  </p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Daily Tasks</p>
+                  <p className="text-lg font-bold text-white">Opening / Closing</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Checklist</p>
                 </div>
-                <p className="text-xs text-violet-500">Team →</p>
+                <p className="text-xs text-violet-500">View →</p>
               </div>
             </a>
+          </>
+        ) : (
+          <>
+            {/* ── This week + Schedule (2-col) ── */}
+            <div className="grid grid-cols-2 gap-3">
+              <a
+                href="/timecards"
+                className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+              >
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">This Week</p>
+                <p className="text-2xl font-bold text-white">
+                  {totalHours}
+                  <span className="text-sm font-normal text-gray-400 ml-1">hrs</span>
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {weekShifts.length} shift{weekShifts.length !== 1 ? 's' : ''}
+                </p>
+                <p className="text-xs text-violet-500 mt-3">Timecards →</p>
+              </a>
+
+              <a
+                href="/schedule"
+                className={`rounded-2xl p-4 border transition-colors ${
+                  !scheduleSubmitted && scheduleOverdue
+                    ? 'bg-red-950 border-red-800 hover:border-red-700'
+                    : !scheduleSubmitted && daysLeft <= 2
+                    ? 'bg-amber-950 border-amber-700 hover:border-amber-600'
+                    : 'bg-gray-900 border-gray-800 hover:border-gray-700'
+                }`}
+              >
+                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Schedule</p>
+                {scheduleSubmitted ? (
+                  <>
+                    <p className="text-lg font-bold text-green-400">Submitted</p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {nextSchedule!.days_working.length} day{nextSchedule!.days_working.length !== 1 ? 's' : ''} selected
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className={`text-lg font-bold ${scheduleOverdue ? 'text-red-400' : daysLeft <= 2 ? 'text-amber-400' : 'text-white'}`}>
+                      {scheduleOverdue ? 'Overdue' : `${daysLeft}d left`}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">{formatWeekRange(nextMon)}</p>
+                  </>
+                )}
+                <p className="text-xs text-violet-500 mt-3">Schedule →</p>
+              </a>
+            </div>
+
+            {/* ── Expenses ── */}
+            {canExpenses && (
+              <a
+                href="/expenses"
+                className={`block rounded-2xl p-4 border transition-colors ${
+                  (canTeam ? pendingExpCount : myPendingCount) > 0
+                    ? 'bg-yellow-950/40 border-yellow-800/60 hover:border-yellow-700/60'
+                    : 'bg-gray-900 border-gray-800 hover:border-gray-700'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Expenses</p>
+                    {canTeam ? (
+                      pendingExpCount > 0 ? (
+                        <>
+                          <p className="text-xl font-bold text-yellow-400">{pendingExpCount} pending</p>
+                          <p className="text-xs text-gray-500 mt-0.5">${pendingExpTotal.toFixed(2)} awaiting approval</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xl font-bold text-white">All clear</p>
+                          <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
+                        </>
+                      )
+                    ) : (
+                      myPendingCount > 0 ? (
+                        <>
+                          <p className="text-xl font-bold text-yellow-400">{myPendingCount} pending</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Awaiting approval</p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-xl font-bold text-white">All clear</p>
+                          <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
+                        </>
+                      )
+                    )}
+                  </div>
+                  <p className="text-xs text-violet-500 mt-1">Expenses →</p>
+                </div>
+              </a>
+            )}
+
+            {/* ── Management: Flags + Live (2-col) ── */}
+            {canTeam && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <a
+                    href="/flags"
+                    className={`rounded-2xl p-4 border transition-colors ${
+                      flagCount > 0
+                        ? 'bg-amber-950 border-amber-800 hover:border-amber-700'
+                        : 'bg-gray-900 border-gray-800 hover:border-gray-700'
+                    }`}
+                  >
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Open Flags</p>
+                    <p className={`text-2xl font-bold ${flagCount > 0 ? 'text-amber-400' : 'text-white'}`}>
+                      {flagCount}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {flagCount === 0 ? 'All clear' : 'Need review'}
+                    </p>
+                    <p className="text-xs text-violet-500 mt-3">Flags →</p>
+                  </a>
+
+                  <a
+                    href="/map"
+                    className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+                  >
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Live</p>
+                    <p className="text-2xl font-bold text-white">{clockedInCount}</p>
+                    <p className="text-xs text-gray-600 mt-1">on the clock</p>
+                    <p className="text-xs text-violet-500 mt-3">Live Map →</p>
+                  </a>
+                </div>
+
+                {/* Team */}
+                <a
+                  href="/team"
+                  className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Team</p>
+                      <p className="text-xl font-bold text-white">
+                        {teamCount}
+                        <span className="text-sm font-normal text-gray-400 ml-1">active members</span>
+                      </p>
+                      <p className="text-xs text-gray-600 mt-0.5">{clockedInCount} clocked in now</p>
+                    </div>
+                    <p className="text-xs text-violet-500">Team →</p>
+                  </div>
+                </a>
+              </>
+            )}
           </>
         )}
       </div>

@@ -19,6 +19,8 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status')
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
 
   const orgFilter = await getOrgFilter(session)
   let rows: Record<string, unknown>[]
@@ -27,6 +29,8 @@ export async function GET(req: NextRequest) {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params)
     const statusClause = status ? (params.push(status), `AND e.status = $${params.length}`) : ''
+    const fromClause = from ? (params.push(from), `AND e.date >= $${params.length}`) : ''
+    const toClause = to ? (params.push(to), `AND e.date <= $${params.length}`) : ''
     rows = await query(
       `SELECT e.*, u.full_name as user_full_name, u.email as user_email,
               s.full_name as submitter_full_name,
@@ -35,14 +39,16 @@ export async function GET(req: NextRequest) {
        JOIN users u ON u.id = e.user_id
        JOIN users s ON s.id = e.submitted_by
        LEFT JOIN users a ON a.id = e.approved_by
-       WHERE 1=1${orgClause} ${statusClause}
-       ORDER BY e.created_at DESC`,
+       WHERE 1=1${orgClause} ${statusClause} ${fromClause} ${toClause}
+       ORDER BY e.date DESC, e.created_at DESC`,
       params
     ) as Record<string, unknown>[]
   } else {
-    // Manager sees their own + their employees' expenses
+    // Manager/employee sees their own + their employees' expenses
     const params: unknown[] = [session.id]
     const statusClause = status ? (params.push(status), `AND e.status = $${params.length}`) : ''
+    const fromClause = from ? (params.push(from), `AND e.date >= $${params.length}`) : ''
+    const toClause = to ? (params.push(to), `AND e.date <= $${params.length}`) : ''
     rows = await query(
       `SELECT e.*, u.full_name as user_full_name, u.email as user_email,
               s.full_name as submitter_full_name,
@@ -51,8 +57,8 @@ export async function GET(req: NextRequest) {
        JOIN users u ON u.id = e.user_id
        JOIN users s ON s.id = e.submitted_by
        LEFT JOIN users a ON a.id = e.approved_by
-       WHERE (e.user_id = $1 OR u.manager_id = $1) ${statusClause}
-       ORDER BY e.created_at DESC`,
+       WHERE (e.user_id = $1 OR u.manager_id = $1) ${statusClause} ${fromClause} ${toClause}
+       ORDER BY e.date DESC, e.created_at DESC`,
       params
     ) as Record<string, unknown>[]
   }

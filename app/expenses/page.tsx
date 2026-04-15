@@ -53,6 +53,8 @@ export default function ExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<string>('pending')
   const [showHistory, setShowHistory] = useState(false)
+  const [historyFrom, setHistoryFrom] = useState('')
+  const [historyTo, setHistoryTo] = useState('')
 
   // Form state
   const [form, setForm] = useState({
@@ -94,9 +96,19 @@ export default function ExpensesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session])
 
-  async function loadExpenses() {
+  useEffect(() => {
+    if (!showHistory || !historyFrom || !historyTo) return
+    loadExpenses(historyFrom, historyTo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyFrom, historyTo])
+
+  async function loadExpenses(from?: string, to?: string) {
     setLoading(true)
-    const res = await fetch('/api/expenses')
+    const params = new URLSearchParams()
+    if (from) params.set('from', from)
+    if (to) params.set('to', to)
+    const qs = params.size ? '?' + params.toString() : ''
+    const res = await fetch(`/api/expenses${qs}`)
     const data = await res.json()
     setExpenses(data.expenses ?? [])
     setLoading(false)
@@ -241,14 +253,20 @@ export default function ExpensesPage() {
 
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
 
-  function toggleHistory() {
-    if (showHistory) {
-      setShowHistory(false)
-      setFilter('pending')
-    } else {
-      setShowHistory(true)
-      setFilter('paid')
-    }
+  function openHistory() {
+    const to = new Date().toISOString().slice(0, 10)
+    const from = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    setHistoryFrom(from)
+    setHistoryTo(to)
+    setShowHistory(true)
+    setFilter('paid')
+    loadExpenses(from, to)
+  }
+
+  function closeHistory() {
+    setShowHistory(false)
+    setFilter('pending')
+    loadExpenses()
   }
 
   const filtered = expenses.filter((e) => e.status === filter)
@@ -278,30 +296,61 @@ export default function ExpensesPage() {
       <div className="pt-14">
         <div className="px-4 pt-6 pb-4">
           <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h1 className="text-xl font-bold">Expenses</h1>
-              {canViewDetail && (
+            <h1 className="text-xl font-bold">Expenses</h1>
+            <div className="flex items-center gap-2">
+              {canViewDetail && !showHistory && (
                 <button
-                  onClick={toggleHistory}
-                  className={`text-xs px-3 py-1.5 rounded-full font-medium transition-colors border ${
-                    showHistory
-                      ? 'bg-gray-700 text-white border-gray-600'
-                      : 'bg-gray-800 text-gray-400 border-gray-700 hover:text-white'
-                  }`}
+                  onClick={openHistory}
+                  className="text-xs px-3 py-1.5 rounded-full font-medium transition-colors border bg-gray-800 text-gray-400 border-gray-700 hover:text-white"
                 >
-                  {showHistory ? '← Active' : 'History'}
+                  History
+                </button>
+              )}
+              {canSubmit && !showHistory && (
+                <button
+                  onClick={() => setShowForm(true)}
+                  className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+                >
+                  + Submit
                 </button>
               )}
             </div>
-            {canSubmit && !showHistory && (
-              <button
-                onClick={() => setShowForm(true)}
-                className="bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
-              >
-                + Submit
-              </button>
-            )}
           </div>
+
+          {/* History date range bar */}
+          {showHistory && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-semibold text-white">Expense History</p>
+                <button
+                  onClick={closeHistory}
+                  className="text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  ← Back to Active
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={historyFrom}
+                    onChange={(e) => setHistoryFrom(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={historyTo}
+                    onChange={(e) => setHistoryTo(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Summary cards — expandable */}
           <div className="space-y-2 mb-5">

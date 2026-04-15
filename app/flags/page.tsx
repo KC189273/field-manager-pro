@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
 interface Session {
@@ -28,11 +29,13 @@ const FLAG_LABELS: Record<string, string> = {
 }
 
 export default function FlagsPage() {
+  const router = useRouter()
   const [session, setSession] = useState<Session | null>(null)
   const [flags, setFlags] = useState<Flag[]>([])
   const [showResolved, setShowResolved] = useState(false)
   const [loading, setLoading] = useState(false)
   const [resolving, setResolving] = useState<string | null>(null)
+  const [activeFlag, setActiveFlag] = useState<Flag | null>(null)
 
   async function loadFlags(resolved: boolean) {
     setLoading(true)
@@ -61,8 +64,23 @@ export default function FlagsPage() {
     })
     if (res.ok) {
       setFlags(prev => prev.filter(f => f.id !== flagId))
+      setActiveFlag(null)
     }
     setResolving(null)
+  }
+
+  async function resolveAndGo(flag: Flag) {
+    setResolving(flag.id)
+    const res = await fetch('/api/flags', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ flagId: flag.id }),
+    })
+    if (res.ok) {
+      setFlags(prev => prev.filter(f => f.id !== flag.id))
+    }
+    setResolving(null)
+    router.push(`/timecards?userId=${flag.user_id}`)
   }
 
   const flagColors: Record<string, string> = {
@@ -117,11 +135,10 @@ export default function FlagsPage() {
                     </div>
                     {isManager && !showResolved && (
                       <button
-                        onClick={() => resolve(flag.id)}
-                        disabled={resolving === flag.id}
-                        className="flex-shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+                        onClick={() => setActiveFlag(flag)}
+                        className="flex-shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
                       >
-                        {resolving === flag.id ? '…' : 'Resolve'}
+                        Resolve
                       </button>
                     )}
                   </div>
@@ -131,6 +148,57 @@ export default function FlagsPage() {
           </div>
         )}
       </div>
+
+      {/* Resolve modal */}
+      {activeFlag && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          onClick={() => setActiveFlag(null)}
+        >
+          <div
+            className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Flag type badge */}
+            <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border mb-4 ${flagColors[activeFlag.type] ?? 'text-gray-400 bg-gray-900 border-gray-800'}`}>
+              {FLAG_LABELS[activeFlag.type] ?? activeFlag.type}
+            </div>
+
+            <h2 className="text-lg font-bold text-white mb-1">{activeFlag.full_name}</h2>
+            <p className="text-sm text-gray-400 mb-1">
+              {new Date(activeFlag.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+            </p>
+            <p className="text-sm text-gray-300 mb-6">{activeFlag.detail}</p>
+
+            <div className="space-y-2">
+              {/* Primary: go to timecard and resolve */}
+              <button
+                onClick={() => resolveAndGo(activeFlag)}
+                disabled={resolving === activeFlag.id}
+                className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+              >
+                {resolving === activeFlag.id ? 'Opening…' : 'Go to Timecard & Resolve'}
+              </button>
+
+              {/* Secondary: mark resolved without navigating */}
+              <button
+                onClick={() => resolve(activeFlag.id)}
+                disabled={resolving === activeFlag.id}
+                className="w-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors"
+              >
+                {resolving === activeFlag.id ? '…' : 'Mark Resolved (already handled)'}
+              </button>
+
+              <button
+                onClick={() => setActiveFlag(null)}
+                className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

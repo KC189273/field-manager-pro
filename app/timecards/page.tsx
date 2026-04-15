@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
 type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
@@ -109,6 +110,7 @@ const canManage = (role: Role) =>
 const canDownloadRole = (role: Role) => role === 'owner' || role === 'ops_manager' || role === 'developer'
 
 export default function TimecardsPage() {
+  const searchParams = useSearchParams()
   const [session, setSession] = useState<Session | null>(null)
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([])
   const [weekOffset, setWeekOffset] = useState(0)
@@ -215,13 +217,19 @@ export default function TimecardsPage() {
   }, [])
 
   useEffect(() => {
+    const preselectedUserId = searchParams.get('userId')
     fetch('/api/auth/me').then(r => r.json()).then((s: Session) => {
       setSession(s)
       if (canManage(s.role)) {
-        setActiveView('all')
         fetch('/api/team/users').then(r => r.json()).then(d => {
           const users = (d.users ?? []).filter((u: TeamUser) => u.role !== 'developer')
           setTeamUsers(users)
+          if (preselectedUserId) {
+            setSelectedUserId(preselectedUserId)
+            setActiveView('individual')
+          } else {
+            setActiveView('all')
+          }
         })
       }
       // Default dlFrom/dlTo to current week Mon/Sun
@@ -230,7 +238,7 @@ export default function TimecardsPage() {
       setDlFrom(toLocalDateStr(mon))
       setDlTo(toLocalDateStr(sun))
     })
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     if (activeView === 'all' && session && canManage(session.role)) {

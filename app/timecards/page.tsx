@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
@@ -109,7 +109,15 @@ const canManage = (role: Role) =>
 
 const canDownloadRole = (role: Role) => role === 'owner' || role === 'ops_manager' || role === 'developer'
 
-export default function TimecardsPage() {
+export default function TimecardsPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-950" />}>
+      <TimecardsPage />
+    </Suspense>
+  )
+}
+
+function TimecardsPage() {
   const searchParams = useSearchParams()
   const [session, setSession] = useState<Session | null>(null)
   const [teamUsers, setTeamUsers] = useState<TeamUser[]>([])

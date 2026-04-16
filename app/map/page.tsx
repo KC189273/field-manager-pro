@@ -11,6 +11,7 @@ interface Session {
 
 interface Shift {
   id: string
+  user_role: string
   clock_in_at: string
   clock_in_lat: number | null
   clock_in_lng: number | null
@@ -22,13 +23,20 @@ interface Shift {
   full_name: string
 }
 
+interface Breadcrumb {
+  shift_id: string
+  lat: number
+  lng: number
+  recorded_at: string
+  is_gap?: boolean
+}
+
 interface LiveEmployee {
   shift_id: string
   user_id: string
   full_name: string
+  user_role: string
   clock_in_at: string
-  clock_in_lat: number | null
-  clock_in_lng: number | null
   lat: number | null
   lng: number | null
   last_seen_at: string
@@ -39,6 +47,61 @@ interface User {
   full_name: string
   role: string
 }
+
+const PATH_SOURCE = 'shift-paths'
+const PATH_LAYER = 'shift-paths-line'
+
+// Snap a GPS path to roads.
+async function snapToRoads(coords: [number, number][]): Promise<[number, number][]> {
+  if (coords.length < 2) return coords
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
+  try {
+    if (coords.length === 2) {
+      const [a, b] = coords
+      const res = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${a[0]},${a[1]};${b[0]},${b[1]}?access_token=${token}&geometries=geojson&overview=full`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        const route = data.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
+        if (route && route.length >= 2) return route
+      }
+    } else {
+      const MAX = 100
+      const pts: [number, number][] = coords.length > MAX
+        ? Array.from({ length: MAX }, (_, i) => coords[Math.round(i * (coords.length - 1) / (MAX - 1))])
+        : coords
+      const coordStr = pts.map(([lng, lat]) => `${lng},${lat}`).join(';')
+      const radiuses = pts.map(() => '100').join(';')
+      const res = await fetch(
+        `https://api.mapbox.com/matching/v5/mapbox/driving/${coordStr}?access_token=${token}&geometries=geojson&radiuses=${radiuses}&overview=full&tidy=true`
+      )
+      if (res.ok) {
+        const data = await res.json()
+        if (data.matchings?.length) {
+          const all: [number, number][] = []
+          for (const m of data.matchings) {
+            if (m.geometry?.coordinates?.length) all.push(...(m.geometry.coordinates as [number, number][]))
+          }
+          if (all.length >= 2) return all
+        }
+      }
+      const [first, last] = [pts[0], pts[pts.length - 1]]
+      const fallback = await fetch(
+        `https://api.mapbox.com/directions/v5/mapbox/driving/${first[0]},${first[1]};${last[0]},${last[1]}?access_token=${token}&geometries=geojson&overview=full`
+      )
+      if (fallback.ok) {
+        const fData = await fallback.json()
+        const route = fData.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
+        if (route && route.length >= 2) return route
+      }
+    }
+  } catch { /* fall back to straight lines */ }
+  return coords
+}
+
+const canSeePaths = (role: string) =>
+  ['sales_director', 'ops_manager', 'owner', 'developer'].includes(role)
 
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -75,7 +138,6 @@ export default function MapPage() {
   // Initialize Mapbox
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return
-
     import('mapbox-gl').then(mapboxgl => {
       mapboxgl.default.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
       const map = new mapboxgl.default.Map({
@@ -94,20 +156,24 @@ export default function MapPage() {
     markersRef.current = []
   }
 
-  function makeLabel(name: string, color: string) {
+  const clearPaths = () => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.getLayer(PATH_LAYER)) map.removeLayer(PATH_LAYER)
+    if (map.getSource(PATH_SOURCE)) map.removeSource(PATH_SOURCE)
+  }
+
+  function makeMarkerEl(name: string, color: string) {
     const el = document.createElement('div')
     el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;'
-
     const label = document.createElement('div')
     label.style.cssText = `
       background:rgba(0,0,0,0.75);color:#f9fafb;font-size:10px;font-weight:600;
       padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;
     `
     label.textContent = name
-
     const dot = document.createElement('div')
     dot.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 6px ${color}88;`
-
     el.appendChild(label)
     el.appendChild(dot)
     return el
@@ -118,20 +184,63 @@ export default function MapPage() {
 
     const res = await fetch('/api/map/live')
     if (!res.ok) return
-    const { employees } = await res.json() as { employees: LiveEmployee[] }
+    const { employees, breadcrumbs } = await res.json() as {
+      employees: LiveEmployee[]
+      breadcrumbs: Breadcrumb[]
+    }
 
-    import('mapbox-gl').then(mapboxgl => {
+    const empWithCoords = employees
+      .map(emp => ({ ...emp, lat: Number(emp.lat), lng: Number(emp.lng) }))
+      .filter(emp => isFinite(emp.lat) && isFinite(emp.lng) && emp.lat !== 0 && emp.lng !== 0)
+
+    import('mapbox-gl').then(async mapboxgl => {
       const map = mapRef.current
       clearMarkers()
+      clearPaths()
+
+      // Build road-matched paths for DM shifts (only for roles that can see paths)
+      const role = session?.role ?? ''
+      let pathFeatures: object[] = []
+
+      if (canSeePaths(role) && breadcrumbs.length > 0) {
+        const dmEmps = empWithCoords.filter(e => e.user_role === 'manager')
+        const matched = await Promise.all(dmEmps.map(async emp => {
+          const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id)
+          const allPts = [
+            ...crumbs.map(c => ({ lng: Number(c.lng), lat: Number(c.lat) })),
+            { lng: emp.lng, lat: emp.lat },
+          ].filter(p => isFinite(p.lat) && isFinite(p.lng) && p.lat !== 0 && p.lng !== 0)
+
+          const coords: [number, number][] = allPts.map(p => [p.lng, p.lat])
+          const snapped = coords.length >= 2 ? await snapToRoads(coords) : coords
+          return { emp, snapped }
+        }))
+
+        pathFeatures = matched
+          .filter(({ snapped }) => snapped.length >= 2)
+          .map(({ emp, snapped }) => ({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: snapped },
+            properties: { name: emp.full_name },
+          }))
+      }
+
+      map.addSource(PATH_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: pathFeatures },
+      })
+      map.addLayer({
+        id: PATH_LAYER,
+        type: 'line',
+        source: PATH_SOURCE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#22c55e', 'line-width': 3, 'line-opacity': 0.8 },
+      })
 
       const bounds = new mapboxgl.default.LngLatBounds()
       let hasPoints = false
 
-      for (const emp of employees) {
-        const lat = Number(emp.lat)
-        const lng = Number(emp.lng)
-        if (!isFinite(lat) || !isFinite(lng) || lat === 0 || lng === 0) continue
-
+      for (const emp of empWithCoords) {
         const clockIn = new Date(emp.clock_in_at).toLocaleTimeString('en-US', {
           timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit',
         })
@@ -139,10 +248,9 @@ export default function MapPage() {
           timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit',
         })
 
-        const el = makeLabel(emp.full_name.split(' ')[0], '#22c55e')
-
+        const el = makeMarkerEl(emp.full_name.split(' ')[0], '#22c55e')
         const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
-          .setLngLat([lng, lat])
+          .setLngLat([emp.lng, emp.lat])
           .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
             <div style="font-size:13px;line-height:1.6">
               <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f9fafb">${emp.full_name}</div>
@@ -152,9 +260,8 @@ export default function MapPage() {
             </div>
           `))
           .addTo(map)
-
         markersRef.current.push(marker)
-        bounds.extend([lng, lat])
+        bounds.extend([emp.lng, emp.lat])
         hasPoints = true
       }
 
@@ -162,16 +269,13 @@ export default function MapPage() {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15 })
       }
 
-      setLiveCount(employees.filter(e => {
-        const lat = Number(e.lat); const lng = Number(e.lng)
-        return isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0
-      }).length)
+      setLiveCount(empWithCoords.length)
       setLastUpdated(new Date())
     })
-  }, [mapReady])
+  }, [mapReady, session])
 
   async function loadMap() {
-    if (!mapRef.current || !mapReady) return
+    if (!mapRef.current || !mapReady || !session) return
 
     const params = new URLSearchParams()
     if (selectedUser) params.set('userId', selectedUser)
@@ -180,19 +284,57 @@ export default function MapPage() {
 
     const res = await fetch(`/api/map?${params}`)
     if (!res.ok) return
-    const { shifts }: { shifts: Shift[] } = await res.json()
+    const { shifts, breadcrumbs }: { shifts: Shift[]; breadcrumbs: Breadcrumb[] } = await res.json()
 
-    import('mapbox-gl').then(mapboxgl => {
+    import('mapbox-gl').then(async mapboxgl => {
       const map = mapRef.current
       clearMarkers()
+      clearPaths()
 
       const bounds = new mapboxgl.default.LngLatBounds()
       let hasPoints = false
 
+      // Build road-snapped paths for DM shifts (higher roles only)
+      let pathFeatures: object[] = []
+      if (canSeePaths(session.role) && breadcrumbs.length > 0) {
+        const dmShifts = shifts.filter(s => s.user_role === 'manager')
+        const matched = await Promise.all(dmShifts.map(async shift => {
+          const coords: [number, number][] = []
+          if (shift.clock_in_lat && shift.clock_in_lng)
+            coords.push([shift.clock_in_lng, shift.clock_in_lat])
+          const crumbs = breadcrumbs.filter(b => b.shift_id === shift.id && !b.is_gap)
+          for (const c of crumbs) coords.push([c.lng, c.lat])
+          if (shift.clock_out_lat && shift.clock_out_lng)
+            coords.push([shift.clock_out_lng, shift.clock_out_lat])
+
+          const snapped = coords.length >= 2 ? await snapToRoads(coords) : coords
+          return { shift, snapped }
+        }))
+
+        pathFeatures = matched
+          .filter(({ snapped }) => snapped.length >= 2)
+          .map(({ shift, snapped }) => ({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: snapped },
+            properties: { name: shift.full_name },
+          }))
+      }
+
+      map.addSource(PATH_SOURCE, {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: pathFeatures },
+      })
+      map.addLayer({
+        id: PATH_LAYER,
+        type: 'line',
+        source: PATH_SOURCE,
+        layout: { 'line-join': 'round', 'line-cap': 'round' },
+        paint: { 'line-color': '#818cf8', 'line-width': 3, 'line-opacity': 0.8 },
+      })
+
       for (const shift of shifts) {
-        // Clock-in marker (green)
         if (shift.clock_in_lat && shift.clock_in_lng) {
-          const el = makeLabel(shift.full_name, '#22c55e')
+          const el = makeMarkerEl(shift.full_name, '#22c55e')
           const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([shift.clock_in_lng, shift.clock_in_lat])
             .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
@@ -209,9 +351,8 @@ export default function MapPage() {
           hasPoints = true
         }
 
-        // Clock-out marker (red)
         if (shift.clock_out_at && shift.clock_out_lat && shift.clock_out_lng) {
-          const el = makeLabel(shift.full_name, '#ef4444')
+          const el = makeMarkerEl(shift.full_name, '#ef4444')
           const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([shift.clock_out_lng, shift.clock_out_lat])
             .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
@@ -242,6 +383,7 @@ export default function MapPage() {
       const next = !prev
       if (!next) {
         clearMarkers()
+        clearPaths()
         if (liveIntervalRef.current) {
           clearInterval(liveIntervalRef.current)
           liveIntervalRef.current = null
@@ -285,6 +427,10 @@ export default function MapPage() {
       {session && <NavBar role={session.role} fullName={session.fullName} />}
 
       <style>{`
+        @keyframes live-pulse {
+          0%, 100% { transform: scale(1); opacity: 1; }
+          50% { transform: scale(1.35); opacity: 0.6; }
+        }
         .mapboxgl-popup-content {
           background: #1f2937 !important;
           color: #f9fafb !important;
@@ -363,10 +509,18 @@ export default function MapPage() {
       {/* Legend */}
       <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex items-center gap-4">
         {liveMode ? (
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-green-500 block" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.8)' }} />
-            <span className="text-xs text-gray-400">Currently clocked in</span>
-          </div>
+          <>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-green-500 block" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.8)' }} />
+              <span className="text-xs text-gray-400">Currently clocked in</span>
+            </div>
+            {session && canSeePaths(session.role) && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-8 block rounded" style={{ height: '3px', background: '#22c55e' }} />
+                <span className="text-xs text-gray-400">DM route</span>
+              </div>
+            )}
+          </>
         ) : (
           <>
             <div className="flex items-center gap-1.5">
@@ -377,6 +531,12 @@ export default function MapPage() {
               <span className="w-3 h-3 rounded-full bg-red-500 block" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />
               <span className="text-xs text-gray-400">Clock Out</span>
             </div>
+            {session && canSeePaths(session.role) && (
+              <div className="flex items-center gap-1.5">
+                <span className="w-8 block rounded" style={{ height: '3px', background: '#818cf8' }} />
+                <span className="text-xs text-gray-400">DM route</span>
+              </div>
+            )}
           </>
         )}
       </div>

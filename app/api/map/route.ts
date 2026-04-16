@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username
+             u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE s.user_id = $1${df}
       ORDER BY s.clock_in_at DESC LIMIT 50
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username
+             u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE 1=1${dateFilter}${orgClause}
       ORDER BY s.clock_in_at DESC LIMIT 200
@@ -77,12 +77,28 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username
+             u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE s.user_id = $1${df}
       ORDER BY s.clock_in_at DESC LIMIT 50
     `, params)
   }
 
-  return NextResponse.json({ shifts })
+  // Fetch breadcrumbs only for DM (manager) shifts, and only for roles that can see paths
+  const canSeePaths = ['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)
+  const dmShiftIds = canSeePaths
+    ? (shifts as { id: string; user_role: string }[])
+        .filter(s => s.user_role === 'manager')
+        .map(s => s.id)
+    : []
+
+  const breadcrumbs = dmShiftIds.length > 0
+    ? await query(`
+        SELECT b.shift_id, b.lat, b.lng, b.recorded_at, b.is_gap
+        FROM gps_breadcrumbs b
+        WHERE b.shift_id = ANY($1) ORDER BY b.recorded_at ASC
+      `, [dmShiftIds])
+    : []
+
+  return NextResponse.json({ shifts, breadcrumbs })
 }

@@ -222,14 +222,10 @@ export default async function DashboardPage() {
 
         {session.role === 'employee' ? (
           <>
-            {/* ── Employee: upcoming schedule ── */}
-            <a
-              href="/staff-schedule"
-              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl overflow-hidden transition-colors"
-            >
-              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-800/60">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">My Schedule</p>
-                <p className="text-xs text-violet-500">View all →</p>
+            {/* ── Employee: upcoming schedule (read-only) ── */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+              <div className="flex items-center px-5 pt-4 pb-3 border-b border-gray-800/60">
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">Upcoming Shifts</p>
               </div>
               {upcomingShifts.length === 0 ? (
                 <div className="px-5 py-4">
@@ -256,7 +252,7 @@ export default async function DashboardPage() {
                   )}
                 </div>
               )}
-            </a>
+            </div>
 
             {/* ── Employee: checklist link ── */}
             <a
@@ -321,6 +317,21 @@ export default async function DashboardPage() {
                 <p className="text-xs text-violet-500 mt-3">Schedule →</p>
               </a>
             </div>
+
+            {/* ── Store Scheduling (DM and above only) ── */}
+            <a
+              href="/staff-schedule"
+              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Store Scheduling</p>
+                  <p className="text-lg font-bold text-white">Manage Shifts</p>
+                  <p className="text-xs text-gray-600 mt-0.5">View and edit store schedules</p>
+                </div>
+                <p className="text-xs text-violet-500 shrink-0 ml-3">Schedule →</p>
+              </div>
+            </a>
 
             {/* ── Expenses ── */}
             {canExpenses && (

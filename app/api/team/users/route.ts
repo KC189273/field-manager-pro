@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
   const allowedRoles = session.role === 'developer'
     ? ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
     : isOwner(session.role)
-    ? ['employee', 'manager', 'ops_manager']
+    ? ['employee', 'manager', 'ops_manager', 'sales_director']
     : ['employee']
   if (role && !allowedRoles.includes(role)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })

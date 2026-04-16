@@ -383,7 +383,7 @@ export default function TeamPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
-                {isDev && <option value="sales_director">Sales Director</option>}
+                {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
             )}
@@ -430,7 +430,7 @@ export default function TeamPage() {
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
-                {isDev && <option value="sales_director">Sales Director</option>}
+                {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
               {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (

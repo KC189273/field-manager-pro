@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer')) {
+  if (!session || (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -155,7 +155,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer')) {
+  if (!session || (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

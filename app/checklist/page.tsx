@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 
 interface Session {
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 export default function ChecklistPage() {

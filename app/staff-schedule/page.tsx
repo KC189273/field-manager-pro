@@ -12,7 +12,7 @@ const GANTT_SPAN  = GANTT_END - GANTT_START
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Store {
@@ -102,8 +102,7 @@ export default function StaffSchedulePage() {
   const weekLabel = formatWeekRange(monday)
 
   const isEmployee = session?.role === 'employee'
-  const isRDM = session?.role === 'rdm'
-  const canEdit = !!session && !isEmployee && !isRDM
+  const canEdit = !!session && !isEmployee
   const canUnpublish = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
   const scheduleIsLocked = isPublished && session?.role === 'manager'
 

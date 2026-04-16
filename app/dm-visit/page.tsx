@@ -8,7 +8,7 @@ interface Session {
   id: string
   fullName: string
   email: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
   org_id?: string | null
 }
 

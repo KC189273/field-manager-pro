@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Field Manager Pro — Extra Screens</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #1a1a2e; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif; min-height: 100vh; }
+
+  .page-title {
+    text-align: center;
+    color: #a78bfa;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 32px 0 24px;
+  }
+
+  .screens-row {
+    display: flex;
+    gap: 32px;
+    justify-content: center;
+    padding: 0 32px 48px;
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .screen-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .screen-label {
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* iPhone shell */
+  .phone {
+    width: 280px;
+    height: 580px;
+    background: #0f0f0f;
+    border-radius: 44px;
+    border: 6px solid #2d2d2d;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.6), inset 0 0 0 1px #3a3a3a;
+  }
+
+  /* Dynamic island */
+  .phone::before {
+    content: '';
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 90px;
+    height: 24px;
+    background: #0f0f0f;
+    border-radius: 20px;
+    z-index: 100;
+  }
+
+  .screen {
+    width: 100%;
+    height: 100%;
+    background: #030712;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding: 0 20px 6px;
+    flex-shrink: 0;
+  }
+  .status-time { color: white; font-size: 13px; font-weight: 600; }
+  .status-icons { display: flex; gap: 5px; align-items: center; }
+  .status-icons svg { width: 14px; height: 14px; fill: white; }
+
+  /* Top nav */
+  .top-nav {
+    height: 44px;
+    background: #030712;
+    border-bottom: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+  .top-nav-brand { display: flex; align-items: center; gap: 6px; }
+  .brand-icon {
+    width: 24px; height: 24px; border-radius: 7px;
+    background: #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .brand-icon svg { width: 13px; height: 13px; stroke: white; fill: none; }
+  .brand-text { color: white; font-size: 13px; font-weight: 600; }
+  .top-nav-user { color: #6b7280; font-size: 11px; }
+  .top-nav-action { color: #a78bfa; font-size: 11px; font-weight: 600; }
+
+  /* Content area */
+  .content { flex: 1; overflow-y: auto; padding: 16px 14px; }
+
+  /* Bottom bar */
+  .bottom-bar {
+    height: 54px;
+    background: #030712;
+    border-top: 1px solid #1f2937;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .current-page {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+  .current-page svg { width: 14px; height: 14px; stroke: #a78bfa; fill: none; flex-shrink: 0; }
+  .current-page span { color: #a78bfa; font-size: 11px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .menu-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: #1f2937; border-radius: 10px;
+    padding: 6px 12px; flex-shrink: 0;
+  }
+  .menu-btn svg { width: 13px; height: 13px; stroke: #d1d5db; fill: none; }
+  .menu-btn span { color: #d1d5db; font-size: 11px; font-weight: 500; }
+
+  /* Home bar */
+  .home-indicator {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .home-bar {
+    width: 100px; height: 4px;
+    background: #374151;
+    border-radius: 4px;
+  }
+
+  /* Page headers */
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .page-title-text {
+    color: white;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  /* Week nav */
+  .week-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111827;
+    border-radius: 10px;
+    padding: 6px 10px;
+    margin-bottom: 12px;
+  }
+  .week-nav-arrow { color: #6b7280; font-size: 14px; cursor: pointer; }
+  .week-nav-label { color: #d1d5db; font-size: 11px; font-weight: 500; }
+
+  /* Dark cards */
+  .dark-card {
+    background: #111827;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .dark-card.amber-border { border-left: 3px solid #f59e0b; }
+  .dark-card.green-border { border-left: 3px solid #10b981; }
+
+  /* Task cards */
+  .task-card {
+    background: #111827;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .task-circle {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid #374151;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .task-circle.completed {
+    background: #10b981;
+    border-color: #10b981;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .task-circle.completed svg { width: 12px; height: 12px; stroke: white; fill: none; }
+  .task-content { flex: 1; }
+  .task-title { color: white; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+  .task-title.done { text-decoration: line-through; color: #6b7280; }
+  .task-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .pill-purple {
+    background: rgba(124,58,237,0.25);
+    color: #a78bfa;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+  }
+  .pill-amber {
+    background: rgba(120,53,0,0.3);
+    color: #fbbf24;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    border: 1px solid rgba(120,53,0,0.5);
+  }
+  .pill-green {
+    color: #34d399;
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  /* Timecard rows */
+  .timecard-row {
+    background: #111827;
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .timecard-left {}
+  .timecard-name { color: white; font-size: 12px; font-weight: 600; margin-bottom: 2px; }
+  .timecard-date { color: #6b7280; font-size: 10px; margin-bottom: 2px; }
+  .timecard-times { color: #9ca3af; font-size: 10px; }
+  .timecard-hours { color: white; font-size: 13px; font-weight: 700; }
+  .timecard-hours.missing { color: #f59e0b; }
+
+  /* Team cards */
+  .team-card {
+    background: #111827;
+    border-radius: 14px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .team-info { flex: 1; }
+  .team-name { color: white; font-size: 12px; font-weight: 600; }
+  .team-username { color: #6b7280; font-size: 10px; margin-top: 2px; }
+  .team-edit { color: #6b7280; font-size: 10px; }
+  .section-label {
+    color: #4b5563;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    margin-top: 10px;
+  }
+  .pill-dm {
+    background: rgba(124,58,237,0.25);
+    color: #a78bfa;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    display: inline-block;
+  }
+  .pill-emp {
+    background: rgba(107,114,128,0.25);
+    color: #9ca3af;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 20px;
+    display: inline-block;
+  }
+
+  /* Flag cards */
+  .flag-card {
+    background: #111827;
+    border-radius: 14px;
+    padding: 12px;
+    margin-bottom: 8px;
+  }
+  .flag-card.amber-border { border-left: 3px solid #f59e0b; }
+  .flag-card.green-border { border-left: 3px solid #10b981; }
+  .flag-title { color: white; font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+  .flag-title.muted { color: #6b7280; }
+  .flag-who { color: #6b7280; font-size: 10px; margin-bottom: 3px; }
+  .flag-detail { color: #6b7280; font-size: 10px; margin-bottom: 6px; }
+  .resolve-btn {
+    display: inline-block;
+    background: #1f2937;
+    color: #9ca3af;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .resolved-badge {
+    display: inline-block;
+    background: rgba(16,185,129,0.15);
+    color: #34d399;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  /* Login screen */
+  .login-screen {
+    width: 100%;
+    height: 100%;
+    background: #030712;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px;
+    gap: 0;
+  }
+  .login-brand-icon {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    background: #7c3aed;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 12px;
+  }
+  .login-brand-icon svg { width: 28px; height: 28px; stroke: white; fill: none; }
+  .login-app-name { color: white; font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .login-subtitle { color: #6b7280; font-size: 12px; margin-bottom: 28px; }
+  .login-label { color: #6b7280; font-size: 11px; font-weight: 500; margin-bottom: 5px; align-self: flex-start; width: 100%; }
+  .login-input {
+    width: 100%;
+    background: #111827;
+    border: 1px solid #1f2937;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: white;
+    font-size: 12px;
+    margin-bottom: 14px;
+  }
+  .login-input.dots { color: #374151; letter-spacing: 3px; }
+  .login-btn {
+    width: 100%;
+    background: #7c3aed;
+    color: white;
+    font-size: 13px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: 12px;
+    text-align: center;
+    margin-bottom: 14px;
+  }
+  .login-forgot { color: #6b7280; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<p class="page-title">Field Manager Pro — Extra Screens</p>
+
+<div class="screens-row">
+
+  <!-- Tasks Screen -->
+  <div class="screen-wrap" id="wrap-tasks">
+    <span class="screen-label">Tasks</span>
+    <div class="phone" id="phone-tasks">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Tasks</div>
+          </div>
+          <div class="week-nav">
+            <span class="week-nav-arrow">‹</span>
+            <span class="week-nav-label">Apr 14 – Apr 20</span>
+            <span class="week-nav-arrow">›</span>
+          </div>
+
+          <!-- Task 1: Pending -->
+          <div class="task-card">
+            <div class="task-circle"></div>
+            <div class="task-content">
+              <div class="task-title">Review Q2 Staff Schedule</div>
+              <div class="task-meta">
+                <span class="pill-purple">John Davidson</span>
+                <span class="pill-amber">Due Apr 18</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Task 2: Completed -->
+          <div class="task-card">
+            <div class="task-circle completed">
+              <svg viewBox="0 0 24 24" stroke-width="2.5"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <div class="task-content">
+              <div class="task-title done">Update Store Signage</div>
+              <div class="task-meta">
+                <span class="pill-green">✓ Completed Apr 15</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            <span>Tasks</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timecards Screen -->
+  <div class="screen-wrap" id="wrap-timecards">
+    <span class="screen-label">Timecards</span>
+    <div class="phone" id="phone-timecards">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Timecards</div>
+          </div>
+          <div class="week-nav">
+            <span class="week-nav-arrow">‹</span>
+            <span class="week-nav-label">Apr 14 – Apr 20</span>
+            <span class="week-nav-arrow">›</span>
+          </div>
+
+          <!-- Row 1 -->
+          <div class="timecard-row">
+            <div class="timecard-left">
+              <div class="timecard-name">Sarah Kim</div>
+              <div class="timecard-date">Mon Apr 14</div>
+              <div class="timecard-times">In: 8:02 AM &nbsp; Out: 5:14 PM</div>
+            </div>
+            <div class="timecard-hours">9.2h</div>
+          </div>
+
+          <!-- Row 2 -->
+          <div class="timecard-row">
+            <div class="timecard-left">
+              <div class="timecard-name">Mike Torres</div>
+              <div class="timecard-date">Mon Apr 14</div>
+              <div class="timecard-times">In: 9:15 AM &nbsp; Out: —</div>
+            </div>
+            <div class="timecard-hours missing">Missing</div>
+          </div>
+
+          <!-- Row 3 -->
+          <div class="timecard-row">
+            <div class="timecard-left">
+              <div class="timecard-name">Alex Reyes</div>
+              <div class="timecard-date">Mon Apr 14</div>
+              <div class="timecard-times">In: 7:58 AM &nbsp; Out: 4:30 PM</div>
+            </div>
+            <div class="timecard-hours">8.5h</div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 3"/></svg>
+            <span>Timecards</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Team Screen -->
+  <div class="screen-wrap" id="wrap-team">
+    <span class="screen-label">Team</span>
+    <div class="phone" id="phone-team">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-action">+ Add DM</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Team</div>
+          </div>
+
+          <div class="section-label">DMs</div>
+
+          <div class="team-card">
+            <div class="team-info">
+              <div class="team-name">John Davidson</div>
+              <div style="margin-top:3px;"><span class="pill-dm">DM</span></div>
+              <div class="team-username">john.davidson</div>
+            </div>
+            <div class="team-edit">Edit</div>
+          </div>
+
+          <div class="team-card">
+            <div class="team-info">
+              <div class="team-name">Maria Lopez</div>
+              <div style="margin-top:3px;"><span class="pill-dm">DM</span></div>
+              <div class="team-username">maria.lopez</div>
+            </div>
+            <div class="team-edit">Edit</div>
+          </div>
+
+          <div class="section-label">Employees</div>
+
+          <div class="team-card">
+            <div class="team-info">
+              <div class="team-name">Sarah Kim</div>
+              <div style="margin-top:3px;"><span class="pill-emp">Employee</span></div>
+              <div class="team-username">sarah.kim</div>
+            </div>
+            <div class="team-edit">Edit</div>
+          </div>
+
+          <div class="team-card">
+            <div class="team-info">
+              <div class="team-name">Alex Reyes</div>
+              <div style="margin-top:3px;"><span class="pill-emp">Employee</span></div>
+              <div class="team-username">alex.reyes</div>
+            </div>
+            <div class="team-edit">Edit</div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span>Team</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Flags Screen -->
+  <div class="screen-wrap" id="wrap-flags">
+    <span class="screen-label">Flags</span>
+    <div class="phone" id="phone-flags">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Flags</div>
+          </div>
+
+          <!-- Flag 1: Unresolved - amber -->
+          <div class="flag-card amber-border">
+            <div class="flag-title">⚠ Late Clock-In</div>
+            <div class="flag-who">Sarah Kim · Apr 14</div>
+            <div class="flag-detail">Clocked in at 9:47 AM, scheduled 9:00 AM</div>
+            <span class="resolve-btn">Resolve</span>
+          </div>
+
+          <!-- Flag 2: Resolved - green -->
+          <div class="flag-card green-border">
+            <div class="flag-title muted">✓ Missed Clock-Out</div>
+            <div class="flag-who">Mike Torres · Apr 13</div>
+            <div class="flag-detail">Resolved: Manager manually clocked out</div>
+            <span class="resolved-badge">✓ Resolved</span>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9"/></svg>
+            <span>Flags</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Staff Schedule Screen (DM Management View) -->
+  <div class="screen-wrap" id="wrap-staff-schedule">
+    <span class="screen-label">Staff Schedule</span>
+    <div class="phone" id="phone-staff-schedule">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">John D.</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Staff Schedule</div>
+          </div>
+          <!-- Week nav with Publish button -->
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#111827;border-radius:10px;padding:6px 10px;margin-bottom:10px;">
+            <span style="color:#6b7280;font-size:14px;">‹</span>
+            <span style="color:#d1d5db;font-size:11px;font-weight:500;">Apr 14 – Apr 20</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="color:#6b7280;font-size:14px;">›</span>
+              <span style="background:#7c3aed;color:white;font-size:9px;font-weight:700;padding:3px 9px;border-radius:20px;">Publish</span>
+            </div>
+          </div>
+          <!-- Schedule Grid -->
+          <div style="border-radius:10px;overflow:hidden;border:1px solid #1f2937;">
+            <!-- Header row -->
+            <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;background:#1f2937;padding:5px 8px;">
+              <span style="color:#6b7280;font-size:9px;font-weight:600;">Employee</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">M</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">T</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">W</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">T</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">F</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">S</span>
+              <span style="color:#6b7280;font-size:9px;font-weight:600;text-align:center;">S</span>
+            </div>
+            <!-- Row 1: Sarah K. -->
+            <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;background:#111827;padding:7px 8px;align-items:center;">
+              <span style="color:#d1d5db;font-size:10px;font-weight:600;">Sarah K.</span>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+            </div>
+            <!-- Row 2: Mike T. -->
+            <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;background:#0f172a;padding:7px 8px;align-items:center;">
+              <span style="color:#d1d5db;font-size:10px;font-weight:600;">Mike T.</span>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+            </div>
+            <!-- Row 3: Alex R. -->
+            <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;background:#111827;padding:7px 8px;align-items:center;">
+              <span style="color:#d1d5db;font-size:10px;font-weight:600;">Alex R.</span>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+            </div>
+            <!-- Row 4: Jamie L. -->
+            <div style="display:grid;grid-template-columns:2.2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;background:#0f172a;padding:7px 8px;align-items:center;">
+              <span style="color:#d1d5db;font-size:10px;font-weight:600;">Jamie L.</span>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+              <div style="display:flex;justify-content:center;"><span style="color:#4b5563;font-size:10px;">—</span></div>
+              <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:#7c3aed;"></div></div>
+            </div>
+          </div>
+          <div style="margin-top:8px;color:#4b5563;font-size:9px;">Tap employee to edit shifts · 4 of 4 scheduled</div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path stroke-linecap="round" stroke-linejoin="round" d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span>Staff Schedule</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily Checklist Screen -->
+  <div class="screen-wrap" id="wrap-checklist">
+    <span class="screen-label">Checklist</span>
+    <div class="phone" id="phone-checklist">
+      <div class="screen">
+        <div class="status-bar">
+          <span class="status-time">9:41</span>
+          <div class="status-icons">
+            <svg viewBox="0 0 24 24"><path d="M1 6l5.5 5.5L12 6l5.5 5.5L23 6"/></svg>
+            <svg viewBox="0 0 24 24"><rect x="2" y="7" width="18" height="11" rx="2"/><path d="M22 11v3"/></svg>
+          </div>
+        </div>
+        <div class="top-nav">
+          <div class="top-nav-brand">
+            <div class="brand-icon">
+              <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <span class="brand-text">FMP</span>
+          </div>
+          <span class="top-nav-user">Sarah K.</span>
+        </div>
+        <div class="content">
+          <div class="page-header">
+            <div class="page-title-text">Checklist</div>
+          </div>
+          <div style="color:#6b7280;font-size:10px;margin-bottom:10px;margin-top:-6px;">Apr 15, 2026 · Morning</div>
+          <div class="section-label">OPENING</div>
+          <!-- Item 1: Complete -->
+          <div style="background:#111827;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg viewBox="0 0 24 24" width="11" height="11" stroke="white" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span style="color:#6b7280;font-size:11px;text-decoration:line-through;">Unlock front entrance</span>
+          </div>
+          <!-- Item 2: Complete -->
+          <div style="background:#111827;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg viewBox="0 0 24 24" width="11" height="11" stroke="white" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span style="color:#6b7280;font-size:11px;text-decoration:line-through;">Count register &amp; verify cash</span>
+          </div>
+          <!-- Item 3: Complete -->
+          <div style="background:#111827;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;background:#10b981;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+              <svg viewBox="0 0 24 24" width="11" height="11" stroke="white" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <span style="color:#6b7280;font-size:11px;text-decoration:line-through;">Turn on all displays &amp; signage</span>
+          </div>
+          <!-- Item 4: Incomplete -->
+          <div style="background:#111827;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid #374151;flex-shrink:0;"></div>
+            <span style="color:white;font-size:11px;">Complete opening sweep</span>
+          </div>
+          <!-- Item 5: Incomplete -->
+          <div style="background:#111827;border-radius:12px;padding:10px 12px;margin-bottom:6px;display:flex;align-items:center;gap:10px;">
+            <div style="width:20px;height:20px;border-radius:50%;border:2px solid #374151;flex-shrink:0;"></div>
+            <span style="color:white;font-size:11px;">Submit opening report</span>
+          </div>
+          <!-- Progress bar -->
+          <div style="margin-top:10px;">
+            <div style="background:#1f2937;border-radius:20px;height:6px;overflow:hidden;">
+              <div style="background:#7c3aed;width:60%;height:100%;border-radius:20px;"></div>
+            </div>
+            <div style="color:#6b7280;font-size:9px;margin-top:5px;">3 of 5 complete</div>
+          </div>
+        </div>
+        <div class="bottom-bar">
+          <div class="current-page">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+            <span>Checklist</span>
+          </div>
+          <div class="menu-btn">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+            <span>Menu</span>
+          </div>
+        </div>
+        <div class="home-indicator"><div class="home-bar"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Screen -->
+  <div class="screen-wrap" id="wrap-login">
+    <span class="screen-label">Login</span>
+    <div class="phone" id="phone-login">
+      <div class="screen" style="position: relative;">
+        <!-- No status bar or nav for login -->
+        <div style="height: 44px; flex-shrink: 0;"></div>
+        <div class="login-screen">
+          <div class="login-brand-icon">
+            <svg viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <div class="login-app-name">Field Manager Pro</div>
+          <div class="login-subtitle">Sign in to your account</div>
+          <div class="login-label">Username</div>
+          <div class="login-input" style="color:#6b7280;">username</div>
+          <div class="login-label">Password</div>
+          <div class="login-input dots">••••••••</div>
+          <div class="login-btn">Sign In</div>
+          <div class="login-forgot">Forgot your password?</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end screens-row -->
+
+</body>
+</html>

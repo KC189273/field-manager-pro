@@ -7,17 +7,8 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
 export async function GET() {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer' && !isOwner(session.role) && session.role !== 'rdm')) {
+  if (!session || (!isManager(session.role) && session.role !== 'developer' && !isOwner(session.role))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-
-  // RDM: cross-org — returns only managers/ops_managers for task assignment
-  if (session.role === 'rdm') {
-    const users = await query(
-      `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at
-       FROM users WHERE role IN ('manager', 'ops_manager') AND is_active = TRUE ORDER BY full_name`
-    )
-    return NextResponse.json({ users })
   }
 
   const orgFilter = await getOrgFilter(session)
@@ -33,13 +24,12 @@ export async function GET() {
     return NextResponse.json({ users })
   }
 
-  if (isOwner(session.role)) {
+  if (isOwner(session.role) || session.role === 'ops_manager') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
-    // RDM users are cross-org and invisible to org-level users
     const users = await query(
       `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at
-       FROM users u WHERE 1=1${orgClause} AND u.role != 'rdm' ORDER BY u.role, u.full_name`,
+       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
       params
     )
     return NextResponse.json({ users })
@@ -65,11 +55,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Managers can only create employees; developer can create any non-developer (including rdm); owner/sales_director can create managers
+  // Managers can only create employees; developer can create any non-developer; owner/sales_director can create managers
   const allowedRoles = session.role === 'developer'
-    ? ['employee', 'manager', 'ops_manager', 'owner', 'sales_director', 'rdm']
+    ? ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
     : isOwner(session.role)
     ? ['employee', 'manager', 'ops_manager', 'sales_director']
+    : session.role === 'ops_manager'
+    ? ['employee', 'manager']
     : ['employee']
   if (role && !allowedRoles.includes(role)) {
     return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
@@ -79,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   // Determine manager_id
   let finalManagerId: string | null = null
-  if (finalRole !== 'developer' && finalRole !== 'owner' && finalRole !== 'sales_director' && finalRole !== 'rdm') {
+  if (finalRole !== 'developer' && finalRole !== 'owner' && finalRole !== 'sales_director') {
     if ((session.role === 'developer' || isOwner(session.role)) && managerId) {
       finalManagerId = managerId
     } else if (isManager(session.role) && finalRole === 'employee') {
@@ -116,7 +108,7 @@ export async function PATCH(req: NextRequest) {
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
-  if (isManager(session.role)) {
+  if (session.role === 'manager') {
     const target = await queryOne<{ manager_id: string }>(
       `SELECT manager_id FROM users WHERE id = $1`, [userId]
     )
@@ -127,7 +119,7 @@ export async function PATCH(req: NextRequest) {
 
   // Role change validation
   if (role !== undefined) {
-    const allowedRoles = ['employee', 'manager', 'ops_manager', 'owner', 'sales_director', 'rdm']
+    const allowedRoles = ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
     if (!allowedRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
     }

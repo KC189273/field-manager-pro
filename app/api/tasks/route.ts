@@ -23,7 +23,7 @@ interface TaskRow {
   completed_by_name: string | null
 }
 
-const canCreate = (role: string) => isOwner(role as never) || role === 'developer' || role === 'rdm'
+const canCreate = (role: string) => isOwner(role as never) || role === 'developer'
 
 // GET /api/tasks?weekStart=YYYY-MM-DD
 export async function GET(req: NextRequest) {

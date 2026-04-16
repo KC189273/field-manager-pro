@@ -364,9 +364,7 @@ export default function TeamPage() {
         {/* Create form */}
         {showCreate && (
           <form onSubmit={createUser} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-3">
-            <h2 className="font-semibold text-white">
-              {createFor === 'manager' ? 'Add DM' : 'Add Employee'}
-            </h2>
+            <h2 className="font-semibold text-white">Add User</h2>
             <input required placeholder="Full name" value={form.fullName}
               onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
@@ -379,15 +377,17 @@ export default function TeamPage() {
             <input required placeholder="Temporary password" type="password" value={form.password}
               onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            {createFor === 'manager' && (
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Role</label>
               <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="employee">Employee</option>
                 <option value="manager">DM</option>
                 {(isDev || isOwner) && <option value="ops_manager">Ops Manager</option>}
                 {(isDev || isOwner) && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
-            )}
+            </div>
             {canManageAll && managers.length > 0 && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
@@ -491,17 +491,20 @@ export default function TeamPage() {
           </div>
         )}
 
-        {/* DEVELOPER / OWNER VIEW */}
+        {/* DEVELOPER / OWNER / OPS MANAGER VIEW */}
         {canManageAll && (
           <>
+            <div className="flex justify-end mb-4">
+              <button onClick={() => { setForm({ ...emptyForm, role: 'employee' }); setShowCreate(true); setEditUser(null) }}
+                className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
+                + Add User
+              </button>
+            </div>
+
             {/* Managers section */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">DMs</p>
-                <button onClick={() => openCreate('manager')}
-                  className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
-                  + Add DM
-                </button>
               </div>
               {managers.length === 0 ? (
                 <p className="text-gray-600 text-sm py-3">No DMs yet</p>
@@ -586,10 +589,6 @@ export default function TeamPage() {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Employees</p>
-                <button onClick={() => openCreate('employee')}
-                  className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
-                  + Add Employee
-                </button>
               </div>
               {employees.length === 0 ? (
                 <p className="text-gray-600 text-sm py-3">No employees yet</p>

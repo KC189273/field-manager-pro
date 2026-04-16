@@ -216,7 +216,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
           onClick={() => setMenuOpen(false)}
         >
           <div
-            className="bg-gray-900 rounded-t-2xl overflow-hidden max-h-[80vh] flex flex-col"
+            className="bg-gray-900 rounded-t-2xl max-h-[80vh] flex flex-col"
             onClick={e => e.stopPropagation()}
           >
             {/* Handle */}
@@ -238,7 +238,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
             </div>
 
             {/* Nav items grouped by section */}
-            <div className="overflow-y-auto flex-1 py-2">
+            <div className="overflow-y-scroll flex-1 py-2">
               {sections.map(section => (
                 <div key={section}>
                   <p className="px-5 pt-4 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-600">{section}</p>

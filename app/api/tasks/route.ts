@@ -38,7 +38,9 @@ export async function GET(req: NextRequest) {
   const isManager = session.role === 'manager' || session.role === 'ops_manager'
 
   const params: unknown[] = [weekStart]
-  const orgClause = appendOrgFilter(orgFilter, params, 't')
+  // Filter by the assignee's org (a.org_id) so tasks created by developer
+  // with NULL org_id are still visible to the correct org's users
+  const orgClause = appendOrgFilter(orgFilter, params, 'a')
 
   // Managers only see tasks assigned to them
   let assigneeClause = ''
@@ -88,7 +90,15 @@ export async function POST(req: NextRequest) {
   }
 
   const orgFilter = await getOrgFilter(session)
-  const orgId = orgFilter.filterByOrg ? orgFilter.orgId : null
+  // If creator has no org (e.g. developer), resolve org from the assignee
+  let orgId = orgFilter.filterByOrg ? orgFilter.orgId : null
+  if (!orgId) {
+    const assigneeOrg = await queryOne<{ org_id: string | null }>(
+      `SELECT org_id FROM users WHERE id = $1`,
+      [assigneeId]
+    )
+    orgId = assigneeOrg?.org_id ?? null
+  }
 
   const result = await queryOne<{ id: string }>(
     `INSERT INTO tasks (org_id, week_start, title, description, assignee_id, created_by)

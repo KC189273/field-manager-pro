@@ -3,6 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { getReceiptViewUrl } from '@/lib/s3'
+import { sendEmail, taskAssignedHtml } from '@/lib/notifications'
 
 interface TaskRow {
   id: string
@@ -95,6 +96,20 @@ export async function POST(req: NextRequest) {
      RETURNING id`,
     [orgId, weekStart, title.trim(), description?.trim() || null, assigneeId, session.id]
   )
+
+  // Email the assignee
+  const assignee = await queryOne<{ email: string; full_name: string }>(
+    `SELECT email, full_name FROM users WHERE id = $1`,
+    [assigneeId]
+  )
+  if (assignee?.email) {
+    const weekOf = new Date(weekStart + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    sendEmail(
+      assignee.email,
+      `New task assigned: ${title.trim()}`,
+      taskAssignedHtml(assignee.full_name, session.fullName, title.trim(), description?.trim() || null, weekOf)
+    ).catch(() => {})
+  }
 
   return NextResponse.json({ ok: true, id: result?.id })
 }

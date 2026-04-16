@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { sendEmail, taskCompletedHtml } from '@/lib/notifications'
 
 const canAlwaysComplete = (role: string) => isOwner(role as never) || role === 'developer'
 
@@ -37,6 +38,26 @@ export async function POST(req: NextRequest) {
            photo_key = EXCLUDED.photo_key`,
     [taskId, session.id, note || null, photoKey || null]
   )
+
+  // Email the task creator
+  const task = await queryOne<{ title: string; created_by: string | null }>(
+    `SELECT title, created_by FROM tasks WHERE id = $1`,
+    [taskId]
+  )
+  if (task?.created_by && task.created_by !== session.id) {
+    const creator = await queryOne<{ email: string; full_name: string }>(
+      `SELECT email, full_name FROM users WHERE id = $1`,
+      [task.created_by]
+    )
+    if (creator?.email) {
+      const completedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      sendEmail(
+        creator.email,
+        `Task completed: ${task.title}`,
+        taskCompletedHtml(creator.full_name, session.fullName, task.title, note || null, completedAt)
+      ).catch(() => {})
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }

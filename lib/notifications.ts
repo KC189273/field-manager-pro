@@ -207,3 +207,49 @@ export function expensePaidHtml(recipientName: string, amount: string, category:
     </div>
   `
 }
+
+
+export function taskAssignedHtml(assigneeName: string, assignerName: string, title: string, description: string | null, weekOf: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">New Task Assigned</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;color:#1c1c1e;margin:0 0 16px;">Hi ${assigneeName}, you have been assigned a new task by <strong>${assignerName}</strong>.</p>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <p style="font-size:16px;font-weight:700;color:#1c1c1e;margin:0 0 6px;">${title}</p>
+          ${description ? `<p style="font-size:14px;color:#555;margin:0 0 10px;">${description}</p>` : ''}
+          <p style="font-size:13px;color:#8e8e93;margin:0;">Week of ${weekOf}</p>
+        </div>
+        <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Task</a>
+      </div>
+    </div>
+  `
+}
+
+export function taskCompletedHtml(assignerName: string, assigneeName: string, title: string, note: string | null, completedAt: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Task Completed</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <div style="background:#e8f5e9;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+          <p style="font-size:16px;font-weight:700;color:#2e7d32;margin:0 0 4px;">Task Completed</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${assignerName}, <strong>${assigneeName}</strong> has completed a task you assigned.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <p style="font-size:15px;font-weight:600;color:#1c1c1e;margin:0 0 6px;">${title}</p>
+          <p style="font-size:13px;color:#8e8e93;margin:0;">Completed ${completedAt}</p>
+        </div>
+        ${note ? `<div style="background:#fff3e0;border-radius:8px;padding:12px 14px;margin-bottom:20px;"><p style="font-size:13px;font-weight:600;color:#e65100;margin:0 0 4px;">Note:</p><p style="font-size:14px;color:#555;margin:0;">${note}</p></div>` : ''}
+        <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Tasks</a>
+      </div>
+    </div>
+  `
+}

@@ -82,13 +82,14 @@ export default function StaffSchedulePage() {
   const [form, setForm] = useState({
     employeeId: '',
     shiftDate: '',
-    startTime: '09:00',
-    endTime: '17:00',
+    startTime: '09:45',
+    endTime: '19:00',
     roleNote: '',
   })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [publishing, setPublishing] = useState(false)
+  const [modalError, setModalError] = useState('')
 
   // Computed week
   const monday = (() => {
@@ -150,11 +151,12 @@ export default function StaffSchedulePage() {
 
   function openAdd(shiftDate: string) {
     setEditingShift(null)
+    setModalError('')
     setForm({
-      employeeId: employees[0]?.id ?? '',
+      employeeId: '',
       shiftDate,
-      startTime: '09:00',
-      endTime: '17:00',
+      startTime: '09:45',
+      endTime: '19:00',
       roleNote: '',
     })
     setModal('add')
@@ -162,6 +164,7 @@ export default function StaffSchedulePage() {
 
   function openEdit(shift: Shift) {
     setEditingShift(shift)
+    setModalError('')
     setForm({
       employeeId: shift.employee_id,
       shiftDate: shift.shift_date,
@@ -173,38 +176,38 @@ export default function StaffSchedulePage() {
   }
 
   async function saveShift() {
-    if (!form.employeeId || !form.shiftDate || !form.startTime || !form.endTime) return
+    console.log('[saveShift] called, form:', form, 'employees loaded:', employees.length)
+    setModalError('')
+    if (!form.employeeId) { setModalError('Please select an employee.'); return }
+    if (!form.shiftDate) { setModalError('Please select a date.'); return }
+    if (!form.startTime || !form.endTime) { setModalError('Please set start and end times.'); return }
     setSaving(true)
     try {
-      if (modal === 'edit' && editingShift) {
-        await fetch('/api/staff-schedule', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            shiftId: editingShift.id,
-            employeeId: form.employeeId,
-            shiftDate: form.shiftDate,
-            startTime: form.startTime,
-            endTime: form.endTime,
-            roleNote: form.roleNote || null,
-          }),
-        })
-      } else {
-        await fetch('/api/staff-schedule', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            storeId: selectedStore,
-            employeeId: form.employeeId,
-            shiftDate: form.shiftDate,
-            startTime: form.startTime,
-            endTime: form.endTime,
-            roleNote: form.roleNote || null,
-          }),
-        })
+      const payload = modal === 'edit' && editingShift
+        ? { shiftId: editingShift.id, employeeId: form.employeeId, shiftDate: form.shiftDate, startTime: form.startTime, endTime: form.endTime, roleNote: form.roleNote || null }
+        : { storeId: selectedStore, employeeId: form.employeeId, shiftDate: form.shiftDate, startTime: form.startTime, endTime: form.endTime, roleNote: form.roleNote || null }
+
+      console.log('[saveShift] payload:', payload, 'method:', modal === 'edit' ? 'PATCH' : 'POST')
+
+      const res = await fetch('/api/staff-schedule', {
+        method: modal === 'edit' && editingShift ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+
+      console.log('[saveShift] response status:', res.status)
+
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        console.log('[saveShift] error response:', d)
+        setModalError(d.error ?? `Save failed (${res.status}). Please try again.`)
+        return
       }
       setModal(null)
       await loadShifts()
+    } catch (err) {
+      console.error('[saveShift] caught:', err)
+      setModalError('Network error. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -214,13 +217,20 @@ export default function StaffSchedulePage() {
     if (!editingShift) return
     setDeleting(true)
     try {
-      await fetch('/api/staff-schedule', {
+      const res = await fetch('/api/staff-schedule', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shiftId: editingShift.id }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error ?? 'Failed to delete shift.')
+        return
+      }
       setModal(null)
       await loadShifts()
+    } catch {
+      alert('Network error. Please try again.')
     } finally {
       setDeleting(false)
     }
@@ -229,12 +239,19 @@ export default function StaffSchedulePage() {
   async function publishWeek() {
     setPublishing(true)
     try {
-      await fetch('/api/staff-schedule/publish', {
+      const res = await fetch('/api/staff-schedule/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeId: selectedStore, weekStart }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error ?? 'Failed to publish schedule.')
+        return
+      }
       setIsPublished(true)
+    } catch {
+      alert('Network error. Please try again.')
     } finally {
       setPublishing(false)
     }
@@ -243,12 +260,19 @@ export default function StaffSchedulePage() {
   async function unpublishWeek() {
     setPublishing(true)
     try {
-      await fetch('/api/staff-schedule/publish', {
+      const res = await fetch('/api/staff-schedule/publish', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ storeId: selectedStore, weekStart }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        alert(d.error ?? 'Failed to unpublish schedule.')
+        return
+      }
       setIsPublished(false)
+    } catch {
+      alert('Network error. Please try again.')
     } finally {
       setPublishing(false)
     }
@@ -560,6 +584,12 @@ export default function StaffSchedulePage() {
                 />
               </div>
 
+              {modalError && (
+                <div className="rounded-xl bg-red-900/30 border border-red-600/40 px-4 py-3 text-sm text-red-400">
+                  {modalError}
+                </div>
+              )}
+
               <div className="flex gap-3 pt-1">
                 {modal === 'edit' && (
                   <button
@@ -578,7 +608,7 @@ export default function StaffSchedulePage() {
                 </button>
                 <button
                   onClick={saveShift}
-                  disabled={saving || !form.employeeId || !form.shiftDate}
+                  disabled={saving}
                   className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
                 >
                   {saving ? 'Saving…' : modal === 'edit' ? 'Save Changes' : 'Add Shift'}

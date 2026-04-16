@@ -32,6 +32,7 @@ export default async function DashboardPage() {
     teamRow,
     pendingExpRow,
     myPendingRow,
+    upcomingShifts,
   ] = await Promise.all([
     // Own active shift
     queryOne<{ id: string; clock_in_at: string; clock_in_address: string | null }>(
@@ -96,6 +97,21 @@ export default async function DashboardPage() {
           [session.id]
         )
       : Promise.resolve(null),
+    // Upcoming published scheduled shifts (employees only)
+    isEmployee
+      ? query<{ shift_date: string; start_time: string; end_time: string; role_note: string | null; store_address: string }>(
+          `SELECT ss.shift_date::text, ss.start_time::text, ss.end_time::text, ss.role_note, sl.address AS store_address
+           FROM scheduled_shifts ss
+           JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+           INNER JOIN scheduled_shifts_publish ssp
+             ON ssp.store_location_id = ss.store_location_id
+             AND ssp.week_start = date_trunc('week', ss.shift_date)::date
+           WHERE ss.employee_id = $1
+             AND ss.shift_date >= CURRENT_DATE
+           ORDER BY ss.shift_date, ss.start_time`,
+          [session.id]
+        )
+      : Promise.resolve([] as { shift_date: string; start_time: string; end_time: string; role_note: string | null; store_address: string }[]),
   ])
 
   // Derived values
@@ -163,6 +179,42 @@ export default async function DashboardPage() {
 
         {session.role === 'employee' ? (
           <>
+            {/* ── Employee: upcoming schedule ── */}
+            <a
+              href="/staff-schedule"
+              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl overflow-hidden transition-colors"
+            >
+              <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-800/60">
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">My Schedule</p>
+                <p className="text-xs text-violet-500">View all →</p>
+              </div>
+              {upcomingShifts.length === 0 ? (
+                <div className="px-5 py-4">
+                  <p className="text-sm text-gray-500">No upcoming shifts posted yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-800/50">
+                  {upcomingShifts.slice(0, 7).map((s, i) => (
+                    <div key={i} className="flex items-center justify-between px-5 py-3">
+                      <div>
+                        <p className="text-sm font-medium text-white">{formatShiftDate(s.shift_date)}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate max-w-[180px]">{s.store_address}</p>
+                        {s.role_note && <p className="text-xs text-violet-400 mt-0.5">{s.role_note}</p>}
+                      </div>
+                      <p className="text-xs text-gray-400 shrink-0 ml-3">
+                        {fmtShiftTime(s.start_time)} – {fmtShiftTime(s.end_time)}
+                      </p>
+                    </div>
+                  ))}
+                  {upcomingShifts.length > 7 && (
+                    <div className="px-5 py-2.5">
+                      <p className="text-xs text-gray-600">+{upcomingShifts.length - 7} more shifts</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </a>
+
             {/* ── Employee: checklist link ── */}
             <a
               href="/checklist"
@@ -342,4 +394,16 @@ function formatDuration(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h ${m}m`
   return `${m}m`
+}
+
+function formatShiftDate(dateStr: string): string {
+  const d = new Date(dateStr + 'T12:00:00')
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function fmtShiftTime(t: string): string {
+  const [h, m] = t.split(':').map(Number)
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`
 }

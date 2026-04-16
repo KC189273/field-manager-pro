@@ -368,7 +368,7 @@ export default function TasksPage() {
                 >
                   <option value="">Select person…</option>
                   {assignableUsers.map(u => (
-                    <option key={u.id} value={u.id}>{u.full_name} ({u.role.replace('_', ' ')})</option>
+                    <option key={u.id} value={u.id}>{u.full_name} ({u.role === 'manager' ? 'DM' : u.role.replace('_', ' ')})</option>
                   ))}
                 </select>
               </div>

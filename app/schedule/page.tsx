@@ -153,7 +153,7 @@ export default function SchedulePage() {
         {activeTab === 1 && isOverdue && !isSubmitted && (
           <div className="bg-red-950 border border-red-800 rounded-xl p-4 mb-5">
             <p className="text-red-400 font-semibold text-sm">Schedule submission is past due</p>
-            <p className="text-xs text-gray-400 mt-0.5">Contact your manager if you need assistance.</p>
+            <p className="text-xs text-gray-400 mt-0.5">Contact your DM if you need assistance.</p>
           </div>
         )}
 

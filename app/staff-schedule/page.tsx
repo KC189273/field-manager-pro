@@ -461,7 +461,7 @@ export default function StaffSchedulePage() {
         {!selectedStore && (
           <div className="text-center text-gray-500 py-16">
             <p className="text-sm">No stores assigned to you yet.</p>
-            <p className="text-xs mt-1">Contact your ops manager to get stores assigned.</p>
+            <p className="text-xs mt-1">Contact your Owner to get stores assigned.</p>
           </div>
         )}
 

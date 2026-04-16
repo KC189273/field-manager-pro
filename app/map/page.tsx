@@ -22,19 +22,13 @@ interface Shift {
   full_name: string
 }
 
-interface Breadcrumb {
-  shift_id: string
-  lat: number | null
-  lng: number | null
-  recorded_at: string
-  is_gap: boolean
-}
-
 interface LiveEmployee {
   shift_id: string
   user_id: string
   full_name: string
   clock_in_at: string
+  clock_in_lat: number | null
+  clock_in_lng: number | null
   lat: number | null
   lng: number | null
   last_seen_at: string
@@ -46,69 +40,12 @@ interface User {
   role: string
 }
 
-const PATH_SOURCE = 'shift-paths'
-const PATH_LAYER = 'shift-paths-line'
-
-// Snap a GPS path to roads.
-// 2 points → Directions API (clean A→B road route).
-// 3+ points → Map Matching API (snaps actual GPS trace to roads).
-async function snapToRoads(coords: [number, number][]): Promise<[number, number][]> {
-  if (coords.length < 2) return coords
-  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
-  try {
-    if (coords.length === 2) {
-      // Directions API — best for just start/end with no intermediate GPS
-      const [a, b] = coords
-      const res = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${a[0]},${a[1]};${b[0]},${b[1]}?access_token=${token}&geometries=geojson&overview=full`
-      )
-      if (res.ok) {
-        const data = await res.json()
-        const route = data.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
-        if (route && route.length >= 2) return route
-      }
-    } else {
-      // Map Matching API — snaps GPS trace to roads (up to 100 pts)
-      const MAX = 100
-      const pts: [number, number][] = coords.length > MAX
-        ? Array.from({ length: MAX }, (_, i) => coords[Math.round(i * (coords.length - 1) / (MAX - 1))])
-        : coords
-      const coordStr = pts.map(([lng, lat]) => `${lng},${lat}`).join(';')
-      const radiuses = pts.map(() => '100').join(';')
-      const res = await fetch(
-        `https://api.mapbox.com/matching/v5/mapbox/driving/${coordStr}?access_token=${token}&geometries=geojson&radiuses=${radiuses}&overview=full&tidy=true`
-      )
-      if (res.ok) {
-        const data = await res.json()
-        if (data.matchings?.length) {
-          const all: [number, number][] = []
-          for (const m of data.matchings) {
-            if (m.geometry?.coordinates?.length) all.push(...(m.geometry.coordinates as [number, number][]))
-          }
-          if (all.length >= 2) return all
-        }
-      }
-      // Map Matching failed — fall back to Directions API between first and last point
-      const [first, last] = [pts[0], pts[pts.length - 1]]
-      const fallback = await fetch(
-        `https://api.mapbox.com/directions/v5/mapbox/driving/${first[0]},${first[1]};${last[0]},${last[1]}?access_token=${token}&geometries=geojson&overview=full`
-      )
-      if (fallback.ok) {
-        const fData = await fallback.json()
-        const route = fData.routes?.[0]?.geometry?.coordinates as [number, number][] | undefined
-        if (route && route.length >= 2) return route
-      }
-    }
-  } catch { /* fall back to straight lines */ }
-  return coords
-}
-
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const liveMarkersRef = useRef<any[]>([])
+  const markersRef = useRef<any[]>([])
   const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [users, setUsers] = useState<User[]>([])
@@ -152,10 +89,28 @@ export default function MapPage() {
     })
   }, [])
 
-  const clearAllMarkers = () => {
-    liveMarkersRef.current.forEach(m => { try { m.remove() } catch { /* ignore */ } })
-    liveMarkersRef.current = []
-    document.querySelectorAll('.fmp-marker, .fmp-live-marker').forEach(el => el.remove())
+  const clearMarkers = () => {
+    markersRef.current.forEach(m => { try { m.remove() } catch { /* ignore */ } })
+    markersRef.current = []
+  }
+
+  function makeLabel(name: string, color: string) {
+    const el = document.createElement('div')
+    el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;'
+
+    const label = document.createElement('div')
+    label.style.cssText = `
+      background:rgba(0,0,0,0.75);color:#f9fafb;font-size:10px;font-weight:600;
+      padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;
+    `
+    label.textContent = name
+
+    const dot = document.createElement('div')
+    dot.style.cssText = `width:12px;height:12px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 0 6px ${color}88;`
+
+    el.appendChild(label)
+    el.appendChild(dot)
+    return el
   }
 
   const loadLive = useCallback(async () => {
@@ -163,112 +118,32 @@ export default function MapPage() {
 
     const res = await fetch('/api/map/live')
     if (!res.ok) return
-    const { employees, breadcrumbs } = await res.json() as {
-      employees: LiveEmployee[]
-      breadcrumbs: Breadcrumb[]
-    }
-
-    // Build road-matched paths for each employee in parallel
-    const empWithCoords = employees
-      .map(emp => ({ ...emp, lat: Number(emp.lat), lng: Number(emp.lng) }))
-      .filter(emp => isFinite(emp.lat) && isFinite(emp.lng) && emp.lat !== 0 && emp.lng !== 0)
-
-    const matchedPaths = await Promise.all(empWithCoords.map(async emp => {
-      const crumbs = breadcrumbs.filter(b => b.shift_id === emp.shift_id && !b.is_gap)
-      const allPts = ([
-        ...crumbs.map(c => ({ lng: Number(c.lng), lat: Number(c.lat), t: new Date(c.recorded_at).getTime() })),
-        { lng: emp.lng, lat: emp.lat, t: new Date(emp.last_seen_at).getTime() },
-      ]).filter(p => isFinite(p.lat) && isFinite(p.lng) && p.lat !== 0 && p.lng !== 0)
-
-      // Filter out points requiring >200 km/h from the previous point
-      const filtered: [number, number][] = []
-      for (const pt of allPts) {
-        if (filtered.length === 0) { filtered.push([pt.lng, pt.lat]); continue }
-        const prev = filtered[filtered.length - 1]
-        const R = 6371
-        const dLat = (pt.lat - prev[1]) * Math.PI / 180
-        const dLng = (pt.lng - prev[0]) * Math.PI / 180
-        const a = Math.sin(dLat/2)**2 + Math.cos(prev[1]*Math.PI/180)*Math.cos(pt.lat*Math.PI/180)*Math.sin(dLng/2)**2
-        const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
-        if (dist <= 100) filtered.push([pt.lng, pt.lat])
-      }
-
-      const coords = filtered.length >= 2 ? await snapToRoads(filtered) : filtered
-      return { emp, coords }
-    }))
+    const { employees } = await res.json() as { employees: LiveEmployee[] }
 
     import('mapbox-gl').then(mapboxgl => {
       const map = mapRef.current
-
-      // Properly remove old live markers via Mapbox API
-      liveMarkersRef.current.forEach(m => { try { m.remove() } catch { /* ignore */ } })
-      liveMarkersRef.current = []
-      document.querySelectorAll('.fmp-live-marker').forEach(el => el.remove())
-
-      // Remove existing path layer/source
-      if (map.getLayer(PATH_LAYER)) map.removeLayer(PATH_LAYER)
-      if (map.getSource(PATH_SOURCE)) map.removeSource(PATH_SOURCE)
-
-      const livePaths = matchedPaths
-        .filter(({ coords }) => coords.length >= 2)
-        .map(({ emp, coords }) => ({
-          type: 'Feature' as const,
-          geometry: { type: 'LineString' as const, coordinates: coords },
-          properties: { name: emp.full_name },
-        }))
-
-      map.addSource(PATH_SOURCE, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: livePaths },
-      })
-      map.addLayer({
-        id: PATH_LAYER,
-        type: 'line',
-        source: PATH_SOURCE,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#22c55e', 'line-width': 3, 'line-opacity': 0.8 },
-      })
+      clearMarkers()
 
       const bounds = new mapboxgl.default.LngLatBounds()
       let hasPoints = false
 
-      for (const emp of empWithCoords) {
-        // Wrapper element for Mapbox marker
-        const wrapper = document.createElement('div')
-        wrapper.className = 'fmp-live-marker'
-        wrapper.style.cssText = 'position:relative;width:28px;height:28px;'
+      for (const emp of employees) {
+        const lat = Number(emp.lat)
+        const lng = Number(emp.lng)
+        if (!isFinite(lat) || !isFinite(lng) || lat === 0 || lng === 0) continue
 
-        // Pulsing ring
-        const ring = document.createElement('div')
-        ring.style.cssText = `
-          width:28px;height:28px;border-radius:50%;
-          background:rgba(34,197,94,0.2);border:2px solid rgba(34,197,94,0.6);
-          display:flex;align-items:center;justify-content:center;
-          animation:live-pulse 2s ease-in-out infinite;cursor:pointer;
-        `
-        // Inner dot
-        const dot = document.createElement('div')
-        dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#22c55e;border:1.5px solid white;box-shadow:0 0 6px rgba(34,197,94,0.8);'
-        ring.appendChild(dot)
+        const clockIn = new Date(emp.clock_in_at).toLocaleTimeString('en-US', {
+          timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit',
+        })
+        const lastSeen = new Date(emp.last_seen_at).toLocaleTimeString('en-US', {
+          timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit',
+        })
 
-        // Name label — sibling of ring, not child
-        const label = document.createElement('div')
-        label.style.cssText = `
-          position:absolute;bottom:34px;left:50%;transform:translateX(-50%);
-          background:rgba(0,0,0,0.8);color:white;font-size:10px;font-weight:600;
-          padding:2px 6px;border-radius:4px;white-space:nowrap;pointer-events:none;
-        `
-        label.textContent = emp.full_name.split(' ')[0]
+        const el = makeLabel(emp.full_name.split(' ')[0], '#22c55e')
 
-        wrapper.appendChild(label)
-        wrapper.appendChild(ring)
-
-        const clockIn = new Date(emp.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })
-        const lastSeen = new Date(emp.last_seen_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })
-
-        const marker = new mapboxgl.default.Marker({ element: wrapper, anchor: 'bottom' })
-          .setLngLat([emp.lng, emp.lat])
-          .setPopup(new mapboxgl.default.Popup({ offset: 16 }).setHTML(`
+        const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([lng, lat])
+          .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
             <div style="font-size:13px;line-height:1.6">
               <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f9fafb">${emp.full_name}</div>
               <div style="color:#4ade80;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">● Live</div>
@@ -278,8 +153,8 @@ export default function MapPage() {
           `))
           .addTo(map)
 
-        liveMarkersRef.current.push(marker)
-        bounds.extend([emp.lng, emp.lat])
+        markersRef.current.push(marker)
+        bounds.extend([lng, lat])
         hasPoints = true
       }
 
@@ -287,7 +162,10 @@ export default function MapPage() {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15 })
       }
 
-      setLiveCount(empWithCoords.length)
+      setLiveCount(employees.filter(e => {
+        const lat = Number(e.lat); const lng = Number(e.lng)
+        return isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0
+      }).length)
       setLastUpdated(new Date())
     })
   }, [mapReady])
@@ -302,65 +180,22 @@ export default function MapPage() {
 
     const res = await fetch(`/api/map?${params}`)
     if (!res.ok) return
-    const { shifts, breadcrumbs }: { shifts: Shift[]; breadcrumbs: Breadcrumb[] } = await res.json()
+    const { shifts }: { shifts: Shift[] } = await res.json()
 
-    import('mapbox-gl').then(async mapboxgl => {
+    import('mapbox-gl').then(mapboxgl => {
       const map = mapRef.current
-
-      // Remove all markers
-      clearAllMarkers()
-
-      // Remove existing path layer/source
-      if (map.getLayer(PATH_LAYER)) map.removeLayer(PATH_LAYER)
-      if (map.getSource(PATH_SOURCE)) map.removeSource(PATH_SOURCE)
+      clearMarkers()
 
       const bounds = new mapboxgl.default.LngLatBounds()
       let hasPoints = false
 
-      // Build road-snapped path for each shift in parallel.
-      // Requires at least clock_in + one other point (breadcrumb or clock_out).
-      // Shifts with only clock_in get a dot but no line.
-      const rawPaths = shifts.map(shift => {
-        const coords: [number, number][] = []
-        if (shift.clock_in_lat && shift.clock_in_lng)
-          coords.push([shift.clock_in_lng, shift.clock_in_lat])
-        const crumbs = breadcrumbs.filter(b => b.shift_id === shift.id && b.lat && b.lng && !b.is_gap)
-        for (const c of crumbs) coords.push([c.lng!, c.lat!])
-        if (shift.clock_out_lat && shift.clock_out_lng)
-          coords.push([shift.clock_out_lng, shift.clock_out_lat])
-        return { shift, coords }
-      }).filter(({ coords }) => coords.length >= 2)
-
-      const pathFeatures = await Promise.all(rawPaths.map(async ({ shift, coords }) => {
-        const snapped = await snapToRoads(coords)
-        return {
-          type: 'Feature' as const,
-          geometry: { type: 'LineString' as const, coordinates: snapped },
-          properties: { name: shift.full_name },
-        }
-      }))
-
-      map.addSource(PATH_SOURCE, {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: pathFeatures },
-      })
-      map.addLayer({
-        id: PATH_LAYER,
-        type: 'line',
-        source: PATH_SOURCE,
-        layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#818cf8', 'line-width': 3, 'line-opacity': 0.8 },
-      })
-
       for (const shift of shifts) {
         // Clock-in marker (green)
         if (shift.clock_in_lat && shift.clock_in_lng) {
-          const el = document.createElement('div')
-          el.className = 'fmp-marker'
-          el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#22c55e;border:2.5px solid white;box-shadow:0 0 6px rgba(34,197,94,0.5);cursor:pointer;'
-          new mapboxgl.default.Marker({ element: el })
+          const el = makeLabel(shift.full_name, '#22c55e')
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([shift.clock_in_lng, shift.clock_in_lat])
-            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(`
+            .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
               <div style="font-size:13px;line-height:1.6">
                 <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f9fafb">${shift.full_name}</div>
                 <div style="color:#4ade80;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Clock In</div>
@@ -369,18 +204,17 @@ export default function MapPage() {
               </div>
             `))
             .addTo(map)
+          markersRef.current.push(marker)
           bounds.extend([shift.clock_in_lng, shift.clock_in_lat])
           hasPoints = true
         }
 
         // Clock-out marker (red)
         if (shift.clock_out_at && shift.clock_out_lat && shift.clock_out_lng) {
-          const el = document.createElement('div')
-          el.className = 'fmp-marker'
-          el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#ef4444;border:2.5px solid white;box-shadow:0 0 6px rgba(239,68,68,0.5);cursor:pointer;'
-          new mapboxgl.default.Marker({ element: el })
+          const el = makeLabel(shift.full_name, '#ef4444')
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
             .setLngLat([shift.clock_out_lng, shift.clock_out_lat])
-            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(`
+            .setPopup(new mapboxgl.default.Popup({ offset: 14 }).setHTML(`
               <div style="font-size:13px;line-height:1.6">
                 <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f9fafb">${shift.full_name}</div>
                 <div style="color:#f87171;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Clock Out</div>
@@ -389,6 +223,7 @@ export default function MapPage() {
               </div>
             `))
             .addTo(map)
+          markersRef.current.push(marker)
           bounds.extend([shift.clock_out_lng, shift.clock_out_lat])
           hasPoints = true
         }
@@ -402,18 +237,11 @@ export default function MapPage() {
     setLoaded(true)
   }
 
-  // Toggle live mode
   const toggleLive = useCallback(() => {
     setLiveMode(prev => {
       const next = !prev
-      if (next) {
-        // Switching to live — clear historical markers
-        clearAllMarkers()
-        if (mapRef.current?.getLayer(PATH_LAYER)) mapRef.current.removeLayer(PATH_LAYER)
-        if (mapRef.current?.getSource(PATH_SOURCE)) mapRef.current.removeSource(PATH_SOURCE)
-      } else {
-        // Switching off live — clear live markers, stop interval
-        document.querySelectorAll('.fmp-live-marker').forEach(el => el.remove())
+      if (!next) {
+        clearMarkers()
         if (liveIntervalRef.current) {
           clearInterval(liveIntervalRef.current)
           liveIntervalRef.current = null
@@ -425,7 +253,6 @@ export default function MapPage() {
     })
   }, [])
 
-  // Start/stop polling when liveMode changes
   useEffect(() => {
     if (liveMode && mapReady) {
       loadLive()
@@ -445,7 +272,6 @@ export default function MapPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, session])
 
-  // Format "updated X ago"
   const updatedAgo = lastUpdated
     ? (() => {
         const secs = Math.floor((Date.now() - lastUpdated.getTime()) / 1000)
@@ -458,12 +284,7 @@ export default function MapPage() {
     <div className="min-h-screen bg-gray-950 flex flex-col pb-16 pt-14">
       {session && <NavBar role={session.role} fullName={session.fullName} />}
 
-      {/* Pulse animation + popup styles */}
       <style>{`
-        @keyframes live-pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50% { transform: scale(1.35); opacity: 0.6; }
-        }
         .mapboxgl-popup-content {
           background: #1f2937 !important;
           color: #f9fafb !important;
@@ -490,7 +311,6 @@ export default function MapPage() {
 
       {/* Filters */}
       <div className="px-4 py-3 bg-gray-950 border-b border-gray-800 flex flex-wrap gap-2 items-end">
-        {/* Live toggle — managers+ only */}
         {session && canViewAll(session.role) && (
           <button
             onClick={toggleLive}
@@ -505,7 +325,6 @@ export default function MapPage() {
           </button>
         )}
 
-        {/* Historical filters — hidden in live mode */}
         {!liveMode && (
           <>
             {session && canViewAll(session.role) && (
@@ -531,13 +350,10 @@ export default function MapPage() {
           </>
         )}
 
-        {/* Live status badge */}
         {liveMode && lastUpdated && (
-          <div className="flex items-center gap-2 ml-1">
-            <span className="text-xs text-green-400 font-medium">
-              ● LIVE · {liveCount} clocked in · updated {updatedAgo}
-            </span>
-          </div>
+          <span className="text-xs text-green-400 font-medium ml-1">
+            ● LIVE · {liveCount} clocked in · updated {updatedAgo}
+          </span>
         )}
         {liveMode && !lastUpdated && (
           <span className="text-xs text-gray-500">Loading…</span>
@@ -553,9 +369,14 @@ export default function MapPage() {
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-green-500 block" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} /><span className="text-xs text-gray-400">Clock In</span></div>
-            <div className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded-full bg-red-500 block" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} /><span className="text-xs text-gray-400">Clock Out</span></div>
-            <div className="flex items-center gap-1.5"><span className="w-8 h-0.5 bg-indigo-400 block rounded" style={{ height: '3px' }} /><span className="text-xs text-gray-400">Traveled Route</span></div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-green-500 block" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.5)' }} />
+              <span className="text-xs text-gray-400">Clock In</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded-full bg-red-500 block" style={{ boxShadow: '0 0 6px rgba(239,68,68,0.5)' }} />
+              <span className="text-xs text-gray-400">Clock Out</span>
+            </div>
           </>
         )}
       </div>

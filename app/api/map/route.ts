@@ -84,13 +84,5 @@ export async function GET(req: NextRequest) {
     `, params)
   }
 
-  const breadcrumbs = (shifts as { id: string }[]).length > 0
-    ? await query(`
-        SELECT b.shift_id, b.lat, b.lng, b.recorded_at, b.is_gap
-        FROM gps_breadcrumbs b
-        WHERE b.shift_id = ANY($1) ORDER BY b.recorded_at ASC
-      `, [(shifts as { id: string }[]).map(s => s.id)])
-    : []
-
-  return NextResponse.json({ shifts, breadcrumbs })
+  return NextResponse.json({ shifts })
 }

@@ -55,7 +55,7 @@ export default function TasksPage() {
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState({ title: '', description: '', assigneeId: '', dueDate: '' })
+  const [createForm, setCreateForm] = useState({ title: '', description: '', assigneeId: '', dueDate: '', dueTime: '' })
   const [saving, setSaving] = useState(false)
   const [createError, setCreateError] = useState('')
 
@@ -122,7 +122,7 @@ export default function TasksPage() {
 
   // ── Create task ──────────────────────────────────────────
   function openCreate() {
-    setCreateForm({ title: '', description: '', assigneeId: assignableUsers[0]?.id ?? '', dueDate: '' })
+    setCreateForm({ title: '', description: '', assigneeId: assignableUsers[0]?.id ?? '', dueDate: '', dueTime: '' })
     setCreateError('')
     setShowCreate(true)
   }
@@ -131,6 +131,9 @@ export default function TasksPage() {
     setCreateError('')
     if (!createForm.title.trim()) { setCreateError('Title is required.'); return }
     if (!createForm.assigneeId) { setCreateError('Please select an assignee.'); return }
+    if (!createForm.dueDate || !createForm.dueTime) { setCreateError('Due date and time are required.'); return }
+    // Combine date + time into an ISO string (browser local time → UTC)
+    const dueDateISO = new Date(`${createForm.dueDate}T${createForm.dueTime}`).toISOString()
     setSaving(true)
     try {
       const res = await fetch('/api/tasks', {
@@ -141,7 +144,7 @@ export default function TasksPage() {
           title: createForm.title,
           description: createForm.description || null,
           assigneeId: createForm.assigneeId,
-          dueDate: createForm.dueDate || null,
+          dueDate: dueDateISO,
         }),
       })
       if (!res.ok) {
@@ -380,13 +383,23 @@ export default function TasksPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Due Date <span className="text-gray-600">(optional)</span></label>
-                <input
-                  type="date"
-                  value={createForm.dueDate}
-                  onChange={e => setCreateForm(f => ({ ...f, dueDate: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500"
-                />
+                <label className="block text-xs text-gray-400 mb-1.5">Due Date &amp; Time</label>
+                <div className="flex gap-2">
+                  <input
+                    type="date"
+                    required
+                    value={createForm.dueDate}
+                    onChange={e => setCreateForm(f => ({ ...f, dueDate: e.target.value }))}
+                    className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                  <input
+                    type="time"
+                    required
+                    value={createForm.dueTime}
+                    onChange={e => setCreateForm(f => ({ ...f, dueTime: e.target.value }))}
+                    className="w-32 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
               </div>
               {createError && (
                 <div className="rounded-xl bg-red-900/30 border border-red-600/40 px-4 py-3 text-sm text-red-400">{createError}</div>
@@ -523,12 +536,21 @@ function TaskCard({
     manager: 'DM', ops_manager: 'Ops Manager',
     sales_director: 'Sales Director', owner: 'Owner', developer: 'Developer',
   }
-  const today = new Date().toISOString().split('T')[0]
-  const isOverdue = !isDone && !!task.due_date && task.due_date < today
-  const isDueToday = !isDone && task.due_date === today
+  const now = new Date()
+  const dueDate = task.due_date ? new Date(task.due_date) : null
+  const isOverdue = !isDone && !!dueDate && dueDate < now
+  const isDueToday = !isDone && !!dueDate && !isOverdue &&
+    dueDate.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) ===
+    now.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+
+  function fmtDue(d: Date): string {
+    const datePart = d.toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })
+    const timePart = d.toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })
+    return `${datePart} before ${timePart}`
+  }
 
   return (
-    <div className={`bg-gray-900 border rounded-2xl overflow-hidden ${isDone ? 'border-green-900/50' : isOverdue ? 'border-red-800/60' : 'border-gray-800'}`}>
+    <div className={`bg-gray-900 border rounded-2xl overflow-hidden ${isDone ? 'border-green-900/50' : isOverdue ? 'border-red-700' : isDueToday ? 'border-amber-800/60' : 'border-gray-800'}`}>
       <div className="flex items-start gap-3 p-4">
         {/* Checkmark button */}
         {canComplete ? (
@@ -573,7 +595,7 @@ function TaskCard({
             {task.created_by_name && (
               <span className="text-[10px] text-gray-600">from {task.created_by_name}</span>
             )}
-            {task.due_date && !isDone && (
+            {dueDate && !isDone && (
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
                 isOverdue
                   ? 'bg-red-900/40 text-red-400 border border-red-800/40'
@@ -581,9 +603,7 @@ function TaskCard({
                   ? 'bg-amber-900/40 text-amber-400 border border-amber-800/40'
                   : 'bg-gray-800 text-gray-400 border border-gray-700'
               }`}>
-                {isOverdue ? '⚠ Overdue · ' : isDueToday ? '· Due today' : 'Due '}
-                {isOverdue || isDueToday ? '' : new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                {isOverdue ? new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+                {isOverdue ? `⚠ Overdue · ${fmtDue(dueDate)}` : `Due ${fmtDue(dueDate)}`}
               </span>
             )}
           </div>

@@ -22,14 +22,24 @@ export async function GET() {
 
   const orgFilter = await getOrgFilter(session)
 
-  if (session.role === 'developer' || isOwner(session.role)) {
+  if (session.role === 'developer') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
-    // Exclude RDM users from org-level team views (they are cross-org and invisible to org users)
-    const rdmClause = ` AND u.role != 'rdm'`
     const users = await query(
       `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at
-       FROM users u WHERE 1=1${orgClause}${rdmClause} ORDER BY u.role, u.full_name`,
+       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
+      params
+    )
+    return NextResponse.json({ users })
+  }
+
+  if (isOwner(session.role)) {
+    const params: unknown[] = []
+    const orgClause = appendOrgFilter(orgFilter, params, 'u')
+    // RDM users are cross-org and invisible to org-level users
+    const users = await query(
+      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at
+       FROM users u WHERE 1=1${orgClause} AND u.role != 'rdm' ORDER BY u.role, u.full_name`,
       params
     )
     return NextResponse.json({ users })

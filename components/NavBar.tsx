@@ -135,6 +135,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
       ? [
           { href: '/team', label: 'Team', icon: TeamIcon, section: 'Management' } as NavLink,
           { href: '/staff-schedule', label: 'Staff Schedule', icon: StaffScheduleIcon, section: 'Management' } as NavLink,
+          { href: '/tasks', label: 'Tasks', icon: TasksIcon, section: 'Management' } as NavLink,
           { href: '/flags', label: 'Flags', icon: FlagIcon, section: 'Management' } as NavLink,
           { href: '/map', label: 'Map', icon: MapIcon, section: 'Management' } as NavLink,
           { href: '/dm-visit', label: 'DM Store Visit', icon: StoreIcon, section: 'Management' } as NavLink,
@@ -373,6 +374,14 @@ function StaffScheduleIcon({ className }: { className?: string }) {
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <rect x="3" y="4" width="18" height="18" rx="2" />
       <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18M8 14h4m-4 4h2" />
+    </svg>
+  )
+}
+
+function TasksIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
     </svg>
   )
 }

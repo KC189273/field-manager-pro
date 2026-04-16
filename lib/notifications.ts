@@ -230,6 +230,23 @@ export function taskAssignedHtml(assigneeName: string, assignerName: string, tit
   `
 }
 
+export function passwordResetHtml(fullName: string, resetUrl: string): string {
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Password Reset Request</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;color:#1c1c1e;margin:0 0 16px;">Hi ${fullName},</p>
+        <p style="font-size:14px;color:#555;margin:0 0 20px;">We received a request to reset your password. Click the button below to choose a new one. This link expires in 1 hour.</p>
+        <a href="${resetUrl}" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;margin-bottom:20px;">Reset My Password</a>
+        <p style="font-size:13px;color:#8e8e93;margin:0;">If you didn't request a password reset, you can safely ignore this email — your password won't change.</p>
+      </div>
+    </div>
+  `
+}
+
 export function taskCompletedHtml(assignerName: string, assigneeName: string, title: string, note: string | null, completedAt: string): string {
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
   return `

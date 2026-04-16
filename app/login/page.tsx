@@ -2,6 +2,7 @@
 
 import { useState, useEffect, FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 const REMEMBER_KEY = 'fmp-remember'
 
@@ -113,6 +114,9 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
+          <Link href="/forgot-password" className="block text-center text-gray-500 hover:text-gray-300 text-sm transition-colors">
+            Forgot your password?
+          </Link>
         </form>
       </div>
     </div>

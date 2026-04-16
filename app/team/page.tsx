@@ -23,7 +23,7 @@ interface User {
 
 const ROLE_LABELS: Record<string, string> = {
   employee: 'Employee',
-  manager: 'Manager',
+  manager: 'DM',
   ops_manager: 'Ops Manager',
   owner: 'Owner',
   sales_director: 'Sales Director',
@@ -365,7 +365,7 @@ export default function TeamPage() {
         {showCreate && (
           <form onSubmit={createUser} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-3">
             <h2 className="font-semibold text-white">
-              {createFor === 'manager' ? 'Add Manager' : 'Add Employee'}
+              {createFor === 'manager' ? 'Add DM' : 'Add Employee'}
             </h2>
             <input required placeholder="Full name" value={form.fullName}
               onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))}
@@ -382,7 +382,7 @@ export default function TeamPage() {
             {createFor === 'manager' && (
               <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="manager">Manager</option>
+                <option value="manager">DM</option>
                 <option value="ops_manager">Ops Manager</option>
                 {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="rdm">RDM</option>}
@@ -430,7 +430,7 @@ export default function TeamPage() {
               <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
+                <option value="manager">DM</option>
                 <option value="ops_manager">Ops Manager</option>
                 {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="rdm">RDM</option>}
@@ -499,14 +499,14 @@ export default function TeamPage() {
             {/* Managers section */}
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Managers</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">DMs</p>
                 <button onClick={() => openCreate('manager')}
                   className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
-                  + Add Manager
+                  + Add DM
                 </button>
               </div>
               {managers.length === 0 ? (
-                <p className="text-gray-600 text-sm py-3">No managers yet</p>
+                <p className="text-gray-600 text-sm py-3">No DMs yet</p>
               ) : (
                 <div className="space-y-2">
                   {managers.map(user => (

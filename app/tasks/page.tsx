@@ -496,7 +496,7 @@ function TaskCard({
 }) {
   const isDone = !!task.completed_at
   const ROLE_LABELS: Record<string, string> = {
-    manager: 'Manager', ops_manager: 'Ops Manager',
+    manager: 'DM', ops_manager: 'Ops Manager',
     sales_director: 'Sales Director', owner: 'Owner', developer: 'Developer',
   }
 

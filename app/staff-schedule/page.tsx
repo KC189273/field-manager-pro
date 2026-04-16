@@ -176,7 +176,6 @@ export default function StaffSchedulePage() {
   }
 
   async function saveShift() {
-    console.log('[saveShift] called, form:', form, 'employees loaded:', employees.length)
     setModalError('')
     if (!form.employeeId) { setModalError('Please select an employee.'); return }
     if (!form.shiftDate) { setModalError('Please select a date.'); return }
@@ -187,19 +186,14 @@ export default function StaffSchedulePage() {
         ? { shiftId: editingShift.id, employeeId: form.employeeId, shiftDate: form.shiftDate, startTime: form.startTime, endTime: form.endTime, roleNote: form.roleNote || null }
         : { storeId: selectedStore, employeeId: form.employeeId, shiftDate: form.shiftDate, startTime: form.startTime, endTime: form.endTime, roleNote: form.roleNote || null }
 
-      console.log('[saveShift] payload:', payload, 'method:', modal === 'edit' ? 'PATCH' : 'POST')
-
       const res = await fetch('/api/staff-schedule', {
         method: modal === 'edit' && editingShift ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       })
 
-      console.log('[saveShift] response status:', res.status)
-
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
-        console.log('[saveShift] error response:', d)
         setModalError(d.error ?? `Save failed (${res.status}). Please try again.`)
         return
       }

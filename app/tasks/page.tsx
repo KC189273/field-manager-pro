@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import NavBar from '@/components/NavBar'
 import { currentWeekStart, formatWeekRange } from '@/lib/schedule'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
 
 interface Session {
   id: string
@@ -80,7 +80,7 @@ export default function TasksPage() {
   const weekStart = toDateStr(monday)
   const weekLabel = formatWeekRange(monday)
 
-  const canCreate = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
+  const canCreate = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer' || session?.role === 'rdm'
   const canCompleteTask = (task: Task) =>
     session?.id === task.assignee_id || canCreate
 

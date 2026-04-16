@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isCapacitor, resumeNativeTrackingIfClocked } from '@/lib/gps-native'
 
 interface NavBarProps {
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
   fullName: string
 }
 
@@ -79,7 +79,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   }, [MIN_INTERVAL_MS])
 
   useEffect(() => {
-    if (role === 'developer' || role === 'owner' || role === 'sales_director') return
+    if (role === 'developer' || role === 'owner' || role === 'sales_director' || role === 'rdm') return
 
     // In the native Capacitor app, use the native background GPS plugin.
     // In the browser, use watchPosition (stops when backgrounded — browser limitation).
@@ -122,16 +122,25 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     router.push('/login')
   }
 
+  const isRDM = role === 'rdm'
+
   const links: NavLink[] = [
     { href: '/dashboard', label: 'Home', icon: HomeIcon, section: 'General' },
-    { href: '/clock', label: 'Clock In / Out', icon: ClockIcon, section: 'General' },
-    { href: '/schedule', label: 'Schedule', icon: CalendarIcon, section: 'General' },
-    { href: '/staff-schedule', label: 'My Schedule', icon: StaffScheduleIcon, section: 'General' },
-    { href: '/time-history', label: 'Time History', icon: HistoryIcon, section: 'General' },
-    { href: '/timecards', label: 'Timecards', icon: TimecardIcon, section: 'General' },
-    { href: '/checklist', label: 'Opening / Closing Checklist', icon: ChecklistIcon, section: 'General' },
-    ...(canSubmit(role) ? [{ href: '/expenses', label: 'Expenses', icon: ExpenseIcon, section: 'Finance' } as NavLink] : []),
-    ...(canViewTeam(role)
+    ...(!isRDM ? [
+      { href: '/clock', label: 'Clock In / Out', icon: ClockIcon, section: 'General' } as NavLink,
+      { href: '/schedule', label: 'Schedule', icon: CalendarIcon, section: 'General' } as NavLink,
+      { href: '/staff-schedule', label: 'My Schedule', icon: StaffScheduleIcon, section: 'General' } as NavLink,
+      { href: '/time-history', label: 'Time History', icon: HistoryIcon, section: 'General' } as NavLink,
+      { href: '/timecards', label: 'Timecards', icon: TimecardIcon, section: 'General' } as NavLink,
+      { href: '/checklist', label: 'Opening / Closing Checklist', icon: ChecklistIcon, section: 'General' } as NavLink,
+    ] : []),
+    ...(!isRDM && canSubmit(role) ? [{ href: '/expenses', label: 'Expenses', icon: ExpenseIcon, section: 'Finance' } as NavLink] : []),
+    ...(isRDM
+      ? [
+          { href: '/staff-schedule', label: 'Staff Schedule', icon: StaffScheduleIcon, section: 'General' } as NavLink,
+          { href: '/tasks', label: 'Tasks', icon: TasksIcon, section: 'General' } as NavLink,
+        ]
+      : canViewTeam(role)
       ? [
           { href: '/team', label: 'Team', icon: TeamIcon, section: 'Management' } as NavLink,
           { href: '/staff-schedule', label: 'Staff Schedule', icon: StaffScheduleIcon, section: 'Management' } as NavLink,

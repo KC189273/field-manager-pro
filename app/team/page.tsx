@@ -8,7 +8,7 @@ interface Org { id: string; name: string }
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
 }
 
 interface User {
@@ -27,6 +27,7 @@ const ROLE_LABELS: Record<string, string> = {
   ops_manager: 'Ops Manager',
   owner: 'Owner',
   sales_director: 'Sales Director',
+  rdm: 'RDM',
   developer: 'Developer',
 }
 
@@ -384,6 +385,7 @@ export default function TeamPage() {
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
                 {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
+                {isDev && <option value="rdm">RDM</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
             )}
@@ -431,6 +433,7 @@ export default function TeamPage() {
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
                 {(isDev || session?.role === 'owner') && <option value="sales_director">Sales Director</option>}
+                {isDev && <option value="rdm">RDM</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
               {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
 
 interface SessionUser {
   id: string

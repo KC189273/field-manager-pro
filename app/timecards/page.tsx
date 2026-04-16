@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'rdm' | 'developer'
 
 interface Session {
   id: string
@@ -107,7 +107,7 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 const canManage = (role: Role) =>
   role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
-const canDownloadRole = (role: Role) => role === 'owner' || role === 'sales_director' || role === 'ops_manager' || role === 'developer'
+const canDownloadRole = (role: Role) => role === 'owner' || role === 'sales_director' || role === 'developer'
 
 export default function TimecardsPageWrapper() {
   return (

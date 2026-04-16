@@ -5,7 +5,7 @@ import { query, queryOne } from '@/lib/db'
 // POST — publish a (store, week) pair
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || session.role === 'employee') {
+  if (!session || session.role === 'employee' || session.role === 'rdm') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

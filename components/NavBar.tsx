@@ -126,7 +126,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     { href: '/dashboard', label: 'Home', icon: HomeIcon, section: 'General' },
     { href: '/clock', label: 'Clock In / Out', icon: ClockIcon, section: 'General' },
     { href: '/schedule', label: 'Schedule', icon: CalendarIcon, section: 'General' },
-    { href: '/staff-schedule', label: 'My Schedule', icon: StaffScheduleIcon, section: 'General' },
+    ...(role !== 'employee' ? [{ href: '/staff-schedule', label: 'Store Scheduling', icon: StaffScheduleIcon, section: 'General' } as NavLink] : []),
     { href: '/time-history', label: 'Time History', icon: HistoryIcon, section: 'General' },
     { href: '/timecards', label: 'Timecards', icon: TimecardIcon, section: 'General' },
     { href: '/checklist', label: 'Opening / Closing Checklist', icon: ChecklistIcon, section: 'General' },

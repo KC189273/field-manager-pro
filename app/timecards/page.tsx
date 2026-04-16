@@ -91,10 +91,11 @@ function toLocalDateStr(date: Date): string {
 }
 
 function toDatetimeLocal(iso: string): string {
-  const d = new Date(iso)
-  const offset = -5 * 60
-  const local = new Date(d.getTime() - offset * 60000)
-  return local.toISOString().slice(0, 16)
+  // Use sv-SE locale: gives "YYYY-MM-DD HH:MM:SS" in the target timezone
+  return new Date(iso)
+    .toLocaleString('sv-SE', { timeZone: CST })
+    .slice(0, 16)
+    .replace(' ', 'T')
 }
 
 function shiftDuration(shift: Shift, nowMs: number): number {

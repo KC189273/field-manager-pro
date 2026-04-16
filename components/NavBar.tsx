@@ -126,6 +126,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     { href: '/dashboard', label: 'Home', icon: HomeIcon, section: 'General' },
     { href: '/clock', label: 'Clock In / Out', icon: ClockIcon, section: 'General' },
     { href: '/schedule', label: 'Schedule', icon: CalendarIcon, section: 'General' },
+    { href: '/staff-schedule', label: 'My Schedule', icon: StaffScheduleIcon, section: 'General' },
     { href: '/time-history', label: 'Time History', icon: HistoryIcon, section: 'General' },
     { href: '/timecards', label: 'Timecards', icon: TimecardIcon, section: 'General' },
     { href: '/checklist', label: 'Opening / Closing Checklist', icon: ChecklistIcon, section: 'General' },
@@ -133,6 +134,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     ...(canViewTeam(role)
       ? [
           { href: '/team', label: 'Team', icon: TeamIcon, section: 'Management' } as NavLink,
+          { href: '/staff-schedule', label: 'Staff Schedule', icon: StaffScheduleIcon, section: 'Management' } as NavLink,
           { href: '/flags', label: 'Flags', icon: FlagIcon, section: 'Management' } as NavLink,
           { href: '/map', label: 'Map', icon: MapIcon, section: 'Management' } as NavLink,
           { href: '/dm-visit', label: 'DM Store Visit', icon: StoreIcon, section: 'Management' } as NavLink,
@@ -362,6 +364,15 @@ function MapIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+    </svg>
+  )
+}
+
+function StaffScheduleIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16 2v4M8 2v4M3 10h18M8 14h4m-4 4h2" />
     </svg>
   )
 }

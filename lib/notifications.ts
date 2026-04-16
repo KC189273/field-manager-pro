@@ -209,8 +209,11 @@ export function expensePaidHtml(recipientName: string, amount: string, category:
 }
 
 
-export function taskAssignedHtml(assigneeName: string, assignerName: string, title: string, description: string | null, weekOf: string): string {
+export function taskAssignedHtml(assigneeName: string, assignerName: string, title: string, description: string | null, weekOf: string, dueDate?: string | null): string {
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const dueLine = dueDate
+    ? `<p style="font-size:13px;color:#bf360c;font-weight:600;margin:6px 0 0;">Due: ${new Date(dueDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>`
+    : ''
   return `
     <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
       <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
@@ -223,6 +226,7 @@ export function taskAssignedHtml(assigneeName: string, assignerName: string, tit
           <p style="font-size:16px;font-weight:700;color:#1c1c1e;margin:0 0 6px;">${title}</p>
           ${description ? `<p style="font-size:14px;color:#555;margin:0 0 10px;">${description}</p>` : ''}
           <p style="font-size:13px;color:#8e8e93;margin:0;">Week of ${weekOf}</p>
+          ${dueLine}
         </div>
         <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Task</a>
       </div>

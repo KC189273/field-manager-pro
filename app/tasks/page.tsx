@@ -17,6 +17,7 @@ interface Task {
   week_start: string
   title: string
   description: string | null
+  due_date: string | null
   assignee_id: string
   assignee_name: string
   created_by: string | null
@@ -52,7 +53,7 @@ export default function TasksPage() {
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false)
-  const [createForm, setCreateForm] = useState({ title: '', description: '', assigneeId: '' })
+  const [createForm, setCreateForm] = useState({ title: '', description: '', assigneeId: '', dueDate: '' })
   const [saving, setSaving] = useState(false)
   const [createError, setCreateError] = useState('')
 
@@ -120,7 +121,7 @@ export default function TasksPage() {
 
   // ── Create task ──────────────────────────────────────────
   function openCreate() {
-    setCreateForm({ title: '', description: '', assigneeId: assignableUsers[0]?.id ?? '' })
+    setCreateForm({ title: '', description: '', assigneeId: assignableUsers[0]?.id ?? '', dueDate: '' })
     setCreateError('')
     setShowCreate(true)
   }
@@ -139,6 +140,7 @@ export default function TasksPage() {
           title: createForm.title,
           description: createForm.description || null,
           assigneeId: createForm.assigneeId,
+          dueDate: createForm.dueDate || null,
         }),
       })
       if (!res.ok) {
@@ -370,6 +372,15 @@ export default function TasksPage() {
                   ))}
                 </select>
               </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Due Date <span className="text-gray-600">(optional)</span></label>
+                <input
+                  type="date"
+                  value={createForm.dueDate}
+                  onChange={e => setCreateForm(f => ({ ...f, dueDate: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500"
+                />
+              </div>
               {createError && (
                 <div className="rounded-xl bg-red-900/30 border border-red-600/40 px-4 py-3 text-sm text-red-400">{createError}</div>
               )}
@@ -499,9 +510,12 @@ function TaskCard({
     manager: 'DM', ops_manager: 'Ops Manager',
     sales_director: 'Sales Director', owner: 'Owner', developer: 'Developer',
   }
+  const today = new Date().toISOString().split('T')[0]
+  const isOverdue = !isDone && !!task.due_date && task.due_date < today
+  const isDueToday = !isDone && task.due_date === today
 
   return (
-    <div className={`bg-gray-900 border rounded-2xl overflow-hidden ${isDone ? 'border-green-900/50' : 'border-gray-800'}`}>
+    <div className={`bg-gray-900 border rounded-2xl overflow-hidden ${isDone ? 'border-green-900/50' : isOverdue ? 'border-red-800/60' : 'border-gray-800'}`}>
       <div className="flex items-start gap-3 p-4">
         {/* Checkmark button */}
         {canComplete ? (
@@ -545,6 +559,19 @@ function TaskCard({
             </span>
             {task.created_by_name && (
               <span className="text-[10px] text-gray-600">from {task.created_by_name}</span>
+            )}
+            {task.due_date && !isDone && (
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
+                isOverdue
+                  ? 'bg-red-900/40 text-red-400 border border-red-800/40'
+                  : isDueToday
+                  ? 'bg-amber-900/40 text-amber-400 border border-amber-800/40'
+                  : 'bg-gray-800 text-gray-400 border border-gray-700'
+              }`}>
+                {isOverdue ? '⚠ Overdue · ' : isDueToday ? '· Due today' : 'Due '}
+                {isOverdue || isDueToday ? '' : new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {isOverdue ? new Date(task.due_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
+              </span>
             )}
           </div>
 

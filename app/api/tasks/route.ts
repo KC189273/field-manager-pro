@@ -10,6 +10,7 @@ interface TaskRow {
   week_start: string
   title: string
   description: string | null
+  due_date: string | null
   assignee_id: string
   assignee_name: string
   created_by: string | null
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   const tasks = await query<TaskRow>(`
     SELECT
-      t.id, t.week_start::text, t.title, t.description,
+      t.id, t.week_start::text, t.title, t.description, t.due_date::text,
       t.assignee_id, a.full_name AS assignee_name,
       t.created_by, cb.full_name AS created_by_name,
       t.created_at::text,
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { weekStart, title, description, assigneeId } = await req.json()
+  const { weekStart, title, description, assigneeId, dueDate } = await req.json()
   if (!weekStart || !title || !assigneeId) {
     return NextResponse.json({ error: 'weekStart, title, and assigneeId are required' }, { status: 400 })
   }
@@ -101,10 +102,10 @@ export async function POST(req: NextRequest) {
   }
 
   const result = await queryOne<{ id: string }>(
-    `INSERT INTO tasks (org_id, week_start, title, description, assignee_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO tasks (org_id, week_start, title, description, due_date, assignee_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
      RETURNING id`,
-    [orgId, weekStart, title.trim(), description?.trim() || null, assigneeId, session.id]
+    [orgId, weekStart, title.trim(), description?.trim() || null, dueDate || null, assigneeId, session.id]
   )
 
   // Email the assignee
@@ -117,7 +118,7 @@ export async function POST(req: NextRequest) {
     sendEmail(
       assignee.email,
       `New task assigned: ${title.trim()}`,
-      taskAssignedHtml(assignee.full_name, session.fullName, title.trim(), description?.trim() || null, weekOf)
+      taskAssignedHtml(assignee.full_name, session.fullName, title.trim(), description?.trim() || null, weekOf, dueDate || null)
     ).catch(() => {})
   }
 

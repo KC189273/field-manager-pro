@@ -106,6 +106,15 @@ export default function StaffSchedulePage() {
   const canUnpublish = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
   const scheduleIsLocked = isPublished && session?.role === 'manager'
 
+  // Scheduling window: max 3 weeks ahead for managers
+  const MAX_OFFSET = session?.role === 'manager' ? 3 : 6
+  const requiredWeek = (() => {
+    const d = currentWeekStart()
+    d.setDate(d.getDate() + 14)
+    return toDateStr(d)
+  })()
+  const isRequiredWeek = weekStart === requiredWeek && session?.role === 'manager'
+
   // Load session + stores + employees once
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(setSession)
@@ -362,6 +371,24 @@ export default function StaffSchedulePage() {
           </div>
         </div>
 
+        {/* Deadline banner — managers only */}
+        {session?.role === 'manager' && (
+          <div className="bg-amber-950/50 border border-amber-700/50 rounded-xl px-4 py-2.5 mb-3 flex items-center justify-between">
+            <div>
+              <p className="text-xs font-semibold text-amber-400">Schedule Due Every Monday</p>
+              <p className="text-[11px] text-amber-600 mt-0.5">
+                Week of {new Date(requiredWeek + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} must be entered by end of today each Monday
+              </p>
+            </div>
+            <button
+              onClick={() => setWeekOffset(2)}
+              className="shrink-0 ml-3 text-[11px] text-amber-400 border border-amber-700/60 px-2.5 py-1 rounded-lg hover:bg-amber-900/40 transition-colors"
+            >
+              View →
+            </button>
+          </div>
+        )}
+
         {/* Week nav */}
         <div className="flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 mb-3">
           <button onClick={() => setWeekOffset(w => w - 1)} className="text-gray-400 hover:text-white text-xl px-1 transition-colors">‹</button>
@@ -369,8 +396,14 @@ export default function StaffSchedulePage() {
             <p className="text-sm font-semibold text-white">{weekLabel}</p>
             {weekOffset === 0 && <p className="text-[10px] text-violet-400">Current Week</p>}
             {weekOffset === 1 && <p className="text-[10px] text-gray-500">Next Week</p>}
+            {isRequiredWeek && <p className="text-[10px] text-amber-400 font-semibold">⚠ Due this Monday</p>}
+            {weekOffset === 3 && <p className="text-[10px] text-gray-500">3 Weeks Out</p>}
           </div>
-          <button onClick={() => setWeekOffset(w => w + 1)} className="text-gray-400 hover:text-white text-xl px-1 transition-colors">›</button>
+          <button
+            onClick={() => setWeekOffset(w => Math.min(w + 1, MAX_OFFSET))}
+            disabled={weekOffset >= MAX_OFFSET}
+            className="text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed text-xl px-1 transition-colors"
+          >›</button>
         </div>
 
         {/* Store selector */}

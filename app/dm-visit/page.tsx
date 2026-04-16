@@ -8,7 +8,7 @@ interface Session {
   id: string
   fullName: string
   email: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
   org_id?: string | null
 }
 
@@ -46,10 +46,10 @@ const VISIT_REASONS = ['Scheduled Visit', 'Performance Coaching', 'Recognition V
 const GRADES = ['A', 'B', 'D', 'F']
 
 const canViewAll = (role: string) =>
-  role === 'ops_manager' || role === 'owner' || role === 'developer'
+  role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
 const canManageStores = (role: string) =>
-  role === 'owner' || role === 'developer'
+  role === 'owner' || role === 'sales_director' || role === 'developer'
 
 const EMPTY_FORM = {
   store_location_id: '',

@@ -7,7 +7,7 @@ import { startNativeTracking, stopNativeTracking } from '@/lib/gps-native'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface ClockStatus {

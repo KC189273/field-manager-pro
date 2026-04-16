@@ -547,7 +547,7 @@ export async function GET(req: NextRequest) {
 
   // Send to owners (per org, just their org) + developer (all)
   const owners = await query<{ email: string; org_id: string | null }>(`
-    SELECT email, org_id FROM users WHERE role = 'owner' AND is_active = TRUE
+    SELECT email, org_id FROM users WHERE role IN ('owner','sales_director') AND is_active = TRUE
   `)
   const developers = await query<{ email: string }>(`
     SELECT email FROM users WHERE role = 'developer' AND is_active = TRUE

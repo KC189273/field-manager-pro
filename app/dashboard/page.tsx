@@ -67,8 +67,8 @@ export default async function DashboardPage() {
     canTeam
       ? queryOne<{ count: string }>(
           orgId
-            ? `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner') AND u.org_id = $1`
-            : `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner')`,
+            ? `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director') AND u.org_id = $1`
+            : `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director')`,
           orgId ? [orgId] : []
         )
       : Promise.resolve(null),

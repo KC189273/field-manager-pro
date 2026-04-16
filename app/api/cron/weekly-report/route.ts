@@ -252,7 +252,7 @@ export async function GET(req: NextRequest) {
 
   // Collect recipients: managers + ops_managers + owners + developer if enabled
   const recipients = await query<{ email: string }>(
-    `SELECT email FROM users WHERE role IN ('manager','ops_manager','owner') AND is_active = TRUE`
+    `SELECT email FROM users WHERE role IN ('manager','ops_manager','owner','sales_director') AND is_active = TRUE`
   )
 
   const devConfig = await queryOne<{ value: string }>(

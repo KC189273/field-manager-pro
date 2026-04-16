@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   // Load managers in this org for name lookup
   const managers = await query<{ id: string; full_name: string }>(
-    `SELECT id, full_name FROM users WHERE role IN ('manager','ops_manager','owner') AND org_id ${targetOrgId ? '= $1' : 'IS NULL'}`,
+    `SELECT id, full_name FROM users WHERE role IN ('manager','ops_manager','owner','sales_director') AND org_id ${targetOrgId ? '= $1' : 'IS NULL'}`,
     targetOrgId ? [targetOrgId] : []
   )
 

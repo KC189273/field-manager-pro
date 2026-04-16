@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
 // DELETE — unpublish (ops_manager, owner, developer only)
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
-  const canUnpublish = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'developer'
+  const canUnpublish = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
   if (!session || !canUnpublish) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

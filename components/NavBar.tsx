@@ -6,13 +6,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isCapacitor, resumeNativeTrackingIfClocked } from '@/lib/gps-native'
 
 interface NavBarProps {
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
   fullName: string
 }
 
 const isManager = (role: string) => role === 'manager' || role === 'ops_manager'
 const canSubmit = (role: string) => role !== 'employee'
-const canViewTeam = (role: string) => isManager(role) || role === 'owner' || role === 'developer'
+const canViewTeam = (role: string) => isManager(role) || role === 'owner' || role === 'sales_director' || role === 'developer'
 
 interface Org { id: string; name: string }
 
@@ -79,7 +79,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   }, [MIN_INTERVAL_MS])
 
   useEffect(() => {
-    if (role === 'developer' || role === 'owner') return
+    if (role === 'developer' || role === 'owner' || role === 'sales_director') return
 
     // In the native Capacitor app, use the native background GPS plugin.
     // In the browser, use watchPosition (stops when backgrounded — browser limitation).

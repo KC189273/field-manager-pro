@@ -8,7 +8,7 @@ interface Org { id: string; name: string }
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface User {
@@ -26,6 +26,7 @@ const ROLE_LABELS: Record<string, string> = {
   manager: 'Manager',
   ops_manager: 'Ops Manager',
   owner: 'Owner',
+  sales_director: 'Sales Director',
   developer: 'Developer',
 }
 
@@ -58,10 +59,10 @@ export default function TeamPage() {
   const bulkFileRef = useRef<HTMLInputElement>(null)
 
   const isDev = session?.role === 'developer'
-  const isOwner = session?.role === 'owner'
+  const isOwner = session?.role === 'owner' || session?.role === 'sales_director'
   const isDevOrOwner = isDev || isOwner
   const canBulkImport = isDev || isOwner || session?.role === 'ops_manager'
-  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner')
+  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
   const employees = users.filter(u => u.role === 'employee')
 
   async function loadUsers() {
@@ -382,6 +383,7 @@ export default function TeamPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
+                {isDev && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
             )}
@@ -428,13 +430,14 @@ export default function TeamPage() {
                 <option value="employee">Employee</option>
                 <option value="manager">Manager</option>
                 <option value="ops_manager">Ops Manager</option>
+                {isDev && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
               </select>
               {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
                 <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
               )}
             </div>
-            {isDevOrOwner && editForm.role !== 'developer' && editForm.role !== 'owner' && managers.length > 0 && (
+            {isDevOrOwner && editForm.role !== 'developer' && editForm.role !== 'owner' && editForm.role !== 'sales_director' && managers.length > 0 && (
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
                 <select value={editForm.managerId}

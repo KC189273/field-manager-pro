@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Shift {
@@ -122,7 +122,7 @@ export default function MapPage() {
   const [liveCount, setLiveCount] = useState(0)
 
   const canViewAll = (role: string) =>
-    role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'developer'
+    role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(s => {

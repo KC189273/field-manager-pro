@@ -105,7 +105,7 @@ export async function POST(req: NextRequest) {
 
   // Notify owner(s) of new expense
   const owners = await query<{ email: string }>(
-    `SELECT email FROM users WHERE role = 'owner' AND is_active = true`
+    `SELECT email FROM users WHERE role IN ('owner','sales_director') AND is_active = true`
   )
   const ownerEmails = owners.map((o) => o.email)
   if (ownerEmails.length > 0) {

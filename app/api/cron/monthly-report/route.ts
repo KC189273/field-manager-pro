@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
   // Recipients: owners of each org + developer
   const owners = await query<{ email: string; org_id: string }>(`
     SELECT email, org_id FROM users
-    WHERE role = 'owner' AND is_active = TRUE AND org_id IS NOT NULL
+    WHERE role IN ('owner','sales_director') AND is_active = TRUE AND org_id IS NOT NULL
   `)
 
   const developers = await query<{ email: string }>(`

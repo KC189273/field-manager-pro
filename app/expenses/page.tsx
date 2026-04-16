@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface SessionUser {
   id: string
@@ -88,7 +88,7 @@ export default function ExpensesPage() {
   useEffect(() => {
     if (!session) return
     loadExpenses()
-    if (session.role === 'developer' || session.role === 'owner' || session.role === 'manager' || session.role === 'ops_manager') {
+    if (session.role === 'developer' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'manager' || session.role === 'ops_manager') {
       fetch('/api/team/users')
         .then((r) => r.json())
         .then((d) => setTeamUsers(d.users ?? []))
@@ -246,10 +246,10 @@ export default function ExpensesPage() {
     }
   }
 
-  const canApprove = session?.role === 'owner' || session?.role === 'developer'
-  const canViewDetail = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'developer'
+  const canApprove = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
+  const canViewDetail = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
   const canSubmit = session && session.role !== 'employee'
-  const canOnBehalf = session?.role === 'owner' || session?.role === 'developer'
+  const canOnBehalf = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
 
   const [detailExpense, setDetailExpense] = useState<Expense | null>(null)
 

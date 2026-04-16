@@ -44,10 +44,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  // Managers can only create employees; developer can create any non-developer; owner can create managers
+  // Managers can only create employees; developer can create any non-developer; owner/sales_director can create managers
   const allowedRoles = session.role === 'developer'
-    ? ['employee', 'manager', 'ops_manager', 'owner']
-    : session.role === 'owner'
+    ? ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
+    : isOwner(session.role)
     ? ['employee', 'manager', 'ops_manager']
     : ['employee']
   if (role && !allowedRoles.includes(role)) {
@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
 
   // Determine manager_id
   let finalManagerId: string | null = null
-  if (finalRole !== 'developer' && finalRole !== 'owner') {
+  if (finalRole !== 'developer' && finalRole !== 'owner' && finalRole !== 'sales_director') {
     if ((session.role === 'developer' || isOwner(session.role)) && managerId) {
       finalManagerId = managerId
     } else if (isManager(session.role) && finalRole === 'employee') {
@@ -106,7 +106,7 @@ export async function PATCH(req: NextRequest) {
 
   // Role change validation
   if (role !== undefined) {
-    const allowedRoles = ['employee', 'manager', 'ops_manager']
+    const allowedRoles = ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
     if (!allowedRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
     }

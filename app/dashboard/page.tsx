@@ -33,6 +33,7 @@ export default async function DashboardPage() {
     pendingExpRow,
     myPendingRow,
     upcomingShifts,
+    myTasks,
   ] = await Promise.all([
     // Own active shift
     queryOne<{ id: string; clock_in_at: string; clock_in_address: string | null }>(
@@ -112,6 +113,17 @@ export default async function DashboardPage() {
           [session.id]
         )
       : Promise.resolve([] as { shift_date: string; start_time: string; end_time: string; role_note: string | null; store_address: string }[]),
+    // Tasks assigned to me — incomplete only
+    query<{ id: string; title: string; due_date: string | null }>(
+      `SELECT t.id, t.title, t.due_date::text
+       FROM tasks t
+       LEFT JOIN task_completions tc ON tc.task_id = t.id
+       WHERE t.assignee_id = $1
+         AND tc.task_id IS NULL
+       ORDER BY t.due_date ASC NULLS LAST, t.created_at ASC
+       LIMIT 10`,
+      [session.id]
+    ),
   ])
 
   // Derived values
@@ -176,6 +188,37 @@ export default async function DashboardPage() {
             </span>
           </div>
         </a>
+
+        {/* ── Assigned Tasks ── */}
+        {myTasks.length > 0 && (
+          <a
+            href="/tasks"
+            className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl overflow-hidden transition-colors"
+          >
+            <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-gray-800/60">
+              <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">My Tasks</p>
+              <p className="text-xs text-violet-500">View all →</p>
+            </div>
+            <div className="divide-y divide-gray-800/50">
+              {myTasks.map(task => {
+                const now = new Date()
+                const dueDate = task.due_date ? new Date(task.due_date) : null
+                const isOverdue = dueDate && dueDate < now
+                const isDueToday = dueDate && dueDate.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }) === now.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+                return (
+                  <div key={task.id} className="flex items-center justify-between px-5 py-3 gap-3">
+                    <p className="text-sm text-white truncate">{task.title}</p>
+                    {dueDate && (
+                      <p className={`text-xs shrink-0 font-medium ${isOverdue ? 'text-red-400' : isDueToday ? 'text-amber-400' : 'text-gray-500'}`}>
+                        {isOverdue ? '⚠ ' : ''}{fmtDueShort(dueDate)}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </a>
+        )}
 
         {session.role === 'employee' ? (
           <>
@@ -399,6 +442,16 @@ function formatDuration(seconds: number): string {
 function formatShiftDate(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')
   return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+}
+
+function fmtDueShort(d: Date): string {
+  const month = d.toLocaleDateString('en-US', { month: 'short', timeZone: 'America/Chicago' })
+  const day = d.toLocaleDateString('en-US', { day: 'numeric', timeZone: 'America/Chicago' })
+  const h = d.getHours()
+  const m = d.getMinutes()
+  const ampm = h >= 12 ? 'PM' : 'AM'
+  const h12 = h % 12 || 12
+  return `${month} ${day} ${h12}:${String(m).padStart(2, '0')} ${ampm}`
 }
 
 function fmtShiftTime(t: string): string {

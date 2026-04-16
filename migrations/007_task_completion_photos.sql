@@ -1,0 +1,1 @@
+ALTER TABLE task_completions ADD COLUMN IF NOT EXISTS photo_keys TEXT[] NOT NULL DEFAULT '{}';

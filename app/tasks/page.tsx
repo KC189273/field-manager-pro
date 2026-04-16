@@ -27,6 +27,8 @@ interface Task {
   note: string | null
   photo_key: string | null
   photo_url: string | null
+  photo_keys: string[]
+  photo_urls: string[]
   completed_by_name: string | null
 }
 
@@ -60,8 +62,7 @@ export default function TasksPage() {
   // Complete modal
   const [completingTask, setCompletingTask] = useState<Task | null>(null)
   const [completeNote, setCompleteNote] = useState('')
-  const [photoKey, setPhotoKey] = useState<string | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoEntries, setPhotoEntries] = useState<{ key: string | null; preview: string }[]>([])
   const [uploading, setUploading] = useState(false)
   const [completing, setCompleting] = useState(false)
   const [completeError, setCompleteError] = useState('')
@@ -172,30 +173,31 @@ export default function TasksPage() {
   function openComplete(task: Task) {
     setCompletingTask(task)
     setCompleteNote('')
-    setPhotoKey(null)
-    setPhotoPreview(null)
+    setPhotoEntries([])
     setCompleteError('')
   }
 
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoPreview(URL.createObjectURL(file))
-    setPhotoKey(null)
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
     setUploading(true)
-    try {
-      const urlRes = await fetch('/api/tasks/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      })
-      if (!urlRes.ok) { setCompleteError('Photo upload failed.'); setUploading(false); return }
-      const { url, key } = await urlRes.json()
-      const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      if (!s3Res.ok) { setCompleteError('Photo upload failed.'); setUploading(false); return }
-      setPhotoKey(key)
-    } catch {
-      setCompleteError('Photo upload failed.')
+    for (const file of files) {
+      const preview = URL.createObjectURL(file)
+      setPhotoEntries(prev => [...prev, { key: null, preview }])
+      try {
+        const urlRes = await fetch('/api/tasks/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, contentType: file.type }),
+        })
+        if (urlRes.ok) {
+          const { url, key } = await urlRes.json()
+          const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+          if (s3Res.ok) {
+            setPhotoEntries(prev => prev.map(e => e.preview === preview ? { ...e, key } : e))
+          }
+        }
+      } catch {}
     }
     setUploading(false)
   }
@@ -208,7 +210,12 @@ export default function TasksPage() {
       const res = await fetch('/api/tasks/complete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId: completingTask.id, note: completeNote || null, photoKey }),
+        body: JSON.stringify({
+          taskId: completingTask.id,
+          note: completeNote || null,
+          photoKey: photoEntries[0]?.key ?? null,       // backward compat
+          photoKeys: photoEntries.filter(e => e.key).map(e => e.key),
+        }),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
@@ -419,26 +426,32 @@ export default function TasksPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Photo (optional)</label>
-                {photoPreview ? (
-                  <div className="relative">
-                    <img src={photoPreview} alt="preview" className="w-full h-40 object-cover rounded-xl" />
-                    <button
-                      onClick={() => { setPhotoPreview(null); setPhotoKey(null) }}
-                      className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-7 h-7 flex items-center justify-center text-sm"
-                    >×</button>
-                    {uploading && (
-                      <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                        <p className="text-white text-xs">Uploading…</p>
+                <label className="block text-xs text-gray-400 mb-1.5">
+                  Photos <span className="text-gray-600">(optional — tap to add multiple)</span>
+                </label>
+                {photoEntries.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {photoEntries.map((entry, i) => (
+                      <div key={i} className="relative">
+                        <img src={entry.preview} alt="" className="w-full h-20 object-cover rounded-lg border border-gray-700" />
+                        {entry.key === null && (
+                          <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                            <p className="text-white text-[9px]">Uploading…</p>
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setPhotoEntries(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute -top-1.5 -right-1.5 bg-gray-800 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs border border-gray-600"
+                        >×</button>
                       </div>
-                    )}
+                    ))}
                   </div>
-                ) : (
-                  <label className="flex items-center justify-center w-full h-20 bg-gray-800 border border-dashed border-gray-700 rounded-xl cursor-pointer hover:border-violet-500 transition-colors">
-                    <span className="text-sm text-gray-500">Tap to add photo</span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
-                  </label>
                 )}
+                <label className="flex items-center justify-center w-full h-14 bg-gray-800 border border-dashed border-gray-700 rounded-xl cursor-pointer hover:border-violet-500 transition-colors">
+                  <span className="text-sm text-gray-500">{uploading ? 'Uploading…' : '+ Add photos'}</span>
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotoChange} disabled={uploading} />
+                </label>
               </div>
               {completeError && (
                 <div className="rounded-xl bg-red-900/30 border border-red-600/40 px-4 py-3 text-sm text-red-400">{completeError}</div>
@@ -585,14 +598,18 @@ function TaskCard({
               {task.note && (
                 <p className="text-xs text-gray-400 italic">"{task.note}"</p>
               )}
-              {task.photo_url && (
-                <button onClick={() => onLightbox(task.photo_url!)} className="block">
-                  <img
-                    src={task.photo_url}
-                    alt="Completion photo"
-                    className="h-20 w-32 object-cover rounded-lg border border-gray-700 hover:border-violet-500 transition-colors"
-                  />
-                </button>
+              {(task.photo_urls?.length > 0 || task.photo_url) && (
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {(task.photo_urls?.length > 0 ? task.photo_urls : [task.photo_url]).filter(Boolean).map((url, i) => (
+                    <button key={i} onClick={() => onLightbox(url!)} className="block">
+                      <img
+                        src={url!}
+                        alt="Completion photo"
+                        className="h-20 w-24 object-cover rounded-lg border border-gray-700 hover:border-violet-500 transition-colors"
+                      />
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           )}

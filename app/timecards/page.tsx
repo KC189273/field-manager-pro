@@ -107,7 +107,7 @@ const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Satu
 const canManage = (role: Role) =>
   role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
-const canDownloadRole = (role: Role) => role === 'owner' || role === 'sales_director' || role === 'developer'
+const canDownloadRole = (role: Role) => role === 'owner' || role === 'sales_director' || role === 'developer' || role === 'manager'
 
 export default function TimecardsPageWrapper() {
   return (

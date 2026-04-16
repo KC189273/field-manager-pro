@@ -19,6 +19,7 @@ interface TaskRow {
   completed_at: string | null
   note: string | null
   photo_key: string | null
+  photo_keys: string[]
   completed_by_name: string | null
 }
 
@@ -56,7 +57,7 @@ export async function GET(req: NextRequest) {
       t.assignee_id, a.full_name AS assignee_name,
       t.created_by, cb.full_name AS created_by_name,
       t.created_at::text,
-      tc.completed_at::text, tc.note, tc.photo_key,
+      tc.completed_at::text, tc.note, tc.photo_key, tc.photo_keys,
       cu.full_name AS completed_by_name
     FROM tasks t
     JOIN users a ON a.id = t.assignee_id
@@ -72,6 +73,7 @@ export async function GET(req: NextRequest) {
     tasks.map(async t => ({
       ...t,
       photo_url: t.photo_key ? await getReceiptViewUrl(t.photo_key) : null,
+      photo_urls: await Promise.all((t.photo_keys ?? []).map(k => getReceiptViewUrl(k))),
     }))
   )
 

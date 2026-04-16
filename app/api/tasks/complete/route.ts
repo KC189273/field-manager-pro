@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { taskId, note, photoKey } = await req.json()
+  const { taskId, note, photoKey, photoKeys } = await req.json()
   if (!taskId) return NextResponse.json({ error: 'taskId required' }, { status: 400 })
 
   if (!(await assertAccess(session, taskId))) {
@@ -29,14 +29,15 @@ export async function POST(req: NextRequest) {
   }
 
   await query(
-    `INSERT INTO task_completions (task_id, completed_by, note, photo_key)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO task_completions (task_id, completed_by, note, photo_key, photo_keys)
+     VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT (task_id) DO UPDATE
        SET completed_by = EXCLUDED.completed_by,
            completed_at = NOW(),
            note = EXCLUDED.note,
-           photo_key = EXCLUDED.photo_key`,
-    [taskId, session.id, note || null, photoKey || null]
+           photo_key = EXCLUDED.photo_key,
+           photo_keys = EXCLUDED.photo_keys`,
+    [taskId, session.id, note || null, photoKey || null, photoKeys?.length ? photoKeys : []]
   )
 
   // Email the task creator

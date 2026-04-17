@@ -414,6 +414,12 @@ export default function MapPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, session])
 
+  // Auto-reload when employee filter changes
+  useEffect(() => {
+    if (mapReady && session && loaded) loadMap()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUser])
+
   const updatedAgo = lastUpdated
     ? (() => {
         const secs = Math.floor((Date.now() - lastUpdated.getTime()) / 1000)

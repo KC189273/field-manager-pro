@@ -82,11 +82,18 @@ export async function POST(req: NextRequest) {
   const existing = await queryOne(`SELECT id FROM users WHERE username = $1`, [username.trim().toLowerCase()])
   if (existing) return NextResponse.json({ error: 'Username already taken' }, { status: 409 })
 
+  // Inherit org from manager if one is assigned, otherwise from creator
+  let finalOrgId: string | null = session.org_id ?? null
+  if (finalManagerId) {
+    const mgr = await queryOne<{ org_id: string | null }>('SELECT org_id FROM users WHERE id = $1', [finalManagerId])
+    if (mgr?.org_id) finalOrgId = mgr.org_id
+  }
+
   const hash = await bcrypt.hash(password, 12)
   const user = await queryOne<{ id: string }>(
-    `INSERT INTO users (username, email, password_hash, role, full_name, manager_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-    [username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(), finalManagerId, session.id]
+    `INSERT INTO users (username, email, password_hash, role, full_name, manager_id, org_id, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+    [username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(), finalManagerId, finalOrgId, session.id]
   )
 
   await sendEmail(

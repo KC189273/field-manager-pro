@@ -3,7 +3,7 @@ import { getSession, isManager, isOwner, type Role } from '@/lib/auth'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
 const canManageShifts = (role: Role) => isManager(role) || isOwner(role) || role === 'developer'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { sendEmail, manualTimeEntryHtml } from '@/lib/notifications'
 
 export async function GET(req: NextRequest) {
@@ -105,10 +105,25 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
-  if (!session || !canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { shiftId, clockIn, clockOut, note } = await req.json()
-  if (!shiftId || !note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+  const { shiftId, clockIn, clockOut, note, shiftNote } = await req.json()
+  if (!shiftId) return NextResponse.json({ error: 'shiftId required' }, { status: 400 })
+
+  // Note-only mode: any user can annotate their own shifts; managers can annotate team shifts
+  if (shiftNote !== undefined) {
+    const shift = await queryOne<{ user_id: string }>('SELECT user_id FROM shifts WHERE id = $1', [shiftId])
+    if (!shift) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
+    if (shift.user_id !== session.id && !canManageShifts(session.role)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    await query('UPDATE shifts SET shift_note = $1 WHERE id = $2', [shiftNote || null, shiftId])
+    return NextResponse.json({ ok: true })
+  }
+
+  // Time correction flow — manager+ only, note required
+  if (!canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
 
   const shift = await query<{ user_id: string }>(
     `UPDATE shifts SET clock_in_at = COALESCE($1, clock_in_at), clock_out_at = $2,

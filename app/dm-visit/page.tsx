@@ -361,8 +361,8 @@ export default function DmVisitPage() {
     </select>
   )
 
-  const textArea = (key: string, placeholder?: string) => (
-    <textarea value={form[key as keyof typeof form]} onChange={e => setField(key, e.target.value)} required rows={3}
+  const textArea = (key: string, placeholder?: string, required = true) => (
+    <textarea value={form[key as keyof typeof form]} onChange={e => setField(key, e.target.value)} required={required} rows={3}
       placeholder={placeholder} className={inputCls + ' resize-none'} />
   )
 
@@ -478,7 +478,7 @@ export default function DmVisitPage() {
 
               <div className={fieldWrap}>
                 <label className={labelCls}>Additional Comments <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
-                {textArea('additional_comments', 'Any additional context for this visit…')}
+                {textArea('additional_comments', 'Any additional context for this visit…', false)}
               </div>
 
               {/* Pre-Visit Planning */}
@@ -566,7 +566,7 @@ export default function DmVisitPage() {
 
                   <div className={fieldWrap}>
                     <label className={labelCls}>Evaluation Comments <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
-                    {textArea('sales_evaluation_comments', 'Additional notes on the sales interaction…')}
+                    {textArea('sales_evaluation_comments', 'Additional notes on the sales interaction…', false)}
                   </div>
                 </>
               )}
@@ -589,7 +589,7 @@ export default function DmVisitPage() {
 
               <div className={fieldWrap}>
                 <label className={labelCls}>Operational Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
-                {textArea('ops_notes', 'Any operational observations or action items…')}
+                {textArea('ops_notes', 'Any operational observations or action items…', false)}
               </div>
 
               {/* Coaching */}
@@ -598,11 +598,6 @@ export default function DmVisitPage() {
               <div className={fieldWrap}>
                 <label className={labelCls}>Specific Behaviors or Skills Coached</label>
                 {textArea('coaching_1', 'What did you coach on during this visit?')}
-              </div>
-
-              <div className={fieldWrap}>
-                <label className={labelCls}>Action Items Agreed Upon</label>
-                {textArea('coaching_2', 'What specific actions did the employee commit to?')}
               </div>
 
               <div className={fieldWrap}>

@@ -22,6 +22,7 @@ interface Shift {
   is_manual: boolean
   manual_note: string | null
   manual_by_name: string | null
+  shift_note: string | null
   full_name: string
   username: string
 }
@@ -158,6 +159,11 @@ function TimecardsPage() {
   const [editOut, setEditOut] = useState('')
   const [editNote, setEditNote] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+
+  // Shift note modal
+  const [noteShift, setNoteShift] = useState<Shift | null>(null)
+  const [noteText, setNoteText] = useState('')
+  const [noteSaving, setNoteSaving] = useState(false)
 
   // Add modal
   const [addForDay, setAddForDay] = useState<Date | null>(null)
@@ -351,6 +357,27 @@ function TimecardsPage() {
       await loadShifts()
     } finally {
       setEditSaving(false)
+    }
+  }
+
+  function openNote(shift: Shift) {
+    setNoteShift(shift)
+    setNoteText(shift.shift_note ?? '')
+  }
+
+  async function saveNote() {
+    if (!noteShift) return
+    setNoteSaving(true)
+    try {
+      await fetch('/api/shifts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shiftId: noteShift.id, shiftNote: noteText.trim() }),
+      })
+      setNoteShift(null)
+      await loadShifts()
+    } finally {
+      setNoteSaving(false)
     }
   }
 
@@ -676,15 +703,26 @@ function TimecardsPage() {
                                   {shift.is_manual && shift.manual_by_name && (
                                     <p className="text-xs text-gray-600 mt-0.5">By: {shift.manual_by_name}</p>
                                   )}
+                                  {shift.shift_note && (
+                                    <p className="text-xs text-blue-300/80 mt-1">📝 {shift.shift_note}</p>
+                                  )}
                                 </div>
-                                {isMgr && selectedUserId && selectedUserId !== session.id && (
+                                <div className="flex items-center gap-2 shrink-0 mt-0.5">
                                   <button
-                                    onClick={() => openEdit(shift)}
-                                    className="text-xs text-gray-500 hover:text-violet-400 transition-colors font-medium shrink-0 mt-0.5"
+                                    onClick={() => openNote(shift)}
+                                    className="text-xs text-gray-500 hover:text-blue-400 transition-colors font-medium"
                                   >
-                                    Edit
+                                    {shift.shift_note ? 'Edit note' : 'Add note'}
                                   </button>
-                                )}
+                                  {isMgr && selectedUserId && selectedUserId !== session.id && (
+                                    <button
+                                      onClick={() => openEdit(shift)}
+                                      className="text-xs text-gray-500 hover:text-violet-400 transition-colors font-medium"
+                                    >
+                                      Edit
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -765,6 +803,33 @@ function TimecardsPage() {
           </div>
         )}
       </div>
+
+      {/* Shift note modal */}
+      {noteShift && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setNoteShift(null)}>
+          <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-1">Shift Note</h2>
+            <p className="text-sm text-gray-500 mb-4">{fmtTime(noteShift.clock_in_at)} – {noteShift.clock_out_at ? fmtTime(noteShift.clock_out_at) : 'In progress'}</p>
+            <textarea
+              value={noteText}
+              onChange={e => setNoteText(e.target.value)}
+              rows={3}
+              placeholder="Add a note about this shift…"
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+            <div className="flex gap-2 mt-4">
+              <button onClick={saveNote} disabled={noteSaving}
+                className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                {noteSaving ? 'Saving…' : 'Save Note'}
+              </button>
+              <button onClick={() => setNoteShift(null)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit shift modal */}
       {editShift && (

@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { getSession, canViewTeam, canSubmitExpense } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import NavBar from '@/components/NavBar'
-import { daysUntilDeadline, nextWeekStart, formatWeekRange } from '@/lib/schedule'
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -19,14 +18,11 @@ export default async function DashboardPage() {
   const weekStart = new Date(now)
   weekStart.setDate(now.getDate() - now.getDay() + (now.getDay() === 0 ? -6 : 1))
   weekStart.setHours(0, 0, 0, 0)
-  const nextMon = nextWeekStart()
-  const nextMonStr = nextMon.toISOString().split('T')[0]
 
   // Run queries in parallel — skip non-employee data for employees
   const [
     activeShift,
     weekShifts,
-    nextSchedule,
     flagRow,
     clockedInRow,
     teamRow,
@@ -47,13 +43,6 @@ export default async function DashboardPage() {
           `SELECT EXTRACT(EPOCH FROM (COALESCE(clock_out_at, NOW()) - clock_in_at)) as duration_seconds
            FROM shifts WHERE user_id = $1 AND clock_in_at >= $2 ORDER BY clock_in_at DESC`,
           [session.id, weekStart.toISOString()]
-        ),
-    // Next week schedule (skip for employees — not shown)
-    isEmployee
-      ? Promise.resolve(null)
-      : queryOne<{ days_working: number[] }>(
-          `SELECT days_working FROM schedules WHERE user_id = $1 AND week_start = $2`,
-          [session.id, nextMonStr]
         ),
     // Open flags (management)
     canTeam
@@ -133,10 +122,6 @@ export default async function DashboardPage() {
   const clockedInFor = activeShift
     ? formatDuration((Date.now() - new Date(activeShift.clock_in_at).getTime()) / 1000)
     : null
-
-  const daysLeft = daysUntilDeadline()
-  const scheduleSubmitted = !!nextSchedule
-  const scheduleOverdue = daysLeft < 0
 
   const flagCount = parseInt(flagRow?.count ?? '0')
   const clockedInCount = parseInt(clockedInRow?.count ?? '0')
@@ -271,52 +256,21 @@ export default async function DashboardPage() {
           </>
         ) : (
           <>
-            {/* ── This week + Schedule (2-col) ── */}
-            <div className="grid grid-cols-2 gap-3">
-              <a
-                href="/timecards"
-                className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
-              >
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">This Week</p>
-                <p className="text-2xl font-bold text-white">
-                  {totalHours}
-                  <span className="text-sm font-normal text-gray-400 ml-1">hrs</span>
-                </p>
-                <p className="text-xs text-gray-600 mt-1">
-                  {weekShifts.length} shift{weekShifts.length !== 1 ? 's' : ''}
-                </p>
-                <p className="text-xs text-violet-500 mt-3">Timecards →</p>
-              </a>
-
-              <a
-                href="/schedule"
-                className={`rounded-2xl p-4 border transition-colors ${
-                  !scheduleSubmitted && scheduleOverdue
-                    ? 'bg-red-950 border-red-800 hover:border-red-700'
-                    : !scheduleSubmitted && daysLeft <= 2
-                    ? 'bg-amber-950 border-amber-700 hover:border-amber-600'
-                    : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-                }`}
-              >
-                <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Schedule</p>
-                {scheduleSubmitted ? (
-                  <>
-                    <p className="text-lg font-bold text-green-400">Submitted</p>
-                    <p className="text-xs text-gray-600 mt-1">
-                      {nextSchedule!.days_working.length} day{nextSchedule!.days_working.length !== 1 ? 's' : ''} selected
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className={`text-lg font-bold ${scheduleOverdue ? 'text-red-400' : daysLeft <= 2 ? 'text-amber-400' : 'text-white'}`}>
-                      {scheduleOverdue ? 'Overdue' : `${daysLeft}d left`}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">{formatWeekRange(nextMon)}</p>
-                  </>
-                )}
-                <p className="text-xs text-violet-500 mt-3">Schedule →</p>
-              </a>
-            </div>
+            {/* ── This week ── */}
+            <a
+              href="/timecards"
+              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-4 transition-colors"
+            >
+              <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">This Week</p>
+              <p className="text-2xl font-bold text-white">
+                {totalHours}
+                <span className="text-sm font-normal text-gray-400 ml-1">hrs</span>
+              </p>
+              <p className="text-xs text-gray-600 mt-1">
+                {weekShifts.length} shift{weekShifts.length !== 1 ? 's' : ''}
+              </p>
+              <p className="text-xs text-violet-500 mt-3">Timecards →</p>
+            </a>
 
             {/* ── Store Scheduling (DM and above only) ── */}
             <a

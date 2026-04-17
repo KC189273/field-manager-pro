@@ -125,7 +125,6 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   const links: NavLink[] = [
     { href: '/dashboard', label: 'Home', icon: HomeIcon, section: 'General' },
     { href: '/clock', label: 'Clock In / Out', icon: ClockIcon, section: 'General' },
-    { href: '/schedule', label: 'Schedule', icon: CalendarIcon, section: 'General' },
     ...(role !== 'employee' ? [{ href: '/staff-schedule', label: 'Store Scheduling', icon: StaffScheduleIcon, section: 'General' } as NavLink] : []),
     { href: '/time-history', label: 'Time History', icon: HistoryIcon, section: 'General' },
     { href: '/timecards', label: 'Timecards', icon: TimecardIcon, section: 'General' },

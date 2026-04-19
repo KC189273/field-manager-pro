@@ -78,6 +78,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
+    // Period must be closed (period_end in the past)
+    if (new Date(period.period_end + 'T23:59:59Z') >= new Date()) {
+      return NextResponse.json({ error: 'This pay period has not yet closed' }, { status: 400 })
+    }
+
     await queryOne(`
       INSERT INTO payroll_dm_approvals (period_id, dm_id)
       VALUES ($1, $2)

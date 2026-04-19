@@ -184,6 +184,10 @@ export default function PayrollPage() {
   }
 
   if (!session) return <div className="min-h-screen bg-gray-950" />
+  if (session.role === 'employee') {
+    if (typeof window !== 'undefined') window.location.replace('/dashboard')
+    return <div className="min-h-screen bg-gray-950" />
+  }
 
   const role = session.role
   const currentPeriod = periods[0] ?? null

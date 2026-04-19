@@ -17,15 +17,25 @@ interface DmApproval {
   approved_at: string
 }
 
+interface SrApproval {
+  dm_id: string
+  dm_name: string
+  downloaded_at: string | null
+  approved_at: string | null
+  sr_user_id: string | null
+  sr_name: string | null
+}
+
 interface Period {
   id: string
   period_start: string
   period_end: string
   status: string
-  sr_approved_by: string | null
-  sr_approved_at: string | null
-  sr_approver_name: string | null
+  final_submitted_at: string | null
+  final_submitted_by: string | null
+  final_submitter_name: string | null
   dmApprovals: DmApproval[]
+  srApprovals: SrApproval[]
   totalDMs: number
 }
 
@@ -43,28 +53,35 @@ function fmtPeriod(start: string, end: string): string {
   return `${s} – ${e}`
 }
 
+function fmtDatetime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 const canSrApprove = (role: Role) =>
-  role === 'sales_director' || role === 'ops_manager' || role === 'developer'
+  ['sales_director', 'ops_manager', 'developer', 'owner'].includes(role)
 
 const canDownload = (role: Role) =>
-  role === 'sales_director' || role === 'ops_manager' || role === 'owner' || role === 'developer'
+  ['sales_director', 'ops_manager', 'owner', 'developer'].includes(role)
 
 export default function PayrollPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [periods, setPeriods] = useState<Period[]>([])
   const [myHours, setMyHours] = useState<EmployeeHours[]>([])
+  const [orgName, setOrgName] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [approving, setApproving] = useState<string | null>(null)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
-  // Download state
   const [from, setFrom] = useState(() => {
     const d = new Date()
-    d.setDate(d.getDate() - 7)
+    d.setDate(d.getDate() - 13)
     return d.toISOString().split('T')[0]
   })
   const [to, setTo] = useState(() => new Date().toISOString().split('T')[0])
   const [downloading, setDownloading] = useState(false)
+
+  // Track which DM timecards have been downloaded this session (per period)
+  const [downloadedDms, setDownloadedDms] = useState<Record<string, Set<string>>>({})
 
   async function load() {
     const [meRes, payRes] = await Promise.all([
@@ -77,6 +94,7 @@ export default function PayrollPage() {
       const data = await payRes.json()
       setPeriods(data.periods ?? [])
       setMyHours(data.myEmployeeHours ?? [])
+      setOrgName(data.orgName ?? '')
     }
     setLoading(false)
   }
@@ -85,30 +103,62 @@ export default function PayrollPage() {
 
   function showMsg(text: string, type: 'success' | 'error' = 'success') {
     setMessage({ text, type })
-    setTimeout(() => setMessage(null), 4000)
+    setTimeout(() => setMessage(null), 5000)
   }
 
-  async function approve(periodId: string, type: 'dm' | 'sr') {
-    setApproving(periodId + type)
+  async function approve(periodId: string, type: string, dmId?: string) {
+    setApproving(periodId + type + (dmId ?? ''))
     try {
       const res = await fetch('/api/payroll/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ periodId, type }),
+        body: JSON.stringify({ periodId, type, dmId }),
       })
       if (res.ok) {
-        showMsg(type === 'dm' ? 'Payroll approved for your team.' : 'Payroll approved. Owner has been notified.')
+        if (type === 'dm') showMsg('Timecards locked and submitted. SD has been notified.')
+        else if (type === 'sr_approve') showMsg('Timecard approved.')
+        else if (type === 'final') showMsg('Payroll submitted. Owners have been notified.')
+        else if (type === 'owner_override') showMsg('Override applied. Payroll marked as approved.')
         await load()
       } else {
         const d = await res.json().catch(() => ({}))
-        showMsg(d.error ?? 'Failed to approve', 'error')
+        showMsg(d.error ?? 'Action failed', 'error')
       }
     } finally {
       setApproving(null)
     }
   }
 
-  async function downloadCsv() {
+  async function downloadDmCsv(dmId: string, periodId: string, periodStart: string, periodEnd: string) {
+    const url = `/api/payroll/download?from=${periodStart}&to=${periodEnd}&dmId=${dmId}`
+    const res = await fetch(url)
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      showMsg(d.error ?? 'No data for this DM', 'error')
+      return
+    }
+    const blob = await res.blob()
+    const objectUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = `FMP_ADP_Payroll_${periodStart}_to_${periodEnd}_dm.csv`
+    a.click()
+    URL.revokeObjectURL(objectUrl)
+
+    // Mark as downloaded in local state
+    setDownloadedDms(prev => {
+      const next = { ...prev }
+      if (!next[periodId]) next[periodId] = new Set()
+      else next[periodId] = new Set(next[periodId])
+      next[periodId].add(dmId)
+      return next
+    })
+
+    // Refresh data so downloaded_at is reflected from server
+    await load()
+  }
+
+  async function downloadFullCsv() {
     setDownloading(true)
     try {
       const res = await fetch(`/api/payroll/download?from=${from}&to=${to}`)
@@ -132,10 +182,7 @@ export default function PayrollPage() {
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const role = session.role
-
-  // DM's own approval status for the current period
-  const currentPeriod = periods[0]
-  const dmAlreadyApproved = currentPeriod?.dmApprovals.some(a => a.dm_id === session.id)
+  const currentPeriod = periods[0] ?? null
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24 pt-14">
@@ -146,7 +193,9 @@ export default function PayrollPage() {
 
         {message && (
           <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${
-            message.type === 'error' ? 'bg-red-900/40 border border-red-700 text-red-300' : 'bg-green-900/40 border border-green-700 text-green-300'
+            message.type === 'error'
+              ? 'bg-red-900/40 border border-red-700 text-red-300'
+              : 'bg-green-900/40 border border-green-700 text-green-300'
           }`}>
             {message.text}
           </div>
@@ -156,28 +205,31 @@ export default function PayrollPage() {
           <p className="text-gray-500 text-sm text-center py-16">Loading…</p>
         ) : (
           <>
-            {/* ── DM VIEW: Approve their team ── */}
+            {/* ── DM VIEW ── */}
             {role === 'manager' && (
               <div className="space-y-4">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Payroll Approval</p>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Pay Period Timecards</p>
+
                 {periods.length === 0 ? (
                   <p className="text-gray-600 text-sm">No payroll periods found.</p>
-                ) : periods.map(period => {
+                ) : periods.map((period, idx) => {
                   const myApproval = period.dmApprovals.find(a => a.dm_id === session.id)
+                  const isClosed = new Date(period.period_end + 'T23:59:59Z') < new Date()
+
                   return (
                     <div key={period.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
                       <div className="flex items-start justify-between mb-4">
                         <div>
                           <p className="font-semibold text-white">{fmtPeriod(period.period_start, period.period_end)}</p>
                           <p className="text-xs text-gray-500 mt-0.5">
-                            {period.dmApprovals.length} of {period.totalDMs} DMs approved
+                            {myApproval ? 'Locked' : 'Open for submission'}
                           </p>
                         </div>
                         <StatusBadge status={period.status} myApproval={!!myApproval} />
                       </div>
 
-                      {/* Employee hours table */}
-                      {period.id === currentPeriod?.id && myHours.length > 0 && (
+                      {/* Employee hours table — show for last closed period */}
+                      {isClosed && myHours.length > 0 && (
                         <div className="mb-4">
                           <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Your Team's Hours</p>
                           <div className="bg-gray-800/60 rounded-xl overflow-hidden">
@@ -207,24 +259,33 @@ export default function PayrollPage() {
                         </div>
                       )}
 
-                      {period.id === currentPeriod?.id && myHours.length === 0 && (
+                      {isClosed && myHours.length === 0 && !myApproval && (
                         <p className="text-gray-600 text-sm mb-4">No employee hours found for this period.</p>
                       )}
 
-                      {!myApproval ? (
-                        <button
-                          onClick={() => approve(period.id, 'dm')}
-                          disabled={approving === period.id + 'dm'}
-                          className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-                        >
-                          {approving === period.id + 'dm' ? 'Approving…' : 'Approve Payroll'}
-                        </button>
+                      {!myApproval && isClosed ? (
+                        <div className="space-y-3">
+                          <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">
+                            <p className="text-amber-300 text-xs font-medium">
+                              ⚠ Once submitted, timecards for this period are permanently locked and cannot be edited.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => approve(period.id, 'dm')}
+                            disabled={approving === period.id + 'dm'}
+                            className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+                          >
+                            {approving === period.id + 'dm' ? 'Submitting…' : 'Lock & Submit Timecards'}
+                          </button>
+                        </div>
+                      ) : !myApproval && !isClosed ? (
+                        <p className="text-xs text-gray-500 italic">Period not yet closed — available for submission after {new Date(period.period_end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                       ) : (
                         <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
-                          Approved by you on {new Date(myApproval.approved_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          Submitted and locked · {fmtDatetime(myApproval!.approved_at)}
                         </div>
                       )}
                     </div>
@@ -233,72 +294,121 @@ export default function PayrollPage() {
               </div>
             )}
 
-            {/* ── HIGHER ROLES: Approval pipeline + download ── */}
+            {/* ── SD / OPS / OWNER / DEV VIEW ── */}
             {role !== 'manager' && (
               <div className="space-y-6">
-                {/* Approval pipeline */}
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Approval Pipeline</p>
-                  {periods.length === 0 ? (
-                    <p className="text-gray-600 text-sm">No payroll periods found.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {periods.map(period => {
-                        const canApproveNow = canSrApprove(role) && period.status === 'pending_sr'
-                        const isPending = period.status === 'pending_dm' || period.status === 'pending_sr'
-                        return (
-                          <div key={period.id} className={`bg-gray-900 border rounded-2xl p-4 ${isPending ? 'border-amber-800/40' : 'border-gray-800'}`}>
-                            <div className="flex items-start justify-between mb-3">
-                              <div>
-                                <p className="font-semibold text-white text-sm">{fmtPeriod(period.period_start, period.period_end)}</p>
-                                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                  <span className="text-[10px] text-gray-500">
-                                    DMs: {period.dmApprovals.length}/{period.totalDMs} approved
-                                  </span>
-                                  {period.sr_approver_name && (
-                                    <span className="text-[10px] text-gray-500">
-                                      · SR: {period.sr_approver_name}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                              <StatusBadge status={period.status} />
-                            </div>
 
-                            {/* DM approval chips */}
-                            {period.dmApprovals.length > 0 && (
-                              <div className="flex flex-wrap gap-1.5 mb-3">
-                                {period.dmApprovals.map(a => (
-                                  <span key={a.dm_id} className="text-[10px] bg-green-900/30 border border-green-800/40 text-green-400 px-2 py-0.5 rounded-full">
-                                    ✓ {a.dm_name.split(' ')[0]}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            {canApproveNow && (
-                              <button
-                                onClick={() => approve(period.id, 'sr')}
-                                disabled={approving === period.id + 'sr'}
-                                className="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-                              >
-                                {approving === period.id + 'sr' ? 'Approving…' : 'Approve & Notify Owner'}
-                              </button>
-                            )}
-                          </div>
-                        )
-                      })}
+                {/* Owner override */}
+                {(role === 'owner' || role === 'developer') && currentPeriod && currentPeriod.status !== 'approved' && (
+                  <div className="bg-red-950/30 border border-red-800/40 rounded-2xl p-5 space-y-3">
+                    <div>
+                      <p className="text-red-400 text-sm font-semibold">Owner Override</p>
+                      <p className="text-red-400/70 text-xs mt-1">
+                        This will bypass all DM and SR approval steps and immediately mark the period as approved.
+                      </p>
                     </div>
-                  )}
-                </div>
+                    <button
+                      onClick={() => approve(currentPeriod.id, 'owner_override')}
+                      disabled={approving === currentPeriod.id + 'owner_override'}
+                      className="w-full py-2.5 rounded-xl bg-red-700 hover:bg-red-600 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+                    >
+                      {approving === currentPeriod.id + 'owner_override' ? 'Applying…' : 'Override & Approve All'}
+                    </button>
+                  </div>
+                )}
 
-                {/* Download section */}
+                {/* Current period — main review section */}
+                {currentPeriod && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">
+                      Current Period — {fmtPeriod(currentPeriod.period_start, currentPeriod.period_end)}
+                    </p>
+                    <div className={`bg-gray-900 border rounded-2xl p-5 space-y-4 ${currentPeriod.status !== 'approved' ? 'border-amber-800/30' : 'border-gray-800'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-semibold">{fmtPeriod(currentPeriod.period_start, currentPeriod.period_end)}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {currentPeriod.dmApprovals.length} of {currentPeriod.totalDMs} DMs submitted &middot; {currentPeriod.srApprovals.filter(a => a.approved_at).length} of {currentPeriod.totalDMs} approved
+                          </p>
+                        </div>
+                        <StatusBadge status={currentPeriod.status} />
+                      </div>
+
+                      {/* DM rows */}
+                      <DmReviewList
+                        period={currentPeriod}
+                        session={session}
+                        downloadedDms={downloadedDms[currentPeriod.id] ?? new Set()}
+                        approving={approving}
+                        onDownload={(dmId) => downloadDmCsv(dmId, currentPeriod.id, currentPeriod.period_start, currentPeriod.period_end)}
+                        onApprove={(dmId) => approve(currentPeriod.id, 'sr_approve', dmId)}
+                        canSr={canSrApprove(role)}
+                      />
+
+                      {/* Final submit button */}
+                      {canSrApprove(role) &&
+                        currentPeriod.status !== 'approved' &&
+                        currentPeriod.totalDMs > 0 &&
+                        currentPeriod.dmApprovals.length >= currentPeriod.totalDMs &&
+                        currentPeriod.srApprovals.filter(a => a.approved_at).length >= currentPeriod.totalDMs && (
+                          <button
+                            onClick={() => approve(currentPeriod.id, 'final')}
+                            disabled={approving === currentPeriod.id + 'final'}
+                            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
+                          >
+                            {approving === currentPeriod.id + 'final'
+                              ? 'Submitting…'
+                              : `Approve and Submit${orgName ? ` ${orgName}` : ''} Payroll`}
+                          </button>
+                        )}
+
+                      {currentPeriod.status === 'approved' && currentPeriod.final_submitted_at && (
+                        <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Approved &amp; submitted · {fmtDatetime(currentPeriod.final_submitted_at)}
+                          {currentPeriod.final_submitter_name && ` by ${currentPeriod.final_submitter_name}`}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Past periods */}
+                {periods.length > 1 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Past Periods</p>
+                    <div className="space-y-3">
+                      {periods.slice(1).map(period => (
+                        <div key={period.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <p className="font-semibold text-white text-sm">{fmtPeriod(period.period_start, period.period_end)}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {period.dmApprovals.length}/{period.totalDMs} DMs &middot; {period.srApprovals.filter(a => a.approved_at).length}/{period.totalDMs} SR approved
+                              </p>
+                            </div>
+                            <StatusBadge status={period.status} />
+                          </div>
+                          {period.final_submitter_name && period.final_submitted_at && (
+                            <p className="text-xs text-gray-500 mt-2">
+                              Finalized by {period.final_submitter_name} · {fmtDatetime(period.final_submitted_at)}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ADP CSV Download */}
                 {canDownload(role) && (
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Download Payroll CSV</p>
                     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
                       <p className="text-xs text-gray-400">
-                        Download an ADP-formatted CSV for any date range. Enter employee File # in ADP to match records.
+                        Download an ADP-formatted CSV for any date range. Regular and overtime hours are calculated on a weekly basis (40 hr threshold).
                       </p>
                       <div className="flex gap-3">
                         <div className="flex-1">
@@ -321,14 +431,14 @@ export default function PayrollPage() {
                         </div>
                       </div>
                       <button
-                        onClick={downloadCsv}
+                        onClick={downloadFullCsv}
                         disabled={downloading}
                         className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
                       >
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
-                        {downloading ? 'Downloading…' : 'Download ADP CSV'}
+                        {downloading ? 'Downloading…' : 'Download Full ADP CSV'}
                       </button>
                     </div>
                   </div>
@@ -342,31 +452,122 @@ export default function PayrollPage() {
   )
 }
 
+// ── DM Review List ────────────────────────────────────────────────────────────
+
+interface DmReviewListProps {
+  period: Period
+  session: Session
+  downloadedDms: Set<string>
+  approving: string | null
+  onDownload: (dmId: string) => Promise<void>
+  onApprove: (dmId: string) => Promise<void>
+  canSr: boolean
+}
+
+function DmReviewList({ period, session, downloadedDms, approving, onDownload, onApprove, canSr }: DmReviewListProps) {
+  const [downloading, setDownloading] = useState<string | null>(null)
+
+  // Build a full list: submitted DMs from dmApprovals, all else as pending
+  // We show submitted DMs first, then any gap up to totalDMs as "pending"
+  const submittedDmIds = new Set(period.dmApprovals.map(a => a.dm_id))
+
+  return (
+    <div className="space-y-2">
+      {/* DMs who have submitted */}
+      {period.dmApprovals.map(dm => {
+        const srApproval = period.srApprovals.find(a => a.dm_id === dm.dm_id)
+        const isDownloaded = downloadedDms.has(dm.dm_id) || !!srApproval?.downloaded_at
+        const isApproved = !!srApproval?.approved_at
+        const approvingKey = period.id + 'sr_approve' + dm.dm_id
+
+        async function handleDownload() {
+          setDownloading(dm.dm_id)
+          await onDownload(dm.dm_id)
+          setDownloading(null)
+        }
+
+        return (
+          <div key={dm.dm_id} className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3 space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-medium text-white">{dm.dm_name}</p>
+                <p className="text-xs text-gray-500">Submitted {fmtDatetime(dm.approved_at)}</p>
+              </div>
+              {isApproved && (
+                <span className="text-[10px] bg-green-900/30 border border-green-800/40 text-green-400 px-2 py-0.5 rounded-full font-semibold shrink-0">
+                  Approved
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDownload}
+                disabled={downloading === dm.dm_id}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {downloading === dm.dm_id ? 'Downloading…' : isDownloaded ? '✓ Downloaded' : 'Download Timecard'}
+              </button>
+
+              {canSr && isDownloaded && !isApproved && (
+                <button
+                  onClick={() => onApprove(dm.dm_id)}
+                  disabled={approving === approvingKey}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white text-xs font-medium transition-colors"
+                >
+                  {approving === approvingKey ? 'Approving…' : 'Mark Approved'}
+                </button>
+              )}
+
+              {isApproved && srApproval?.sr_name && (
+                <span className="text-xs text-gray-500">by {srApproval.sr_name}</span>
+              )}
+            </div>
+          </div>
+        )
+      })}
+
+      {/* Pending DMs (not yet submitted) */}
+      {period.totalDMs > submittedDmIds.size && Array.from({ length: period.totalDMs - submittedDmIds.size }).map((_, i) => (
+        <div key={`pending-${i}`} className="bg-gray-800/30 border border-gray-700/30 rounded-xl px-3 py-2.5 flex items-center justify-between">
+          <p className="text-xs text-gray-500 italic">Pending DM submission</p>
+          <span className="text-[10px] bg-amber-900/30 border border-amber-800/40 text-amber-400 px-2 py-0.5 rounded-full">Waiting</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── Status Badge ──────────────────────────────────────────────────────────────
+
 function StatusBadge({ status, myApproval }: { status: string; myApproval?: boolean }) {
   if (status === 'approved') {
     return (
-      <span className="text-[10px] bg-green-900/30 border border-green-800/40 text-green-400 px-2 py-0.5 rounded-full font-semibold">
+      <span className="text-[10px] bg-green-900/30 border border-green-800/40 text-green-400 px-2 py-0.5 rounded-full font-semibold shrink-0">
         Approved
       </span>
     )
   }
   if (status === 'pending_sr') {
     return (
-      <span className="text-[10px] bg-blue-900/30 border border-blue-800/40 text-blue-400 px-2 py-0.5 rounded-full font-semibold">
+      <span className="text-[10px] bg-blue-900/30 border border-blue-800/40 text-blue-400 px-2 py-0.5 rounded-full font-semibold shrink-0">
         Awaiting SR
       </span>
     )
   }
   if (myApproval) {
     return (
-      <span className="text-[10px] bg-violet-900/30 border border-violet-800/40 text-violet-400 px-2 py-0.5 rounded-full font-semibold">
+      <span className="text-[10px] bg-violet-900/30 border border-violet-800/40 text-violet-400 px-2 py-0.5 rounded-full font-semibold shrink-0">
         Waiting on others
       </span>
     )
   }
   return (
-    <span className="text-[10px] bg-amber-900/30 border border-amber-800/40 text-amber-400 px-2 py-0.5 rounded-full font-semibold">
-      DM Approval Needed
+    <span className="text-[10px] bg-amber-900/30 border border-amber-800/40 text-amber-400 px-2 py-0.5 rounded-full font-semibold shrink-0">
+      Pending DM
     </span>
   )
 }

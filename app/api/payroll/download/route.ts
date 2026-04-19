@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
-import { getOrgFilter } from '@/lib/org'
 
 const CST = 'America/Chicago'
 
@@ -13,29 +12,55 @@ async function getOrgId(session: { role: string; id: string; org_id?: string | n
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
-  const canDownload = session && (
-    isOwner(session.role as never) ||
-    session.role === 'ops_manager' ||
-    session.role === 'sales_director' ||
-    session.role === 'developer'
-  )
+  const canDownload =
+    session &&
+    (isOwner(session.role as never) ||
+      session.role === 'ops_manager' ||
+      session.role === 'sales_director' ||
+      session.role === 'developer')
+
   if (!canDownload) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const dmId = searchParams.get('dmId') ?? null
+
   if (!from || !to) return NextResponse.json({ error: 'from and to required' }, { status: 400 })
 
   const orgId = await getOrgId(session!)
 
-  // For developer with no org filter, allow all orgs
-  const orgFilter = orgId ? `AND u.org_id = '${orgId}'` : ''
+  // If dmId provided and role is SD/ops_manager, record download in payroll_sr_approvals
+  const canRecordDownload =
+    dmId &&
+    (session!.role === 'sales_director' || session!.role === 'ops_manager')
 
-  const toExclusive = new Date(to)
-  toExclusive.setDate(toExclusive.getDate() + 1)
-  const toStr = toExclusive.toISOString().split('T')[0]
+  if (canRecordDownload && orgId) {
+    // Find the period that covers these dates
+    const period = await queryOne<{ id: string }>(`
+      SELECT id FROM payroll_periods
+      WHERE org_id = $1
+        AND period_start <= $2::date
+        AND period_end >= $3::date
+      LIMIT 1
+    `, [orgId, from, to])
 
-  // Calculate weekly hours per employee, then aggregate per period
+    if (period) {
+      await queryOne(`
+        INSERT INTO payroll_sr_approvals (period_id, dm_id, downloaded_at)
+        VALUES ($1, $2, NOW())
+        ON CONFLICT (period_id, dm_id) DO UPDATE
+          SET downloaded_at = COALESCE(payroll_sr_approvals.downloaded_at, NOW())
+      `, [period.id, dmId])
+    }
+  }
+
+  // Build org filter SQL
+  const orgFilter = orgId ? `AND u.org_id = '${orgId.replace(/'/g, "''")}'` : ''
+
+  // Build manager filter SQL if dmId provided
+  const dmFilter = dmId ? `AND u.manager_id = '${dmId.replace(/'/g, "''")}'` : ''
+
   const rows = await query<{
     user_id: string
     last_name: string
@@ -52,6 +77,7 @@ export async function GET(req: NextRequest) {
         u.full_name,
         u.username,
         u.org_id,
+        u.manager_id,
         o.name AS org_name,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date AS week_start,
         SUM(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0) AS total_hours
@@ -60,10 +86,11 @@ export async function GET(req: NextRequest) {
       LEFT JOIN organizations o ON o.id = u.org_id
       WHERE s.clock_out_at IS NOT NULL
         AND (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
-        AND (s.clock_in_at AT TIME ZONE $3)::date < $2::date
+        AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
         AND u.role = 'employee'
         ${orgFilter}
-      GROUP BY s.user_id, u.full_name, u.username, u.org_id, o.name, week_start
+        ${dmFilter}
+      GROUP BY s.user_id, u.full_name, u.username, u.org_id, u.manager_id, o.name, week_start
     )
     SELECT
       user_id,
@@ -77,27 +104,26 @@ export async function GET(req: NextRequest) {
     FROM weekly_hours
     GROUP BY user_id, full_name, username, org_name
     ORDER BY last_name, first_name
-  `, [from, toStr, CST])
+  `, [from, to, CST])
 
   if (rows.length === 0) {
     return NextResponse.json({ error: 'No data for selected period' }, { status: 404 })
   }
 
-  // Build ADP-compatible CSV
   const batchId = `FMP-${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`
 
   const headers = [
     'Co Code', 'Batch ID', 'File #', 'First Name', 'Last Name',
     'Pay Period Begin Date', 'Pay Period End Date',
-    'Regular Hours', 'Overtime Hours', 'Total Hours'
+    'Regular Hours', 'Overtime Hours', 'Total Hours',
   ]
 
   const csvRows = [
     headers.map(h => `"${h}"`).join(','),
     ...rows.map(r => [
-      '""',                           // Co Code — owner fills in
+      '""',
       `"${batchId}"`,
-      `"${r.username}"`,              // File # — ADP employee ID placeholder
+      `"${r.username}"`,
       `"${r.first_name}"`,
       `"${r.last_name}"`,
       `"${from}"`,
@@ -105,7 +131,7 @@ export async function GET(req: NextRequest) {
       `"${r.regular_hours.toFixed(2)}"`,
       `"${r.ot_hours.toFixed(2)}"`,
       `"${r.total_hours.toFixed(2)}"`,
-    ].join(','))
+    ].join(',')),
   ]
 
   const csv = csvRows.join('\r\n')

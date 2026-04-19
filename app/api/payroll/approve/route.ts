@@ -147,8 +147,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'dmId required for sr_approve' }, { status: 400 })
     }
 
-    // Verify downloaded_at is set (unless owner/developer)
-    const isOverride = isOwner(session.role as never) || session.role === 'developer'
+    // Verify downloaded_at is set (unless owner/developer bypassing)
+    const isOverride = session.role === 'owner' || session.role === 'developer'
     if (!isOverride) {
       const srRow = await queryOne<{ downloaded_at: string | null }>(`
         SELECT downloaded_at FROM payroll_sr_approvals
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const isOverride = isOwner(session.role as never) || session.role === 'developer'
+    const isOverride = session.role === 'owner' || session.role === 'developer'
 
     if (!isOverride) {
       // Verify ALL active DMs have dm_approvals AND sr_approvals with approved_at
@@ -239,7 +239,7 @@ export async function POST(req: NextRequest) {
 
   // ── Owner Override: bypass all steps ──
   if (type === 'owner_override') {
-    const allowed = isOwner(session.role as never) || session.role === 'developer'
+    const allowed = session.role === 'owner' || session.role === 'developer'
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }

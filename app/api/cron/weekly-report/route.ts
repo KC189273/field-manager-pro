@@ -36,21 +36,6 @@ function weeklyReportHtml(
   }).join('')
 
   const totalExpenses = expenses.reduce((s, e) => s + parseFloat(e.amount), 0)
-  const pendingExpenses = expenses.filter(e => e.status === 'pending')
-  const pendingTotal = pendingExpenses.reduce((s, e) => s + parseFloat(e.amount), 0)
-
-  const statusColor: Record<string, string> = {
-    pending: '#b45309',
-    approved: '#166534',
-    paid: '#1d4ed8',
-    rejected: '#991b1b',
-  }
-  const statusBg: Record<string, string> = {
-    pending: '#fef3c7',
-    approved: '#dcfce7',
-    paid: '#dbeafe',
-    rejected: '#fee2e2',
-  }
 
   const expenseRows = expenses.map(e => `
     <tr style="border-bottom:1px solid #e5e5ea;">
@@ -58,9 +43,6 @@ function weeklyReportHtml(
       <td style="padding:8px 14px;font-size:13px;color:#555;">${e.category}</td>
       <td style="padding:8px 14px;font-size:13px;color:#555;">${e.date}</td>
       <td style="padding:8px 14px;font-size:13px;font-weight:600;text-align:right;">$${parseFloat(e.amount).toFixed(2)}</td>
-      <td style="padding:8px 14px;text-align:center;">
-        <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${statusBg[e.status] ?? '#f2f2f7'};color:${statusColor[e.status] ?? '#555'};text-transform:capitalize;">${e.status}</span>
-      </td>
     </tr>
   `).join('')
 
@@ -88,18 +70,12 @@ function weeklyReportHtml(
             <p style="font-size:12px;color:#8e8e93;margin:0 0 24px;">⚠ = Over 8 hours.</p>`
         }
 
-        <h2 style="font-size:15px;font-weight:700;color:#1c1c1e;margin:0 0 12px;">Expenses Submitted Yesterday</h2>
+        <h2 style="font-size:15px;font-weight:700;color:#1c1c1e;margin:0 0 12px;">Open Expenses Submitted Yesterday</h2>
         ${expenses.length === 0
-          ? '<p style="color:#8e8e93;font-size:14px;margin:0;">No expenses submitted yesterday.</p>'
-          : `<div style="display:flex;gap:16px;margin-bottom:16px;">
-              <div style="flex:1;background:#f2f2f7;border-radius:10px;padding:12px 16px;">
-                <p style="font-size:12px;color:#8e8e93;margin:0 0 2px;">Total Submitted</p>
-                <p style="font-size:18px;font-weight:700;color:#1c1c1e;margin:0;">$${totalExpenses.toFixed(2)}</p>
-              </div>
-              <div style="flex:1;background:#fef3c7;border-radius:10px;padding:12px 16px;">
-                <p style="font-size:12px;color:#92400e;margin:0 0 2px;">Pending Approval</p>
-                <p style="font-size:18px;font-weight:700;color:#b45309;margin:0;">$${pendingTotal.toFixed(2)} <span style="font-size:13px;font-weight:400;">(${pendingExpenses.length})</span></p>
-              </div>
+          ? '<p style="color:#8e8e93;font-size:14px;margin:0;">No open expenses submitted yesterday.</p>'
+          : `<div style="background:#fef3c7;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+              <p style="font-size:12px;color:#92400e;margin:0 0 2px;">Pending Approval</p>
+              <p style="font-size:18px;font-weight:700;color:#b45309;margin:0;">$${totalExpenses.toFixed(2)} <span style="font-size:13px;font-weight:400;">(${expenses.length})</span></p>
             </div>
             <table style="width:100%;border-collapse:collapse;">
               <thead>
@@ -108,45 +84,29 @@ function weeklyReportHtml(
                   <th style="padding:8px 14px;text-align:left;font-size:13px;color:#8e8e93;font-weight:600;">Category</th>
                   <th style="padding:8px 14px;text-align:left;font-size:13px;color:#8e8e93;font-weight:600;">Date</th>
                   <th style="padding:8px 14px;text-align:right;font-size:13px;color:#8e8e93;font-weight:600;">Amount</th>
-                  <th style="padding:8px 14px;text-align:center;font-size:13px;color:#8e8e93;font-weight:600;">Status</th>
                 </tr>
               </thead>
               <tbody>${expenseRows}</tbody>
             </table>`
         }
 
-        <h2 style="font-size:15px;font-weight:700;color:#1c1c1e;margin:24px 0 12px;">All Outstanding Expenses</h2>
+        <h2 style="font-size:15px;font-weight:700;color:#1c1c1e;margin:24px 0 12px;">All Open Expenses</h2>
         ${outstanding.length === 0
-          ? '<p style="color:#8e8e93;font-size:14px;margin:0 0 20px;">No outstanding expenses.</p>'
+          ? '<p style="color:#8e8e93;font-size:14px;margin:0 0 20px;">No open expenses.</p>'
           : (() => {
               const outTotal = outstanding.reduce((s, e) => s + parseFloat(e.amount), 0)
-              const pendingOut = outstanding.filter(e => e.status === 'pending')
-              const approvedOut = outstanding.filter(e => e.status === 'approved')
               const outRows = outstanding.map(e => `
                 <tr style="border-bottom:1px solid #e5e5ea;">
                   <td style="padding:8px 14px;font-size:13px;color:#1c1c1e;">${e.full_name}</td>
                   <td style="padding:8px 14px;font-size:13px;color:#555;">${e.category}</td>
                   <td style="padding:8px 14px;font-size:13px;color:#555;">${e.date}</td>
                   <td style="padding:8px 14px;font-size:13px;font-weight:600;text-align:right;">$${parseFloat(e.amount).toFixed(2)}</td>
-                  <td style="padding:8px 14px;text-align:center;">
-                    <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:${e.status === 'pending' ? '#fef3c7' : '#dcfce7'};color:${e.status === 'pending' ? '#b45309' : '#166534'};text-transform:capitalize;">${e.status}</span>
-                  </td>
                 </tr>
               `).join('')
               return `
-                <div style="display:flex;gap:16px;margin-bottom:16px;">
-                  <div style="flex:1;background:#f2f2f7;border-radius:10px;padding:12px 16px;">
-                    <p style="font-size:12px;color:#8e8e93;margin:0 0 2px;">Total Outstanding</p>
-                    <p style="font-size:18px;font-weight:700;color:#1c1c1e;margin:0;">$${outTotal.toFixed(2)}</p>
-                  </div>
-                  <div style="flex:1;background:#fef3c7;border-radius:10px;padding:12px 16px;">
-                    <p style="font-size:12px;color:#92400e;margin:0 0 2px;">Pending</p>
-                    <p style="font-size:18px;font-weight:700;color:#b45309;margin:0;">$${pendingOut.reduce((s,e)=>s+parseFloat(e.amount),0).toFixed(2)} <span style="font-size:13px;font-weight:400;">(${pendingOut.length})</span></p>
-                  </div>
-                  <div style="flex:1;background:#dcfce7;border-radius:10px;padding:12px 16px;">
-                    <p style="font-size:12px;color:#166534;margin:0 0 2px;">Approved</p>
-                    <p style="font-size:18px;font-weight:700;color:#166534;margin:0;">$${approvedOut.reduce((s,e)=>s+parseFloat(e.amount),0).toFixed(2)} <span style="font-size:13px;font-weight:400;">(${approvedOut.length})</span></p>
-                  </div>
+                <div style="background:#fef3c7;border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+                  <p style="font-size:12px;color:#92400e;margin:0 0 2px;">Total Pending</p>
+                  <p style="font-size:18px;font-weight:700;color:#b45309;margin:0;">$${outTotal.toFixed(2)} <span style="font-size:13px;font-weight:400;">(${outstanding.length})</span></p>
                 </div>
                 <table style="width:100%;border-collapse:collapse;">
                   <thead>
@@ -155,7 +115,6 @@ function weeklyReportHtml(
                       <th style="padding:8px 14px;text-align:left;font-size:13px;color:#8e8e93;font-weight:600;">Category</th>
                       <th style="padding:8px 14px;text-align:left;font-size:13px;color:#8e8e93;font-weight:600;">Date</th>
                       <th style="padding:8px 14px;text-align:right;font-size:13px;color:#8e8e93;font-weight:600;">Amount</th>
-                      <th style="padding:8px 14px;text-align:center;font-size:13px;color:#8e8e93;font-weight:600;">Status</th>
                     </tr>
                   </thead>
                   <tbody>${outRows}</tbody>
@@ -220,21 +179,22 @@ export async function GET(req: NextRequest) {
     ORDER BY u.full_name
   `, [yesterdayStart.toISOString(), yesterdayEnd.toISOString()])
 
-  // Expenses submitted yesterday
+  // Open (pending) expenses submitted yesterday
   const expenses = await query<ExpenseSummary>(`
     SELECT u.full_name, e.category, e.amount, e.status, e.date::text
     FROM expenses e
     JOIN users u ON u.id = e.submitted_by
     WHERE e.created_at >= $1 AND e.created_at <= $2
+      AND e.status = 'pending'
     ORDER BY e.created_at DESC
   `, [yesterdayStart.toISOString(), yesterdayEnd.toISOString()])
 
-  // All outstanding expenses (pending or approved, not yet paid)
+  // All open (pending) expenses
   const outstanding = await query<ExpenseSummary>(`
     SELECT u.full_name, e.category, e.amount, e.status, e.date::text
     FROM expenses e
     JOIN users u ON u.id = e.submitted_by
-    WHERE e.status IN ('pending', 'approved')
+    WHERE e.status = 'pending'
     ORDER BY e.date ASC, u.full_name
   `)
 

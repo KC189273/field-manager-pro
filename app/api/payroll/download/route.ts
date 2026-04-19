@@ -110,32 +110,44 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'No data for selected period' }, { status: 404 })
   }
 
-  const batchId = `FMP-${from.replace(/-/g, '')}-${to.replace(/-/g, '')}`
+  // ADP batch ID = 6-digit YYMMDD of today's processing date
+  const todayAdp = new Date()
+  const batchId = [
+    String(todayAdp.getUTCFullYear()).slice(2),
+    String(todayAdp.getUTCMonth() + 1).padStart(2, '0'),
+    String(todayAdp.getUTCDate()).padStart(2, '0'),
+  ].join('')
 
+  // ADP date format: MM/DD/YYYY
+  function toAdpDate(iso: string): string {
+    const [y, m, d] = iso.split('-')
+    return `${m}/${d}/${y}`
+  }
+
+  // ADP Workforce Now import format — headers must NOT be quoted
   const headers = [
     'Co Code', 'Batch ID', 'File #', 'First Name', 'Last Name',
     'Pay Period Begin Date', 'Pay Period End Date',
-    'Regular Hours', 'Overtime Hours', 'Total Hours',
+    'Reg Hours', 'O/T Hours',
   ]
 
   const csvRows = [
-    headers.map(h => `"${h}"`).join(','),
+    headers.join(','),
     ...rows.map(r => [
-      '""',
-      `"${batchId}"`,
-      `"${r.username}"`,
+      '',                              // Co Code — filled by ADP admin (org-specific)
+      batchId,                         // YYMMDD processing date
+      `"${r.username}"`,               // File # — ADP employee ID / badge number
       `"${r.first_name}"`,
       `"${r.last_name}"`,
-      `"${from}"`,
-      `"${to}"`,
-      `"${r.regular_hours.toFixed(2)}"`,
-      `"${r.ot_hours.toFixed(2)}"`,
-      `"${r.total_hours.toFixed(2)}"`,
+      toAdpDate(from),                 // MM/DD/YYYY
+      toAdpDate(to),                   // MM/DD/YYYY
+      r.regular_hours.toFixed(2),
+      r.ot_hours.toFixed(2),
     ].join(',')),
   ]
 
   const csv = csvRows.join('\r\n')
-  const filename = `FMP_ADP_Payroll_${from}_to_${to}.csv`
+  const filename = `ADP_Payroll_${from}_to_${to}.csv`
 
   return new NextResponse(csv, {
     headers: {

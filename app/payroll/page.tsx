@@ -68,6 +68,8 @@ export default function PayrollPage() {
   const [periods, setPeriods] = useState<Period[]>([])
   const [myHours, setMyHours] = useState<EmployeeHours[]>([])
   const [orgName, setOrgName] = useState<string>('')
+  const [payrollLaunchDate, setPayrollLaunchDate] = useState<string | null>(null)
+  const [hasEmployees, setHasEmployees] = useState(false)
   const [loading, setLoading] = useState(true)
   const [approving, setApproving] = useState<string | null>(null)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
@@ -94,7 +96,9 @@ export default function PayrollPage() {
       const data = await payRes.json()
       setPeriods(data.periods ?? [])
       setMyHours(data.myEmployeeHours ?? [])
+      setHasEmployees(data.hasEmployees ?? false)
       setOrgName(data.orgName ?? '')
+      setPayrollLaunchDate(data.payrollLaunchDate ?? null)
     }
     setLoading(false)
   }
@@ -201,6 +205,28 @@ export default function PayrollPage() {
           </div>
         )}
 
+        {/* Pre-launch notice */}
+        {!loading && (() => {
+          const isLaunched = payrollLaunchDate && new Date(payrollLaunchDate + 'T00:00:00') <= new Date()
+          if (!isLaunched) {
+            return (
+              <div className="mb-5 px-4 py-3 rounded-xl bg-blue-950/40 border border-blue-800/40 text-blue-300 text-sm">
+                <p className="font-semibold mb-0.5">
+                  {payrollLaunchDate
+                    ? `Payroll enforcement starts ${new Date(payrollLaunchDate + 'T12:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}`
+                    : 'Payroll enforcement not yet active'}
+                </p>
+                <p className="text-blue-400/80 text-xs">
+                  {payrollLaunchDate
+                    ? 'Automated reminders and tasks will begin on that date. The workflow is available for testing now.'
+                    : 'The workflow is available for testing. Automated reminders will start once a launch date is set.'}
+                </p>
+              </div>
+            )
+          }
+          return null
+        })()}
+
         {loading ? (
           <p className="text-gray-500 text-sm text-center py-16">Loading…</p>
         ) : (
@@ -210,7 +236,11 @@ export default function PayrollPage() {
               <div className="space-y-4">
                 <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Pay Period Timecards</p>
 
-                {periods.length === 0 ? (
+                {!hasEmployees ? (
+                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+                    <p className="text-gray-400 text-sm">No employees are assigned to you yet. Payroll submission will be available once employees are assigned.</p>
+                  </div>
+                ) : periods.length === 0 ? (
                   <p className="text-gray-600 text-sm">No payroll periods found.</p>
                 ) : periods.map((period, idx) => {
                   const myApproval = period.dmApprovals.find(a => a.dm_id === session.id)

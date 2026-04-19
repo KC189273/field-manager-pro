@@ -179,10 +179,14 @@ export async function POST(req: NextRequest) {
     const isOverride = session.role === 'owner' || session.role === 'developer'
 
     if (!isOverride) {
-      // Verify ALL active DMs have dm_approvals AND sr_approvals with approved_at
+      // Verify ALL DMs with employees have dm_approvals AND sr_approvals with approved_at
       const activeDMs = await query<{ id: string }>(`
-        SELECT id FROM users
-        WHERE org_id = $1 AND role = 'manager' AND is_active = TRUE
+        SELECT DISTINCT u.id FROM users u
+        WHERE u.org_id = $1 AND u.role = 'manager' AND u.is_active = TRUE
+          AND EXISTS (
+            SELECT 1 FROM users e
+            WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE
+          )
       `, [period.org_id])
 
       for (const dm of activeDMs) {
@@ -245,8 +249,12 @@ export async function POST(req: NextRequest) {
     }
 
     const activeDMs = await query<{ id: string }>(`
-      SELECT id FROM users
-      WHERE org_id = $1 AND role = 'manager' AND is_active = TRUE
+      SELECT DISTINCT u.id FROM users u
+      WHERE u.org_id = $1 AND u.role = 'manager' AND u.is_active = TRUE
+        AND EXISTS (
+          SELECT 1 FROM users e
+          WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE
+        )
     `, [period.org_id])
 
     for (const dm of activeDMs) {

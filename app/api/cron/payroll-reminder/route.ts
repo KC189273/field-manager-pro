@@ -59,7 +59,9 @@ export async function GET(req: NextRequest) {
   const weekStart = mondayOfWeek(today)
   const dueDate = `${today}T12:00:00-05:00` // noon CST today
 
-  // Ensure payroll_periods exist for all orgs and find DMs who haven't submitted
+  // Only process orgs where:
+  // 1. payroll_launch_date IS SET and <= today (enforcement is active)
+  // 2. DMs have at least one active employee assigned
   const dms = await query<{
     id: string
     full_name: string
@@ -67,18 +69,28 @@ export async function GET(req: NextRequest) {
     org_id: string
     period_id: string
   }>(`
-    WITH org_periods AS (
+    WITH launched_orgs AS (
+      SELECT id AS org_id FROM organizations
+      WHERE payroll_launch_date IS NOT NULL
+        AND payroll_launch_date <= CURRENT_DATE
+    ),
+    org_periods AS (
       INSERT INTO payroll_periods (org_id, period_start, period_end, status)
-      SELECT DISTINCT u.org_id, $1::date, $2::date, 'pending_dm'
-      FROM users u
-      WHERE u.role = 'manager' AND u.is_active = TRUE AND u.org_id IS NOT NULL
+      SELECT lo.org_id, $1::date, $2::date, 'pending_dm'
+      FROM launched_orgs lo
+      WHERE EXISTS (
+        SELECT 1 FROM users u
+        WHERE u.org_id = lo.org_id AND u.role = 'manager' AND u.is_active = TRUE
+      )
       ON CONFLICT (org_id, period_start) DO NOTHING
       RETURNING id, org_id
     ),
     all_periods AS (
       SELECT id, org_id FROM org_periods
       UNION
-      SELECT id, org_id FROM payroll_periods WHERE period_start = $1::date
+      SELECT pp.id, pp.org_id FROM payroll_periods pp
+      JOIN launched_orgs lo ON lo.org_id = pp.org_id
+      WHERE pp.period_start = $1::date
     )
     SELECT
       u.id,
@@ -91,6 +103,10 @@ export async function GET(req: NextRequest) {
     WHERE u.role = 'manager'
       AND u.is_active = TRUE
       AND u.email IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM users e
+        WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE
+      )
       AND NOT EXISTS (
         SELECT 1 FROM payroll_dm_approvals pda
         WHERE pda.period_id = ap.id AND pda.dm_id = u.id

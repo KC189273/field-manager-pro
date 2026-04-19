@@ -90,8 +90,9 @@ export async function GET(_req: NextRequest) {
   const orgId = await getOrgId(session)
   if (!orgId) return NextResponse.json({ periods: [], myEmployeeHours: [], role: session.role, userId: session.id, orgName: null })
 
-  const orgRow = await queryOne<{ name: string }>('SELECT name FROM organizations WHERE id = $1', [orgId])
+  const orgRow = await queryOne<{ name: string; payroll_launch_date: string | null }>('SELECT name, payroll_launch_date::text FROM organizations WHERE id = $1', [orgId])
   const orgName = orgRow?.name ?? null
+  const payrollLaunchDate = orgRow?.payroll_launch_date ?? null
 
   const biWeeklyPeriods = getBiWeeklyPeriods()
 
@@ -167,9 +168,15 @@ export async function GET(_req: NextRequest) {
     WHERE psa.period_id = ANY($1)
   `, [periodIds]) : []
 
+  // Only count managers who have at least one active employee assigned
   const dmCount = await queryOne<{ count: string }>(`
-    SELECT COUNT(*)::text AS count FROM users
-    WHERE org_id = $1 AND role = 'manager' AND is_active = TRUE
+    SELECT COUNT(DISTINCT u.id)::text AS count
+    FROM users u
+    WHERE u.org_id = $1 AND u.role = 'manager' AND u.is_active = TRUE
+      AND EXISTS (
+        SELECT 1 FROM users e
+        WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE
+      )
   `, [orgId])
   const totalDMs = parseInt(dmCount?.count ?? '0')
 
@@ -182,7 +189,15 @@ export async function GET(_req: NextRequest) {
     total_hours: number
   }[] = []
 
+  let hasEmployees = false
+
   if (session.role === 'manager') {
+    const empCheck = await queryOne<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM users WHERE manager_id = $1 AND role = 'employee' AND is_active = TRUE`,
+      [session.id]
+    )
+    hasEmployees = parseInt(empCheck?.count ?? '0') > 0
+
     const closed = getLastClosedPeriod()
     if (closed) {
       const allHours = await getPeriodHours(orgId, closed.start, closed.end)
@@ -204,8 +219,10 @@ export async function GET(_req: NextRequest) {
   return NextResponse.json({
     periods: enrichedPeriods,
     myEmployeeHours,
+    hasEmployees,
     role: session.role,
     userId: session.id,
     orgName,
+    payrollLaunchDate,
   })
 }

@@ -4,7 +4,7 @@ import { sendEmail } from '@/lib/notifications'
 const ADMIN_EMAIL = process.env.REPORT_EMAIL_TO ?? process.env.REPORT_EMAIL_FROM!
 
 export async function POST(req: NextRequest) {
-  const { businessName, contactName, email, phone, teamSize, message } = await req.json()
+  const { businessName, contactName, email, phone, teamSize, industry, challenge, currentSoftware, timeline, message } = await req.json()
 
   if (!businessName || !contactName || !email || !teamSize) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -39,6 +39,26 @@ export async function POST(req: NextRequest) {
             <td style="padding:10px 0;color:#8e8e93;font-weight:600;">Team Size</td>
             <td style="padding:10px 0;color:#1c1c1e;">${teamSize}</td>
           </tr>
+          ${industry ? `
+          <tr style="border-bottom:1px solid #f2f2f7;">
+            <td style="padding:10px 0;color:#8e8e93;font-weight:600;">Industry</td>
+            <td style="padding:10px 0;color:#1c1c1e;">${industry}</td>
+          </tr>` : ''}
+          ${challenge ? `
+          <tr style="border-bottom:1px solid #f2f2f7;">
+            <td style="padding:10px 0;color:#8e8e93;font-weight:600;">Biggest Challenge</td>
+            <td style="padding:10px 0;color:#1c1c1e;">${challenge}</td>
+          </tr>` : ''}
+          ${currentSoftware ? `
+          <tr style="border-bottom:1px solid #f2f2f7;">
+            <td style="padding:10px 0;color:#8e8e93;font-weight:600;">Current Software</td>
+            <td style="padding:10px 0;color:#1c1c1e;">${currentSoftware}</td>
+          </tr>` : ''}
+          ${timeline ? `
+          <tr style="border-bottom:1px solid #f2f2f7;">
+            <td style="padding:10px 0;color:#8e8e93;font-weight:600;">Timeline</td>
+            <td style="padding:10px 0;color:#1c1c1e;">${timeline}</td>
+          </tr>` : ''}
           ${message ? `
           <tr>
             <td style="padding:10px 0;color:#8e8e93;font-weight:600;vertical-align:top;">Message</td>

@@ -119,14 +119,12 @@ export default function LoginPage() {
           </Link>
         </form>
 
-        <p className="text-center mt-4">
-          <Link
-            href="/get-started"
-            className="text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors"
-          >
-            Get started for your business →
-          </Link>
-        </p>
+        <a
+          href="/get-started"
+          className="block mt-4 w-full text-center bg-gray-900 border border-violet-700 hover:border-violet-500 text-violet-400 hover:text-violet-300 font-semibold rounded-xl py-3 text-sm transition-colors"
+        >
+          Get started for your business →
+        </a>
       </div>
     </div>
   )

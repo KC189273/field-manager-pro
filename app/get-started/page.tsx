@@ -57,12 +57,13 @@ export default function GetStartedPage() {
           <p className="text-gray-400 text-sm leading-relaxed mb-8">
             Thanks for your interest in Field Manager Pro. We'll reach out within one business day to discuss your team's needs and get you set up.
           </p>
-          <a
-            href="/login"
-            className="text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors"
+          <button
+            type="button"
+            onClick={() => { window.location.href = '/login' }}
+            className="text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors cursor-pointer"
           >
             ← Back to sign in
-          </a>
+          </button>
         </div>
       </div>
     )
@@ -203,9 +204,13 @@ export default function GetStartedPage() {
             {loading ? 'Sending…' : 'Request Access'}
           </button>
 
-          <a href="/login" className="block text-center text-gray-500 hover:text-gray-300 text-sm transition-colors pb-4">
+          <button
+            type="button"
+            onClick={() => { window.location.href = '/login' }}
+            className="block w-full text-center text-gray-500 hover:text-gray-300 text-sm transition-colors pb-4 cursor-pointer"
+          >
             Already have an account? Sign in →
-          </a>
+          </button>
 
         </form>
       </div>

@@ -118,6 +118,15 @@ export default function LoginPage() {
             Forgot your password?
           </Link>
         </form>
+
+        <p className="text-center mt-4">
+          <Link
+            href="/get-started"
+            className="text-violet-400 hover:text-violet-300 text-sm font-medium transition-colors"
+          >
+            Get started for your business →
+          </Link>
+        </p>
       </div>
     </div>
   )

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { sendPushToUsers } from '@/lib/apns'
 
 // POST — publish a (store, week) pair
 export async function POST(req: NextRequest) {
@@ -39,6 +40,21 @@ export async function POST(req: NextRequest) {
      ON CONFLICT (store_location_id, week_start) DO NOTHING`,
     [storeId, weekStart, session.id]
   )
+
+  // Push notification to all employees with shifts for this store/week
+  const employees = await query<{ employee_id: string }>(
+    `SELECT DISTINCT employee_id FROM scheduled_shifts
+     WHERE store_location_id = $1 AND shift_date >= $2 AND shift_date <= ($2::date + INTERVAL '6 days')`,
+    [storeId, weekStart]
+  )
+  const weekDate = new Date(weekStart + 'T12:00:00Z')
+  const weekLabel = weekDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  sendPushToUsers(
+    employees.map(e => e.employee_id),
+    'Schedule Published',
+    `Your schedule for the week of ${weekLabel} is now available.`,
+    'schedule_published'
+  ).catch(() => {})
 
   return NextResponse.json({ ok: true })
 }

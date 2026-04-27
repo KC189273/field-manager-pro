@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, flagAlertHtml } from '@/lib/notifications'
+import { sendPushToUsers } from '@/lib/apns'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -53,8 +54,8 @@ export async function POST(req: NextRequest) {
         `INSERT INTO flags (user_id, shift_id, type, date, detail) VALUES ($1, $2, 'overtime', CURRENT_DATE, $3)`,
         [session.id, shift.id, `${totalHours.toFixed(1)} hours this week`]
       )
-      const managers = await query<{ email: string }>(
-        `SELECT email FROM users WHERE role IN ('manager','ops_manager') AND is_active = TRUE`
+      const managers = await query<{ id: string; email: string }>(
+        `SELECT id, email FROM users WHERE role IN ('manager','ops_manager') AND is_active = TRUE`
       )
       for (const m of managers) {
         await sendEmail(m.email, `FMP: Overtime — ${session.fullName}`,
@@ -62,6 +63,12 @@ export async function POST(req: NextRequest) {
             `${totalHours.toFixed(1)} hours logged this week (40h limit)`)
         )
       }
+      sendPushToUsers(
+        managers.map(m => m.id),
+        'Overtime Flag',
+        `${session.fullName} has logged ${totalHours.toFixed(1)} hours this week`,
+        'flag_created'
+      ).catch(() => {})
     }
   }
 

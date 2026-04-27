@@ -15,6 +15,15 @@ import { query } from '@/lib/db'
 // Cache the JWT for up to 50 minutes (tokens expire after 60)
 let cachedJwt: { value: string; expiresAt: number } | null = null
 
+// Valid notification preference column names — guards against dynamic SQL injection
+const VALID_PREF_TYPES = new Set([
+  'task_assigned',
+  'checklist_submitted',
+  'flag_created',
+  'expense_submitted',
+  'schedule_published',
+])
+
 async function getApnsJwt(): Promise<string> {
   if (cachedJwt && cachedJwt.expiresAt > Date.now()) return cachedJwt.value
 
@@ -84,18 +93,35 @@ export async function sendPush(params: {
 }
 
 /**
+ * Check if a user has a notification type enabled in their preferences.
+ * Defaults to true if they have no preference row (opted in by default).
+ */
+async function isPrefEnabled(userId: string, notificationType: string): Promise<boolean> {
+  if (!VALID_PREF_TYPES.has(notificationType)) return true
+  const rows = await query<Record<string, boolean>>(
+    `SELECT ${notificationType} FROM notification_preferences WHERE user_id = $1`,
+    [userId]
+  )
+  if (!rows.length) return true // no row = default on
+  return rows[0][notificationType] !== false
+}
+
+/**
  * Send a push notification to all registered devices for a user.
- * Non-fatal — silently ignores individual device failures.
+ * Respects notification preferences. Non-fatal — silently ignores failures.
  */
 export async function sendPushToUser(
   userId: string,
   title: string,
   body: string,
+  notificationType?: string,
   data?: Record<string, string>
 ): Promise<void> {
   if (!process.env.APNS_KEY_ID || !process.env.APNS_TEAM_ID || !process.env.APNS_PRIVATE_KEY) return
 
   try {
+    if (notificationType && !(await isPrefEnabled(userId, notificationType))) return
+
     const tokens = await query<{ token: string }>(
       `SELECT token FROM device_tokens WHERE user_id = $1`,
       [userId]
@@ -104,4 +130,19 @@ export async function sendPushToUser(
   } catch (e) {
     console.error('sendPushToUser error:', e)
   }
+}
+
+/**
+ * Send a push notification to multiple users. Non-fatal.
+ */
+export async function sendPushToUsers(
+  userIds: string[],
+  title: string,
+  body: string,
+  notificationType?: string,
+  data?: Record<string, string>
+): Promise<void> {
+  await Promise.allSettled(
+    userIds.map(id => sendPushToUser(id, title, body, notificationType, data))
+  )
 }

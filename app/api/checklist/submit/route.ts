@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
+import { sendPushToUser } from '@/lib/apns'
 
 interface ChecklistItem {
   item_number: number
@@ -194,6 +195,14 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     console.error('Checklist email send failed:', e)
   }
+
+  // Push notification to DM
+  sendPushToUser(
+    dm.id,
+    `${typeLabel} Checklist Submitted`,
+    `${store.address} — submitted by ${session.fullName}`,
+    'checklist_submitted'
+  ).catch(() => {})
 
   return NextResponse.json({ ok: true, id: submission.id })
 }

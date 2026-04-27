@@ -10,6 +10,7 @@ import {
   expenseRejectedHtml,
   expensePaidHtml,
 } from '@/lib/notifications'
+import { sendPushToUsers } from '@/lib/apns'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -104,8 +105,8 @@ export async function POST(req: NextRequest) {
   )
 
   // Notify owner(s) of new expense
-  const owners = await query<{ email: string }>(
-    `SELECT email FROM users WHERE role IN ('owner','sales_director') AND is_active = true`
+  const owners = await query<{ id: string; email: string }>(
+    `SELECT id, email FROM users WHERE role IN ('owner','sales_director') AND is_active = true`
   )
   const ownerEmails = owners.map((o) => o.email)
   if (ownerEmails.length > 0) {
@@ -115,6 +116,13 @@ export async function POST(req: NextRequest) {
       expenseSubmittedHtml(session.fullName, parseFloat(amount).toFixed(2), category, description || '', date)
     )
   }
+
+  sendPushToUsers(
+    owners.map(o => o.id),
+    'New Expense Submitted',
+    `${session.fullName} — ${category} $${parseFloat(amount).toFixed(2)}`,
+    'expense_submitted'
+  ).catch(() => {})
 
   return NextResponse.json({ ok: true })
 }

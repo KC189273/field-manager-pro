@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import NavBar from '@/components/NavBar'
-import { startNativeTracking, stopNativeTracking } from '@/lib/gps-native'
+import { startNativeTracking, stopNativeTracking, isCapacitor } from '@/lib/gps-native'
 
 interface Session {
   id: string
@@ -27,6 +27,7 @@ export default function ClockPage() {
   const [elapsed, setElapsed] = useState('')
   const [locating, setLocating] = useState(false)
   const [gpsStatus, setGpsStatus] = useState<'unknown' | 'granted' | 'denied' | 'unavailable'>('unknown')
+  const [showAlwaysBanner, setShowAlwaysBanner] = useState(false)
 
   const fetchStatus = useCallback(async () => {
     const [meRes, statusRes] = await Promise.all([
@@ -118,6 +119,10 @@ export default function ClockPage() {
         await fetchStatus()
         // Start native background GPS tracking (no-op in browser)
         if (data.shiftId) startNativeTracking(data.shiftId)
+        // Show "Always Allow" guidance once for iOS native users
+        if (isCapacitor() && !localStorage.getItem('fmp_location_guide_dismissed')) {
+          setShowAlwaysBanner(true)
+        }
       }
     } catch {
       setMessage({ text: 'Network error', type: 'error' })
@@ -203,6 +208,31 @@ export default function ClockPage() {
         {gpsStatus === 'unavailable' && (
           <div className="w-full mb-4 px-4 py-3 rounded-xl bg-gray-800 border border-gray-700 text-gray-400 text-sm">
             <p className="text-xs">GPS is not available on this device.</p>
+          </div>
+        )}
+
+        {/* iOS "Always Allow" location guidance */}
+        {showAlwaysBanner && (
+          <div className="w-full mb-4 px-4 py-3 rounded-xl bg-blue-900/40 border border-blue-700 text-blue-200 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold text-blue-100 mb-1">Enable background location</p>
+                <p className="text-xs text-blue-300 leading-relaxed">
+                  For route tracking while the app is in the background, go to{' '}
+                  <span className="font-medium text-blue-100">Settings → Field Manager Pro → Location</span>{' '}
+                  and select <span className="font-medium text-blue-100">Always</span>.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  localStorage.setItem('fmp_location_guide_dismissed', '1')
+                  setShowAlwaysBanner(false)
+                }}
+                className="text-blue-400 hover:text-blue-200 text-lg leading-none flex-shrink-0 mt-0.5"
+              >
+                ×
+              </button>
+            </div>
           </div>
         )}
 

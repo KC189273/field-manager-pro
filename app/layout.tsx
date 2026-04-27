@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import PushInit from '@/components/PushInit'
 
 export const metadata: Metadata = {
   title: 'Field Manager Pro',
@@ -12,7 +13,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet" />
       </head>
-      <body className="min-h-full bg-gray-950 text-white antialiased">{children}</body>
+      <body className="min-h-full bg-gray-950 text-white antialiased">
+        <PushInit />
+        {children}
+      </body>
     </html>
   )
 }

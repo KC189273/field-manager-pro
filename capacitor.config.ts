@@ -17,6 +17,9 @@ const config: CapacitorConfig = {
       stopOnTerminate: false,   // keep tracking even if app is force-closed (Android)
       startOnBoot: false,       // don't auto-start on device reboot
     },
+    PushNotifications: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
   },
   ios: {
     contentInset: 'always',

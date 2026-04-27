@@ -490,8 +490,8 @@ def build_slide_08(prs):
     fill_bg(slide, DARK_BG)
     left_heading(slide, "Your Schedule")
     lines = [
-        "Navigate to Schedule in the bottom navigation bar",
-        "to view your upcoming shifts.",
+        "Your schedule appears on the Home/Dashboard screen",
+        "when you open the app.",
         "",
         "Your DM posts the schedule. You will see your",
         "assigned days and hours.",
@@ -550,24 +550,26 @@ def build_slide_10(prs):
     return slide
 
 def build_slide_11(prs):
-    """Employee: Expenses"""
+    """Employee: Timecards"""
     slide = prs.slides.add_slide(blank_layout(prs))
     fill_bg(slide, DARK_BG)
-    left_heading(slide, "Submitting Expenses")
+    left_heading(slide, "Your Timecards")
     lines = [
-        "Navigate to Expenses to submit a reimbursement request.",
+        "Navigate to Timecards to view your logged hours",
+        "and pay period summaries.",
         "",
-        "1. Tap + New Expense",
-        "2. Select Category",
-        "3. Enter Amount",
-        "4. Add description",
-        "5. Attach receipt photo",
-        "6. Submit — your DM will review",
+        "Your timecard is updated each time you clock in or out.",
+        "",
+        "If you notice a discrepancy, notify your DM",
+        "immediately so they can make a correction.",
+        "",
+        "Your DM will notify you if they make any changes",
+        "to your time entries.",
     ]
     left_body(slide, lines, start_y=1.3, size=13, spacing=0.35)
 
-    # Phone screenshot — expenses
-    add_phone_screenshot(slide, SCREEN_DIR + "screen_expenses.png", left_inches=8.7)
+    # Phone screenshot — timecards
+    add_phone_screenshot(slide, SCREEN_DIR + "screen_timecards.png", left_inches=8.7)
 
     add_corner_icon(slide)
     return slide
@@ -587,13 +589,12 @@ def build_slide_13(prs):
     bullets = [
         "Manage your assigned team of employees",
         "Post the store schedule 2 WEEKS in advance at all times",
-        "YOUR personal schedule must be posted 1 WEEK in advance — failure will prevent clock-in",
         "Review and validate timecards every Monday",
         "Check the app for new tasks and flags DAILY",
         "Clock in when you start your day; clock out only when your shift is fully complete",
         "You are responsible for your team's performance and schedule compliance",
     ]
-    left_bullets(slide, bullets, start_y=1.25, x_in=0.5, w_in=12.2, size=13, spacing=0.62)
+    left_bullets(slide, bullets, start_y=1.25, x_in=0.5, w_in=12.2, size=13, spacing=0.72)
     add_corner_icon(slide)
     return slide
 
@@ -631,18 +632,10 @@ def build_slide_15(prs):
                 "Example: Today is Monday, April 14 → Schedule must be complete through Sunday, April 27",
                 font_size=11, color=LIGHT_GRAY, italic=True, word_wrap=True)
 
-    # Req 2 — amber border
-    dark_card(slide, 0.5, 2.80, 7.5, 1.30, left_border_color=AMBER)
-    add_textbox(slide, Inches(0.75), Inches(2.88), Inches(7.0), Inches(0.30),
-                "Your personal schedule must be posted 1 WEEK in advance.", font_size=13, color=WHITE, bold=True)
-    add_textbox(slide, Inches(0.75), Inches(3.18), Inches(7.0), Inches(0.50),
-                "Example: Today is Monday, April 14 → Your schedule must be set through Sunday, April 20",
-                font_size=11, color=LIGHT_GRAY, italic=True, word_wrap=True)
-
     # Consequence — red border
-    dark_card(slide, 0.5, 4.30, 7.5, 0.80, left_border_color=RED)
-    add_textbox(slide, Inches(0.75), Inches(4.40), Inches(7.0), Inches(0.55),
-                "⚠  If your personal schedule is not loaded, you CANNOT clock in.",
+    dark_card(slide, 0.5, 2.90, 7.5, 0.80, left_border_color=RED)
+    add_textbox(slide, Inches(0.75), Inches(3.00), Inches(7.0), Inches(0.55),
+                "⚠  Schedules must be posted on time — late posting is a compliance violation.",
                 font_size=13, color=RED, bold=True, word_wrap=True)
 
     # Phone screenshot — staff schedule (schedule requirements)
@@ -777,7 +770,7 @@ def build_slide_22(prs):
     fill_bg(slide, DARK_BG)
     left_heading(slide, "Your App Access")
     add_textbox(slide, Inches(0.5), Inches(1.25), Inches(6.5), Inches(0.4),
-                "Depending on Owner delegation, you may have access to:",
+                "As an Ops Manager, you have access to:",
                 font_size=13, color=LIGHT_GRAY)
     features = [
         "Staff Schedule (view + manage)",
@@ -978,6 +971,93 @@ def build_slide_32(prs):
     add_corner_icon(slide)
     return slide
 
+def build_slide_dm_payroll(prs):
+    """DM: Approving Payroll"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Approving Payroll")
+    lines = [
+        "Navigate to Payroll in the nav bar.",
+        "",
+        "Review your team's hours for the pay period.",
+        "",
+        "1. Verify each employee's total hours are accurate",
+        "2. Cross-reference with your timecard approvals",
+        "3. Tap Approve to submit payroll for your team",
+        "",
+        "Payroll must be approved before the Owner can",
+        "run the final payroll export.",
+    ]
+    left_body(slide, lines, start_y=1.3, size=13, spacing=0.35)
+    add_corner_icon(slide)
+    return slide
+
+
+def build_slide_sd_payroll(prs):
+    """Sales Director: Payroll Review & ADP Export"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Payroll Review & ADP Export")
+    lines = [
+        "Navigate to Payroll to review hours across your stores.",
+        "",
+        "1. Review each DM's team hours for the pay period",
+        "2. Verify DM payroll approvals are complete",
+        "3. Use the Export to ADP button to download",
+        "   the payroll file for ADP processing",
+        "",
+        "Ensure all DMs have approved their team's payroll",
+        "before running the ADP export.",
+    ]
+    left_body(slide, lines, start_y=1.3, size=13, spacing=0.35)
+    add_corner_icon(slide)
+    return slide
+
+
+def build_slide_owner_expenses(prs):
+    """Owner: Approving Expenses"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Approving Expenses")
+    lines = [
+        "Navigate to Expenses to review submitted expense requests.",
+        "",
+        "1. Tap a pending expense to view details",
+        "2. Review the amount, category, description,",
+        "   and attached receipt",
+        "3. Tap Approve or Reject",
+        "4. Add a note if rejecting",
+        "",
+        "Submitter is notified of your decision automatically.",
+    ]
+    left_body(slide, lines, start_y=1.3, size=13, spacing=0.38)
+
+    add_phone_screenshot(slide, SCREEN_DIR + "screen_expenses.png", left_inches=8.7)
+    add_corner_icon(slide)
+    return slide
+
+
+def build_slide_owner_payroll(prs):
+    """Owner: Managing Payroll"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Managing Payroll")
+    lines = [
+        "Navigate to Payroll to oversee the full payroll cycle.",
+        "",
+        "1. Confirm all DMs have approved their team's hours",
+        "2. Review total hours across all stores",
+        "3. Tap Export to ADP to generate the payroll file",
+        "4. Upload the file to ADP to process payroll",
+        "",
+        "The ADP export includes all approved hours for",
+        "the current pay period.",
+    ]
+    left_body(slide, lines, start_y=1.3, size=13, spacing=0.38)
+    add_corner_icon(slide)
+    return slide
+
+
 def build_slide_33(prs):
     """RDM Section Header"""
     return section_header_slide(prs,
@@ -1134,6 +1214,9 @@ def main():
                     build_slide_16, build_slide_17, build_slide_18, build_slide_19]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)
+    # DM Payroll slide
+    print("  Building DM payroll slide ...", flush=True)
+    build_slide_dm_payroll(prs)
     # Support slide after DM section
     print("  Building support slide (after DM) ...", flush=True)
     build_support_slide(prs)
@@ -1150,6 +1233,9 @@ def main():
     for builder in [build_slide_23, build_slide_24, build_slide_25, build_slide_26]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)
+    # SD Payroll slide
+    print("  Building SD payroll slide ...", flush=True)
+    build_slide_sd_payroll(prs)
     # Support slide after Sales Director section
     print("  Building support slide (after Sales Director) ...", flush=True)
     build_support_slide(prs)
@@ -1159,19 +1245,16 @@ def main():
                     build_slide_31, build_slide_32]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)
+    # Owner Expense Approvals + Payroll slides
+    print("  Building Owner expenses slide ...", flush=True)
+    build_slide_owner_expenses(prs)
+    print("  Building Owner payroll slide ...", flush=True)
+    build_slide_owner_payroll(prs)
     # Support slide after Owner section
     print("  Building support slide (after Owner) ...", flush=True)
     build_support_slide(prs)
 
-    # Slides 33–35: RDM section
-    for builder in [build_slide_33, build_slide_34, build_slide_35]:
-        print(f"  Building {builder.__name__} ...", flush=True)
-        builder(prs)
-    # Support slide after RDM section
-    print("  Building support slide (after RDM) ...", flush=True)
-    build_support_slide(prs)
-
-    # Slides 36–37: Existing standalone support + Closing
+    # Closing slide (no RDM section)
     for builder in [build_slide_36, build_slide_37]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)

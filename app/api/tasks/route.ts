@@ -4,6 +4,7 @@ import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail, taskAssignedHtml } from '@/lib/notifications'
+import { sendPushToUser } from '@/lib/apns'
 
 interface TaskRow {
   id: string
@@ -123,6 +124,9 @@ export async function POST(req: NextRequest) {
       taskAssignedHtml(assignee.full_name, session.fullName, title.trim(), description?.trim() || null, weekOf, dueDate || null)
     ).catch(() => {})
   }
+
+  // Push notification to assignee
+  sendPushToUser(assigneeId, 'New Task Assigned', title.trim()).catch(() => {})
 
   return NextResponse.json({ ok: true, id: result?.id })
 }

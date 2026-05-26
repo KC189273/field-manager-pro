@@ -48,7 +48,7 @@ export async function GET() {
       LEFT JOIN dm_manager_stores ms ON ms.store_location_id = l.id
       LEFT JOIN users m ON m.id = ms.manager_id
       WHERE l.active = true
-      ORDER BY l.id, l.address
+      ORDER BY l.id, m.full_name
     `)
   }
 

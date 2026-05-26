@@ -373,7 +373,7 @@ export async function POST(req: NextRequest) {
       o.name AS org_name,
       s.clock_in_at::text,
       s.clock_out_at::text,
-      EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) AS duration_seconds,
+      (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) AS duration_seconds,
       s.is_manual,
       s.manual_note,
       mb.full_name AS manual_by_name

@@ -4,6 +4,8 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
   max: 1,
+  connectionTimeoutMillis: 8000,
+  idleTimeoutMillis: 10000,
 })
 
 export async function query<T = Record<string, unknown>>(

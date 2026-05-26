@@ -247,7 +247,7 @@ export default function ExpensesPage() {
   }
 
   const canApprove = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
-  const canViewDetail = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
+  const canViewDetail = session?.role === 'manager' || session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
   const canSubmit = session && session.role !== 'employee'
   const canOnBehalf = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer'
 

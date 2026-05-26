@@ -80,7 +80,10 @@ export async function GET(req: NextRequest) {
         u.manager_id,
         o.name AS org_name,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date AS week_start,
-        SUM(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0) AS total_hours
+        SUM(
+          EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
+          - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
+        ) AS total_hours
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN organizations o ON o.id = u.org_id

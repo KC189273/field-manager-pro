@@ -48,6 +48,12 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 
+	<!-- Camera and photo library permissions -->
+	<key>NSCameraUsageDescription</key>
+	<string>Field Manager Pro needs camera access to take photos for checklists and tasks.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Field Manager Pro needs access to your photo library to attach photos to checklists and tasks.</string>
+
 	<!-- Location permission descriptions shown to users on first request -->
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Field Manager Pro uses your location to track clock-in and clock-out positions for your manager.</string>

@@ -342,20 +342,88 @@ def build_slide_03(prs):
     fill_bg(slide, DARK_BG)
 
     left_heading(slide, "Accessing the App")
+
     steps = [
-        "1. Open fieldmanagerpro.app on your phone or computer",
-        "2. Sign in with your username and password",
-        "3. Use the bottom navigation bar to switch between sections",
+        "1. Download the app from the App Store or Google Play",
+        "2. Or open fieldmanagerpro.app in any browser",
+        "3. Sign in with your username and password",
+        "4. Use the navigation menu to switch between sections",
         "",
-        "Forgot your password? Tap 'Forgot your password?' on the login screen.",
+        "Forgot your password? Tap \u2018Forgot your password?\u2019 on the login screen.",
     ]
-    left_body(slide, steps, start_y=1.3, size=13, spacing=0.42)
+    left_body(slide, steps, start_y=1.3, size=13, spacing=0.40)
+
+    # App Store pill
+    app_store_shape = add_rect(slide, Inches(0.5), Inches(4.55), Inches(1.85), Inches(0.42),
+                               fill_color=MED_DARK, corner_radius=0.1)
+    app_store_tf = app_store_shape.text_frame
+    app_store_tf.word_wrap = False
+    app_store_p = app_store_tf.paragraphs[0]
+    app_store_p.alignment = PP_ALIGN.CENTER
+    app_store_run = app_store_p.add_run()
+    app_store_run.text = "\U0001F34E  App Store"
+    app_store_run.font.size = Pt(12)
+    app_store_run.font.color.rgb = WHITE
+
+    # Google Play pill
+    gplay_shape = add_rect(slide, Inches(2.5), Inches(4.55), Inches(1.85), Inches(0.42),
+                           fill_color=MED_DARK, corner_radius=0.1)
+    gplay_tf = gplay_shape.text_frame
+    gplay_tf.word_wrap = False
+    gplay_p = gplay_tf.paragraphs[0]
+    gplay_p.alignment = PP_ALIGN.CENTER
+    gplay_run = gplay_p.add_run()
+    gplay_run.text = "\u25B6  Google Play"
+    gplay_run.font.size = Pt(12)
+    gplay_run.font.color.rgb = WHITE
+
+    add_textbox(slide, Inches(0.5), Inches(5.1), Inches(6.5), Inches(0.40),
+                "The app is also accessible from any browser at fieldmanagerpro.app",
+                font_size=11, color=LIGHT_GRAY, italic=True, word_wrap=True)
 
     # Phone screenshot — menu (app overview / navigation)
     add_phone_screenshot(slide, SCREEN_DIR + "screen_menu.png", left_inches=8.7)
 
     add_corner_icon(slide)
     return slide
+
+def build_slide_app_setup(prs):
+    """First-Time App Setup — location Always Allow + push notifications"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "First-Time App Setup (iOS)")
+
+    add_textbox(slide, Inches(0.5), Inches(1.2), Inches(7.5), Inches(0.35),
+                "Complete these two steps the first time you open the app:",
+                font_size=13, color=LIGHT_GRAY, word_wrap=True)
+
+    # Step 1 — Location
+    dark_card(slide, 0.5, 1.7, 7.5, 2.25, left_border_color=PURPLE)
+    add_textbox(slide, Inches(0.75), Inches(1.80), Inches(7.0), Inches(0.30),
+                "Step 1 — Allow Location Access", font_size=14, color=PURPLE, bold=True)
+    add_textbox(slide, Inches(0.75), Inches(2.15), Inches(7.0), Inches(1.55),
+                "When the app asks about location, tap \"Allow While Using App\".\n\n"
+                "Then go to:\nSettings \u2192 Field Manager Pro \u2192 Location\n"
+                "\u2192 Select \"Always\"\n\n"
+                "This allows GPS tracking to continue while you are clocked in.",
+                font_size=12, color=WHITE, word_wrap=True)
+
+    # Step 2 — Notifications
+    dark_card(slide, 0.5, 4.15, 7.5, 1.55, left_border_color=GREEN)
+    add_textbox(slide, Inches(0.75), Inches(4.25), Inches(7.0), Inches(0.30),
+                "Step 2 — Allow Push Notifications", font_size=14, color=GREEN, bold=True)
+    add_textbox(slide, Inches(0.75), Inches(4.60), Inches(7.0), Inches(0.85),
+                "When the app asks to send notifications, tap \"Allow\".\n\n"
+                "You\u2019ll receive alerts for new tasks, schedule updates, and more.",
+                font_size=12, color=WHITE, word_wrap=True)
+
+    add_textbox(slide, Inches(0.5), Inches(6.0), Inches(7.5), Inches(0.35),
+                "These steps only appear once. Both can be changed later in your phone\u2019s Settings.",
+                font_size=11, color=LIGHT_GRAY, italic=True, word_wrap=True)
+
+    add_corner_icon(slide)
+    return slide
+
 
 def build_slide_04(prs):
     """General Rules"""
@@ -508,18 +576,41 @@ def build_slide_08(prs):
     return slide
 
 def build_slide_09(prs):
-    """Employee: Checklist"""
+    """Employee: Opening & Closing Checklist"""
     slide = prs.slides.add_slide(blank_layout(prs))
     fill_bg(slide, DARK_BG)
-    left_heading(slide, "Daily Checklist")
-    lines = [
-        "Navigate to Checklist to view and complete your daily assigned tasks.",
-        "",
-        "Tap each item to mark it complete.",
-        "",
-        "Complete all checklist items assigned to you each day.",
-    ]
-    left_body(slide, lines, start_y=1.3, size=13, spacing=0.38)
+    left_heading(slide, "Opening & Closing Checklist")
+
+    add_textbox(slide, Inches(0.5), Inches(1.25), Inches(6.5), Inches(0.35),
+                "Complete a checklist at the start and end of every shift.",
+                font_size=13, color=LIGHT_GRAY, word_wrap=True)
+
+    # Opening card — green border
+    dark_card(slide, 0.5, 1.75, 6.5, 1.65, left_border_color=GREEN)
+    add_textbox(slide, Inches(0.75), Inches(1.85), Inches(6.0), Inches(0.28),
+                "Opening Checklist", font_size=13, color=GREEN, bold=True)
+    add_textbox(slide, Inches(0.75), Inches(2.18), Inches(6.0), Inches(1.05),
+                "1. Navigate to Checklist \u2192 tap Opening\n"
+                "2. Select your store\n"
+                "3. Check off each item\n"
+                "4. Attach the inventory photo when prompted (item 2)\n"
+                "5. Tap Submit when all items are complete",
+                font_size=11, color=WHITE, word_wrap=True)
+
+    # Closing card — amber border
+    dark_card(slide, 0.5, 3.58, 6.5, 1.45, left_border_color=AMBER)
+    add_textbox(slide, Inches(0.75), Inches(3.68), Inches(6.0), Inches(0.28),
+                "Closing Checklist", font_size=13, color=AMBER, bold=True)
+    add_textbox(slide, Inches(0.75), Inches(4.00), Inches(6.0), Inches(0.85),
+                "1. Navigate to Checklist \u2192 tap Closing\n"
+                "2. Select your store\n"
+                "3. Check off each item \u2192 tap Submit",
+                font_size=11, color=WHITE, word_wrap=True)
+
+    add_textbox(slide, Inches(0.5), Inches(5.2), Inches(6.5), Inches(0.45),
+                "Your DM is notified automatically when you submit. "
+                "Do not submit until all items are complete.",
+                font_size=11, color=LIGHT_GRAY, italic=True, word_wrap=True)
 
     # Phone screenshot — checklist
     add_phone_screenshot(slide, SCREEN_DIR + "screen_checklist.png", left_inches=8.7)
@@ -597,6 +688,43 @@ def build_slide_13(prs):
     left_bullets(slide, bullets, start_y=1.25, x_in=0.5, w_in=12.2, size=13, spacing=0.72)
     add_corner_icon(slide)
     return slide
+
+def build_slide_dm_add_employee(prs):
+    """DM: Adding a New Employee"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Adding a New Employee")
+
+    add_textbox(slide, Inches(0.5), Inches(1.25), Inches(6.5), Inches(0.35),
+                "When you hire a new team member, add them to the app the same day.",
+                font_size=13, color=LIGHT_GRAY, word_wrap=True)
+
+    steps = [
+        "1. Navigate to Team",
+        "2. Tap \"+ Add Employee\"",
+        "3. Enter their full name",
+        "4. Create a username  (e.g. first initial + last name: jsmith)",
+        "5. Set a temporary password they will use to first log in",
+        "6. Tap Create",
+    ]
+    left_body(slide, steps, start_y=1.75, size=13, spacing=0.40)
+
+    # Info card
+    dark_card(slide, 0.5, 4.25, 6.5, 1.55, left_border_color=PURPLE)
+    add_textbox(slide, Inches(0.75), Inches(4.35), Inches(6.0), Inches(0.28),
+                "After creating the account", font_size=13, color=PURPLE, bold=True)
+    add_textbox(slide, Inches(0.75), Inches(4.68), Inches(6.0), Inches(0.95),
+                "Give the employee their username and temporary password.\n"
+                "They will log in at fieldmanagerpro.app or through the app\n"
+                "and can change their password after signing in.",
+                font_size=12, color=WHITE, word_wrap=True)
+
+    # Phone screenshot — team
+    add_phone_screenshot(slide, SCREEN_DIR + "screen_team.png", left_inches=8.7)
+
+    add_corner_icon(slide)
+    return slide
+
 
 def build_slide_14(prs):
     """DM: Staff Scheduling"""
@@ -971,6 +1099,48 @@ def build_slide_32(prs):
     add_corner_icon(slide)
     return slide
 
+def build_slide_dm_checklist(prs):
+    """DM: Checklist Dashboard"""
+    slide = prs.slides.add_slide(blank_layout(prs))
+    fill_bg(slide, DARK_BG)
+    left_heading(slide, "Checklist Dashboard")
+
+    add_textbox(slide, Inches(0.5), Inches(1.25), Inches(6.5), Inches(0.40),
+                "Monitor opening and closing submissions across your stores in real time.",
+                font_size=13, color=LIGHT_GRAY, word_wrap=True)
+
+    steps = [
+        "1. Navigate to Checklist \u2192 tap Dashboard",
+        "2. Use the date picker to select any day",
+        "3. Each store shows Opening and Closing status:",
+    ]
+    left_body(slide, steps, start_y=1.8, size=13, spacing=0.38)
+
+    # Status legend cards
+    dark_card(slide, 0.5, 2.98, 3.0, 0.55, left_border_color=GREEN)
+    add_textbox(slide, Inches(0.75), Inches(3.08), Inches(2.7), Inches(0.30),
+                "\u2705  Submitted", font_size=13, color=GREEN, bold=False)
+
+    dark_card(slide, 3.7, 2.98, 3.3, 0.55, left_border_color=RED)
+    add_textbox(slide, Inches(3.95), Inches(3.08), Inches(2.9), Inches(0.30),
+                "\U0001f534  Not yet submitted", font_size=13, color=RED, bold=False)
+
+    steps2 = [
+        "4. Tap any submission to view details,",
+        "   completed items, and the inventory photo",
+        "",
+        "You also receive a push notification each time",
+        "an employee submits a checklist.",
+    ]
+    left_body(slide, steps2, start_y=3.72, size=13, spacing=0.37)
+
+    # Phone screenshot — checklist
+    add_phone_screenshot(slide, SCREEN_DIR + "screen_checklist.png", left_inches=8.7)
+
+    add_corner_icon(slide)
+    return slide
+
+
 def build_slide_dm_payroll(prs):
     """DM: Approving Payroll"""
     slide = prs.slides.add_slide(blank_layout(prs))
@@ -1195,10 +1365,14 @@ def build_support_slide(prs):
 def main():
     prs = new_prs()
 
-    # Slides 1–4: Intro / General
-    for builder in [build_slide_01, build_slide_02, build_slide_03, build_slide_04]:
+    # Slides 1–4: Intro / General (with app setup slide inserted after slide 03)
+    for builder in [build_slide_01, build_slide_02, build_slide_03]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)
+    print("  Building app setup slide ...", flush=True)
+    build_slide_app_setup(prs)
+    print("  Building build_slide_04 ...", flush=True)
+    build_slide_04(prs)
 
     # Slides 5–11: Employee section
     for builder in [build_slide_05, build_slide_06, build_slide_07, build_slide_08,
@@ -1210,10 +1384,18 @@ def main():
     build_support_slide(prs)
 
     # Slides 12–19: DM section
-    for builder in [build_slide_12, build_slide_13, build_slide_14, build_slide_15,
+    for builder in [build_slide_12, build_slide_13]:
+        print(f"  Building {builder.__name__} ...", flush=True)
+        builder(prs)
+    print("  Building DM add employee slide ...", flush=True)
+    build_slide_dm_add_employee(prs)
+    for builder in [build_slide_14, build_slide_15,
                     build_slide_16, build_slide_17, build_slide_18, build_slide_19]:
         print(f"  Building {builder.__name__} ...", flush=True)
         builder(prs)
+    # DM Checklist Dashboard slide
+    print("  Building DM checklist dashboard slide ...", flush=True)
+    build_slide_dm_checklist(prs)
     # DM Payroll slide
     print("  Building DM payroll slide ...", flush=True)
     build_slide_dm_payroll(prs)

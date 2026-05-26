@@ -15,6 +15,7 @@ async function ensureTables() {
     )
   `)
   await query(`ALTER TABLE dm_store_locations ADD COLUMN IF NOT EXISTS org_id UUID`)
+  await query(`ALTER TABLE dm_store_locations ADD COLUMN IF NOT EXISTS employee_capacity SMALLINT NOT NULL DEFAULT 1`)
   await query(`
     CREATE TABLE IF NOT EXISTS dm_manager_stores (
       manager_id        UUID NOT NULL,
@@ -31,6 +32,7 @@ interface StoreRow {
   active: boolean
   org_id: string | null
   org_name: string | null
+  employee_capacity: number
   created_at: string
 }
 
@@ -41,29 +43,28 @@ export async function GET(req: NextRequest) {
 
   try { await ensureTables() } catch { /* already exists */ }
 
-  // Managers with assigned stores only see their assigned active locations
+  // Managers only see their assigned active locations
   if (session.role === 'manager') {
     const assigned = await query<{ store_location_id: string }>(
       `SELECT store_location_id FROM dm_manager_stores WHERE manager_id = $1`,
       [session.id]
     )
-    if (assigned.length > 0) {
-      const ids = assigned.map(r => r.store_location_id)
-      const locations = await query<StoreRow>(
-        `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.created_at
-         FROM dm_store_locations s
-         LEFT JOIN organizations o ON o.id = s.org_id
-         WHERE s.id = ANY($1) AND s.active = true ORDER BY s.address ASC`,
-        [ids]
-      )
-      return NextResponse.json({ locations })
-    }
+    if (assigned.length === 0) return NextResponse.json({ locations: [] })
+    const ids = assigned.map(r => r.store_location_id)
+    const locations = await query<StoreRow>(
+      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.employee_capacity, s.created_at
+       FROM dm_store_locations s
+       LEFT JOIN organizations o ON o.id = s.org_id
+       WHERE s.id = ANY($1) AND s.active = true ORDER BY s.address ASC`,
+      [ids]
+    )
+    return NextResponse.json({ locations })
   }
 
-  // Developer sees all stores
+  // Developer always sees all stores across all orgs
   if (session.role === 'developer') {
     const locations = await query<StoreRow>(
-      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.created_at
+      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.employee_capacity, s.created_at
        FROM dm_store_locations s
        LEFT JOIN organizations o ON o.id = s.org_id
        ORDER BY o.name NULLS LAST, s.address ASC`
@@ -75,7 +76,7 @@ export async function GET(req: NextRequest) {
   const orgId = session.org_id ?? null
   if (orgId) {
     const locations = await query<StoreRow>(
-      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.created_at
+      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.employee_capacity, s.created_at
        FROM dm_store_locations s
        LEFT JOIN organizations o ON o.id = s.org_id
        WHERE (s.org_id = $1 OR s.org_id IS NULL) AND s.active = true
@@ -87,7 +88,7 @@ export async function GET(req: NextRequest) {
 
   // No org — return all active
   const locations = await query<StoreRow>(
-    `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.created_at
+    `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.employee_capacity, s.created_at
      FROM dm_store_locations s
      LEFT JOIN organizations o ON o.id = s.org_id
      WHERE s.active = true ORDER BY s.address ASC`
@@ -143,26 +144,50 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!canManage(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const body = await req.json()
 
-  // Bulk org assignment — { ids: string[], org_id: string | null }
-  if (Array.isArray(body.ids)) {
-    await query(
-      `UPDATE dm_store_locations SET org_id = $1 WHERE id = ANY($2)`,
-      [body.org_id || null, body.ids]
+  // Managers can update employee_capacity only on their assigned stores
+  if (session.role === 'manager') {
+    const { id, employee_capacity } = body
+    if (!id || employee_capacity === undefined || Array.isArray(body.ids)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const assigned = await query<{ store_location_id: string }>(
+      `SELECT store_location_id FROM dm_manager_stores WHERE manager_id = $1 AND store_location_id = $2`,
+      [session.id, id]
     )
+    if (assigned.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    await query(`UPDATE dm_store_locations SET employee_capacity = $1 WHERE id = $2`, [employee_capacity, id])
+    return NextResponse.json({ ok: true })
+  }
+
+  if (!canManage(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // Bulk update — { ids: string[], employee_capacity? | org_id? }
+  if (Array.isArray(body.ids)) {
+    if (body.employee_capacity !== undefined) {
+      await query(
+        `UPDATE dm_store_locations SET employee_capacity = $1 WHERE id = ANY($2)`,
+        [body.employee_capacity, body.ids]
+      )
+    } else {
+      await query(
+        `UPDATE dm_store_locations SET org_id = $1 WHERE id = ANY($2)`,
+        [body.org_id || null, body.ids]
+      )
+    }
     return NextResponse.json({ ok: true, count: body.ids.length })
   }
 
   // Single update
-  const { id, active, address, org_id } = body
+  const { id, active, address, org_id, employee_capacity } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   if (address !== undefined) await query(`UPDATE dm_store_locations SET address = $1 WHERE id = $2`, [address, id])
   if (active !== undefined) await query(`UPDATE dm_store_locations SET active = $1 WHERE id = $2`, [active, id])
   if (org_id !== undefined) await query(`UPDATE dm_store_locations SET org_id = $1 WHERE id = $2`, [org_id || null, id])
+  if (employee_capacity !== undefined) await query(`UPDATE dm_store_locations SET employee_capacity = $1 WHERE id = $2`, [employee_capacity, id])
 
   return NextResponse.json({ ok: true })
 }

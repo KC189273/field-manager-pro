@@ -44,41 +44,57 @@ interface SubmissionDetail {
   submitted_at: string
   items_completed: Array<{ item_number: number; label: string; completed: boolean }>
   inventory_photo_url: string | null
+  inventory_photo_2_url: string | null
+  pos_photo_url: string | null
+  aframe_photo_url: string | null
+  sales_floor_photo_url: string | null
+  cash_drawer_photo_url: string | null
+  reconciliation_photo_url: string | null
+  reconciliation_photo_2_url: string | null
+  comment: string | null
 }
 
 interface ChecklistItemDef {
   item_number: number
   label: string
   requiresPhoto?: boolean
+  additionalPhoto?: boolean
+  optionalPhoto?: boolean
+  multiplePhotos?: boolean
 }
 
 const OPENING_ITEMS: ChecklistItemDef[] = [
   { item_number: 1, label: 'Alarm / clock-in / login' },
-  { item_number: 2, label: 'Send a picture of your inventory to DM', requiresPhoto: true },
+  { item_number: 2, label: 'Send a picture of your inventory to DM', requiresPhoto: true, additionalPhoto: true },
   { item_number: 3, label: 'Put demo phones up' },
-  { item_number: 4, label: 'Verify POS cash drawers' },
-  { item_number: 5, label: 'Turn on Heat / AC' },
+  { item_number: 4, label: 'Verify POS cash drawers', optionalPhoto: true },
+  { item_number: 5, label: 'Turn on Heat / AC / Fan' },
   { item_number: 6, label: 'Turn on appropriate music' },
   { item_number: 7, label: 'Make sure you are in uniform' },
-  { item_number: 8, label: 'Start wiping counters' },
-  { item_number: 9, label: 'Check the Hub for new promos' },
-  { item_number: 10, label: 'Check store email, group chat, and big 5' },
+  { item_number: 8, label: 'Check the Hub for new promos' },
+  { item_number: 9, label: 'Check store email, group chat, and MLB' },
+  { item_number: 10, label: 'Put the A frame, flags, or Wavy man out', optionalPhoto: true },
+  { item_number: 11, label: 'Check voicemail' },
+  { item_number: 12, label: 'Start wiping counters' },
 ]
 
 const CLOSING_ITEMS: ChecklistItemDef[] = [
-  { item_number: 1, label: 'Confirm all customers have left the store' },
-  { item_number: 2, label: 'Send end of day numbers to group chat' },
+  { item_number: 1, label: 'Lock Door' },
+  { item_number: 2, label: 'Confirm all customers have left the store' },
   { item_number: 3, label: 'Close and lock door' },
-  { item_number: 4, label: 'Execute closing and drawer reconciliation procedures' },
-  { item_number: 5, label: 'Count safe, return all POS tills to safe' },
-  { item_number: 6, label: 'Prepare change order as needed' },
-  { item_number: 7, label: 'Secure demo handsets' },
-  { item_number: 8, label: 'Confirm safe is closed and locked' },
-  { item_number: 9, label: 'Leave register drawers empty and fully open' },
-  { item_number: 10, label: 'Sweep / vacuum sales floor' },
-  { item_number: 11, label: 'Dispose of all trash' },
-  { item_number: 12, label: 'Clock out' },
-  { item_number: 13, label: 'Set alarm / lock door' },
+  { item_number: 4, label: 'Send end of day numbers to group chat' },
+  { item_number: 5, label: 'Secure demo handsets' },
+  { item_number: 6, label: 'Execute closing and drawer reconciliation procedures', multiplePhotos: true },
+  { item_number: 7, label: 'Count safe, return all POS tills to safe' },
+  { item_number: 8, label: 'Prepare change order as needed' },
+  { item_number: 9, label: 'Confirm safe is closed and locked' },
+  { item_number: 10, label: 'Leave register drawers empty and fully open' },
+  { item_number: 11, label: 'Put away unsold inventory' },
+  { item_number: 12, label: 'Bring in A-frame/wavy guy, flags, etc.' },
+  { item_number: 13, label: 'Sweep / vacuum sales floor' },
+  { item_number: 14, label: 'Dispose of all trash (If safe outside)' },
+  { item_number: 15, label: 'Clock out' },
+  { item_number: 16, label: 'Set alarm / lock door' },
 ]
 
 const canViewDashboard = (role: Role) =>
@@ -120,10 +136,33 @@ export default function ChecklistPage() {
   const [checked, setChecked] = useState<Set<number>>(new Set())
   const [photoKey, setPhotoKey] = useState<string | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [salesFloorPhotoKey, setSalesFloorPhotoKey] = useState<string | null>(null)
+  const [salesFloorPhotoPreview, setSalesFloorPhotoPreview] = useState<string | null>(null)
+  const [cashDrawerPhotoKey, setCashDrawerPhotoKey] = useState<string | null>(null)
+  const [cashDrawerPhotoPreview, setCashDrawerPhotoPreview] = useState<string | null>(null)
+  // Additional / optional photo slots
+  const [inventoryPhoto2Key, setInventoryPhoto2Key] = useState<string | null>(null)
+  const [inventoryPhoto2Preview, setInventoryPhoto2Preview] = useState<string | null>(null)
+  const [posPhotoKey, setPosPhotoKey] = useState<string | null>(null)
+  const [posPhotoPreview, setPosPhotoPreview] = useState<string | null>(null)
+  const [aframePhotoKey, setAframePhotoKey] = useState<string | null>(null)
+  const [aframePhotoPreview, setAframePhotoPreview] = useState<string | null>(null)
+  const [reconciliationPhotoKey, setReconciliationPhotoKey] = useState<string | null>(null)
+  const [reconciliationPhotoPreview, setReconciliationPhotoPreview] = useState<string | null>(null)
+  const [reconciliationPhoto2Key, setReconciliationPhoto2Key] = useState<string | null>(null)
+  const [reconciliationPhoto2Preview, setReconciliationPhoto2Preview] = useState<string | null>(null)
+  const [comment, setComment] = useState('')
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const fileRef = useRef<HTMLInputElement>(null)
+  const salesFloorFileRef = useRef<HTMLInputElement>(null)
+  const cashDrawerFileRef = useRef<HTMLInputElement>(null)
+  const inventoryPhoto2Ref = useRef<HTMLInputElement>(null)
+  const posPhotoRef = useRef<HTMLInputElement>(null)
+  const aframePhotoRef = useRef<HTMLInputElement>(null)
+  const reconciliationPhotoRef = useRef<HTMLInputElement>(null)
+  const reconciliationPhoto2Ref = useRef<HTMLInputElement>(null)
 
   // Dashboard state
   const [dashDate, setDashDate] = useState(todayLocal)
@@ -177,6 +216,21 @@ export default function ChecklistPage() {
     setStoreId('')
     setPhotoKey(null)
     setPhotoPreview(null)
+    setSalesFloorPhotoKey(null)
+    setSalesFloorPhotoPreview(null)
+    setCashDrawerPhotoKey(null)
+    setCashDrawerPhotoPreview(null)
+    setInventoryPhoto2Key(null)
+    setInventoryPhoto2Preview(null)
+    setPosPhotoKey(null)
+    setPosPhotoPreview(null)
+    setAframePhotoKey(null)
+    setAframePhotoPreview(null)
+    setReconciliationPhotoKey(null)
+    setReconciliationPhotoPreview(null)
+    setReconciliationPhoto2Key(null)
+    setReconciliationPhoto2Preview(null)
+    setComment('')
     setSubmitError('')
     setFormView('form')
   }
@@ -189,11 +243,13 @@ export default function ChecklistPage() {
     })
   }
 
-  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setPhotoPreview(URL.createObjectURL(file))
-    setPhotoKey(null)
+  async function uploadPhoto(
+    file: File,
+    setPreview: (v: string | null) => void,
+    setKey: (v: string | null) => void
+  ) {
+    setPreview(URL.createObjectURL(file))
+    setKey(null)
     setUploading(true)
     try {
       const urlRes = await fetch('/api/checklist/upload-url', {
@@ -201,23 +257,25 @@ export default function ChecklistPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: file.name, contentType: file.type }),
       })
-      if (!urlRes.ok) {
-        alert('Photo upload failed. Please try again.')
-        setUploading(false)
-        return
-      }
+      if (!urlRes.ok) { alert('Photo upload failed. Please try again.'); setUploading(false); return }
       const { url, key } = await urlRes.json()
       const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      if (!s3Res.ok) {
-        alert('Photo upload failed. Please try again.')
-        setUploading(false)
-        return
-      }
-      setPhotoKey(key)
+      if (!s3Res.ok) { alert('Photo upload failed. Please try again.'); setUploading(false); return }
+      setKey(key)
     } catch {
       alert('Photo upload failed. Please try again.')
     }
     setUploading(false)
+  }
+
+  function makeFileHandler(
+    setPreview: (v: string | null) => void,
+    setKey: (v: string | null) => void
+  ) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (file) uploadPhoto(file, setPreview, setKey)
+    }
   }
 
   async function handleSubmit() {
@@ -230,6 +288,14 @@ export default function ChecklistPage() {
       checklistType,
       storeId,
       photoKey: checklistType === 'opening' ? photoKey : null,
+      inventoryPhoto2Key: checklistType === 'opening' ? inventoryPhoto2Key : null,
+      posPhotoKey: checklistType === 'opening' ? posPhotoKey : null,
+      aframePhotoKey: checklistType === 'opening' ? aframePhotoKey : null,
+      salesFloorPhotoKey: checklistType === 'closing' ? salesFloorPhotoKey : null,
+      cashDrawerPhotoKey: checklistType === 'closing' ? cashDrawerPhotoKey : null,
+      reconciliationPhotoKey: checklistType === 'closing' ? reconciliationPhotoKey : null,
+      reconciliationPhoto2Key: checklistType === 'closing' ? reconciliationPhoto2Key : null,
+      comment: comment.trim() || null,
       items: items.map(item => ({
         item_number: item.item_number,
         label: item.label,
@@ -259,8 +325,9 @@ export default function ChecklistPage() {
   const items = checklistType === 'opening' ? OPENING_ITEMS : CLOSING_ITEMS
   const allChecked = items.every(item => checked.has(item.item_number))
   const photoRequired = checklistType === 'opening'
+  const closingPhotosReady = checklistType !== 'closing' || (!!salesFloorPhotoKey && !!cashDrawerPhotoKey)
   const canSubmit = allChecked && !!storeId && !uploading && !submitting &&
-    (!photoRequired || !!photoKey)
+    (!photoRequired || !!photoKey) && closingPhotosReady
 
   // Dashboard: group stores by DM
   const storesByDm = stores.reduce<Record<string, { dmName: string; stores: Store[] }>>((acc, store) => {
@@ -397,20 +464,21 @@ export default function ChecklistPage() {
 
               {/* Checklist items */}
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                {/* Hidden file input — outside the item rows so label clicks can't interfere */}
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handlePhotoChange}
-                />
+                {/* Hidden file inputs */}
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setPhotoPreview, setPhotoKey)} />
+                <input ref={inventoryPhoto2Ref} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setInventoryPhoto2Preview, setInventoryPhoto2Key)} />
+                <input ref={posPhotoRef} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setPosPhotoPreview, setPosPhotoKey)} />
+                <input ref={aframePhotoRef} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setAframePhotoPreview, setAframePhotoKey)} />
+                <input ref={salesFloorFileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={makeFileHandler(setSalesFloorPhotoPreview, setSalesFloorPhotoKey)} />
+                <input ref={cashDrawerFileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={makeFileHandler(setCashDrawerPhotoPreview, setCashDrawerPhotoKey)} />
+                <input ref={reconciliationPhotoRef} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setReconciliationPhotoPreview, setReconciliationPhotoKey)} />
+                <input ref={reconciliationPhoto2Ref} type="file" accept="image/*" className="hidden" onChange={makeFileHandler(setReconciliationPhoto2Preview, setReconciliationPhoto2Key)} />
                 {items.map((item, idx) => (
                   <div
                     key={item.item_number}
                     className={idx < items.length - 1 ? 'border-b border-gray-800/60' : ''}
                   >
-                    {/* Checkbox row — clicking anywhere here toggles the item */}
+                    {/* Checkbox row */}
                     <div
                       onClick={() => toggleItem(item.item_number)}
                       className={`flex items-start gap-3 px-4 py-3.5 cursor-pointer transition-colors ${
@@ -431,35 +499,113 @@ export default function ChecklistPage() {
                       </span>
                     </div>
 
-                    {/* Photo upload section — completely outside the checkbox click area */}
+                    {/* Primary inventory photo (required) + additional photo (optional) — opening item #2 */}
                     {item.requiresPhoto && checklistType === 'opening' && (
-                      <div className="px-4 pb-3">
+                      <div className="px-4 pb-3 space-y-2">
+                        {/* Primary */}
                         {photoPreview ? (
                           <div>
-                            <img
-                              src={photoPreview}
-                              alt="Inventory"
-                              className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700"
-                            />
+                            <img src={photoPreview} alt="Inventory" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
                             <div className="flex items-center gap-3 mt-1.5">
                               {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
                               {photoKey && !uploading && <span className="text-xs text-green-400">Photo uploaded ✓</span>}
-                              <button
-                                type="button"
-                                onClick={() => { setPhotoKey(null); setPhotoPreview(null); if (fileRef.current) fileRef.current.value = '' }}
-                                className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto"
-                              >
-                                Remove
-                              </button>
+                              <button type="button" onClick={() => { setPhotoKey(null); setPhotoPreview(null); if (fileRef.current) fileRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
                             </div>
                           </div>
                         ) : (
-                          <button
-                            type="button"
-                            onClick={() => fileRef.current?.click()}
-                            className="w-full border border-dashed border-gray-600 hover:border-violet-500 rounded-xl py-3 text-center text-gray-500 hover:text-violet-400 transition-colors text-xs"
-                          >
+                          <button type="button" onClick={() => fileRef.current?.click()} className="w-full border border-dashed border-gray-600 hover:border-violet-500 rounded-xl py-3 text-center text-gray-500 hover:text-violet-400 transition-colors text-xs">
                             Tap to attach inventory photo
+                          </button>
+                        )}
+                        {/* Additional photo */}
+                        {item.additionalPhoto && (
+                          inventoryPhoto2Preview ? (
+                            <div>
+                              <img src={inventoryPhoto2Preview} alt="Additional" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                              <div className="flex items-center gap-3 mt-1.5">
+                                {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                                {inventoryPhoto2Key && !uploading && <span className="text-xs text-green-400">Additional photo uploaded ✓</span>}
+                                <button type="button" onClick={() => { setInventoryPhoto2Key(null); setInventoryPhoto2Preview(null); if (inventoryPhoto2Ref.current) inventoryPhoto2Ref.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={() => inventoryPhoto2Ref.current?.click()} className="w-full border border-dashed border-gray-600/60 hover:border-violet-500/60 rounded-xl py-2 text-center text-gray-600 hover:text-violet-400 transition-colors text-xs">
+                              + Add additional photo (optional)
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+
+                    {/* Optional POS photo — opening item #4 */}
+                    {item.optionalPhoto && checklistType === 'opening' && item.item_number === 4 && (
+                      <div className="px-4 pb-3">
+                        {posPhotoPreview ? (
+                          <div>
+                            <img src={posPhotoPreview} alt="POS" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                              {posPhotoKey && !uploading && <span className="text-xs text-green-400">Photo uploaded ✓</span>}
+                              <button type="button" onClick={() => { setPosPhotoKey(null); setPosPhotoPreview(null); if (posPhotoRef.current) posPhotoRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => posPhotoRef.current?.click()} className="w-full border border-dashed border-gray-600/60 hover:border-violet-500/60 rounded-xl py-2 text-center text-gray-600 hover:text-violet-400 transition-colors text-xs">
+                            + Attach photo (optional)
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Optional A-frame photo — opening item #10 */}
+                    {item.optionalPhoto && checklistType === 'opening' && item.item_number === 10 && (
+                      <div className="px-4 pb-3">
+                        {aframePhotoPreview ? (
+                          <div>
+                            <img src={aframePhotoPreview} alt="A-frame" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                              {aframePhotoKey && !uploading && <span className="text-xs text-green-400">Photo uploaded ✓</span>}
+                              <button type="button" onClick={() => { setAframePhotoKey(null); setAframePhotoPreview(null); if (aframePhotoRef.current) aframePhotoRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => aframePhotoRef.current?.click()} className="w-full border border-dashed border-gray-600/60 hover:border-violet-500/60 rounded-xl py-2 text-center text-gray-600 hover:text-violet-400 transition-colors text-xs">
+                            + Attach photo (optional)
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Multiple photos — closing reconciliation item #6 */}
+                    {item.multiplePhotos && checklistType === 'closing' && (
+                      <div className="px-4 pb-3 space-y-2">
+                        {reconciliationPhotoPreview ? (
+                          <div>
+                            <img src={reconciliationPhotoPreview} alt="Reconciliation" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                              {reconciliationPhotoKey && !uploading && <span className="text-xs text-green-400">Photo 1 uploaded ✓</span>}
+                              <button type="button" onClick={() => { setReconciliationPhotoKey(null); setReconciliationPhotoPreview(null); if (reconciliationPhotoRef.current) reconciliationPhotoRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => reconciliationPhotoRef.current?.click()} className="w-full border border-dashed border-gray-600/60 hover:border-violet-500/60 rounded-xl py-2 text-center text-gray-600 hover:text-violet-400 transition-colors text-xs">
+                            + Attach photo (optional)
+                          </button>
+                        )}
+                        {reconciliationPhoto2Preview ? (
+                          <div>
+                            <img src={reconciliationPhoto2Preview} alt="Reconciliation 2" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                            <div className="flex items-center gap-3 mt-1.5">
+                              {uploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                              {reconciliationPhoto2Key && !uploading && <span className="text-xs text-green-400">Photo 2 uploaded ✓</span>}
+                              <button type="button" onClick={() => { setReconciliationPhoto2Key(null); setReconciliationPhoto2Preview(null); if (reconciliationPhoto2Ref.current) reconciliationPhoto2Ref.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => reconciliationPhoto2Ref.current?.click()} className="w-full border border-dashed border-gray-600/60 hover:border-violet-500/60 rounded-xl py-2 text-center text-gray-600 hover:text-violet-400 transition-colors text-xs">
+                            + Attach second photo (optional)
                           </button>
                         )}
                       </div>
@@ -468,11 +614,74 @@ export default function ChecklistPage() {
                 ))}
               </div>
 
+              {/* Closing photos — required */}
+              {checklistType === 'closing' && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-800">
+                    <p className="text-sm font-semibold text-white">Required Closing Photos <span className="text-red-400">*</span></p>
+                    <p className="text-xs text-gray-500 mt-0.5">Take photos of the sales floor and cash drawers before leaving</p>
+                  </div>
+                  {/* Sales floor */}
+                  <div className="px-4 py-3 border-b border-gray-800/60">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Sales Floor</p>
+                    {salesFloorPhotoPreview ? (
+                      <div>
+                        <img src={salesFloorPhotoPreview} alt="Sales Floor" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {uploading && !salesFloorPhotoKey && <span className="text-xs text-violet-400">Uploading...</span>}
+                          {salesFloorPhotoKey && <span className="text-xs text-green-400">Photo uploaded ✓</span>}
+                          <button type="button" onClick={() => { setSalesFloorPhotoKey(null); setSalesFloorPhotoPreview(null); if (salesFloorFileRef.current) salesFloorFileRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => salesFloorFileRef.current?.click()} className="w-full border border-dashed border-gray-600 hover:border-violet-500 rounded-xl py-3 text-center text-gray-500 hover:text-violet-400 transition-colors text-xs">
+                        Tap to take / attach sales floor photo
+                      </button>
+                    )}
+                  </div>
+                  {/* Cash drawers */}
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cash Drawers</p>
+                    {cashDrawerPhotoPreview ? (
+                      <div>
+                        <img src={cashDrawerPhotoPreview} alt="Cash Drawers" className="w-full max-h-40 object-contain rounded-xl bg-gray-800 border border-gray-700" />
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {uploading && !cashDrawerPhotoKey && <span className="text-xs text-violet-400">Uploading...</span>}
+                          {cashDrawerPhotoKey && <span className="text-xs text-green-400">Photo uploaded ✓</span>}
+                          <button type="button" onClick={() => { setCashDrawerPhotoKey(null); setCashDrawerPhotoPreview(null); if (cashDrawerFileRef.current) cashDrawerFileRef.current.value = '' }} className="text-xs text-gray-500 hover:text-red-400 transition-colors ml-auto">Remove</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" onClick={() => cashDrawerFileRef.current?.click()} className="w-full border border-dashed border-gray-600 hover:border-violet-500 rounded-xl py-3 text-center text-gray-500 hover:text-violet-400 transition-colors text-xs">
+                        Tap to take / attach cash drawer photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Optional comment */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">
+                  Comment <span className="text-gray-600 normal-case font-normal">(optional)</span>
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="Any notes for your DM — e.g. issues noticed, items out of stock, anything unusual…"
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none"
+                />
+              </div>
+
               {/* Progress */}
               <div className="flex items-center justify-between text-xs text-gray-500">
                 <span>{checked.size} of {items.length} items completed</span>
                 {photoRequired && !photoKey && (
                   <span className="text-amber-400">Inventory photo required</span>
+                )}
+                {checklistType === 'closing' && !closingPhotosReady && (
+                  <span className="text-amber-400">Closing photos required</span>
                 )}
               </div>
 
@@ -642,24 +851,81 @@ export default function ChecklistPage() {
                     ))}
                   </div>
 
-                  {/* Photo — opening only */}
-                  {detail.inventory_photo_url && (
-                    <div>
-                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Inventory Photo</p>
-                      <img
-                        src={detail.inventory_photo_url}
-                        alt="Inventory"
-                        className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700"
-                        onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                      />
-                      <a
-                        href={detail.inventory_photo_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2"
-                      >
-                        Open full size
-                      </a>
+                  {/* Photos — opening */}
+                  {(detail.inventory_photo_url || detail.inventory_photo_2_url || detail.pos_photo_url || detail.aframe_photo_url) && (
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Opening Photos</p>
+                      {detail.inventory_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Inventory</p>
+                          <img src={detail.inventory_photo_url} alt="Inventory" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.inventory_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.inventory_photo_2_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Inventory (Additional)</p>
+                          <img src={detail.inventory_photo_2_url} alt="Inventory 2" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.inventory_photo_2_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.pos_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">POS Cash Drawers</p>
+                          <img src={detail.pos_photo_url} alt="POS" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.pos_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.aframe_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">A-Frame / Signage</p>
+                          <img src={detail.aframe_photo_url} alt="A-Frame" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.aframe_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Photos — closing */}
+                  {(detail.sales_floor_photo_url || detail.cash_drawer_photo_url || detail.reconciliation_photo_url || detail.reconciliation_photo_2_url) && (
+                    <div className="space-y-4">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Closing Photos</p>
+                      {detail.sales_floor_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Sales Floor</p>
+                          <img src={detail.sales_floor_photo_url} alt="Sales Floor" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.sales_floor_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.cash_drawer_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Cash Drawers</p>
+                          <img src={detail.cash_drawer_photo_url} alt="Cash Drawers" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.cash_drawer_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.reconciliation_photo_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Reconciliation Photo 1</p>
+                          <img src={detail.reconciliation_photo_url} alt="Reconciliation" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.reconciliation_photo_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                      {detail.reconciliation_photo_2_url && (
+                        <div>
+                          <p className="text-xs text-gray-400 mb-1.5">Reconciliation Photo 2</p>
+                          <img src={detail.reconciliation_photo_2_url} alt="Reconciliation 2" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                          <a href={detail.reconciliation_photo_2_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Comment */}
+                  {detail.comment && (
+                    <div className="border-l-4 border-violet-600 bg-gray-800 rounded-r-xl px-4 py-3">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Comment</p>
+                      <p className="text-sm text-gray-200">{detail.comment}</p>
                     </div>
                   )}
                 </div>

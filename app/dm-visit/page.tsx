@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import NavBar from '@/components/NavBar'
+import { downloadBlob } from '@/lib/download'
 
 interface Session {
   id: string
@@ -18,6 +19,7 @@ interface StoreLocation {
   active: boolean
   org_id: string | null
   org_name: string | null
+  employee_capacity: number
 }
 
 interface Org {
@@ -35,15 +37,30 @@ interface DashRow {
 interface DmUser {
   id: string
   full_name: string
+  role: string
 }
 
-type Tab = 'new' | 'dashboard' | 'report' | 'stores'
+interface HoursRow {
+  day_of_week: number // 0=Sun … 6=Sat
+  open_time: string   // HH:MM
+  close_time: string
+  is_closed: boolean
+}
+
+const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+
+type Tab = 'new' | 'quick' | 'dashboard' | 'report' | 'stores'
 
 const DRAFT_KEY = 'dm-visit-draft'
 
-const RDM_OPTIONS = ['Kalee Heinzman', 'Don Woods', 'Jeff Goodman', 'Gary Meier', 'Zac Okerstrom']
+const RDM_OPTIONS = ['Kalee Heinzman', 'Don Woods', 'Jeff Goodman', 'Gary Meier', 'Zac Okerstrom', 'Curt Hauk']
 const VISIT_REASONS = ['Scheduled Visit', 'Performance Coaching', 'Recognition Visit', 'Training Support', 'Compliance Review', 'Other']
 const GRADES = ['A', 'B', 'D', 'F']
+
+function todayLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 const canViewAll = (role: string) =>
   role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
@@ -102,10 +119,25 @@ export default function DmVisitPage() {
   const [submitted, setSubmitted] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
 
+  // Quick Visit
+  const [quickForm, setQuickForm] = useState({ store_location_id: '', store_address: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+  const [quickSubmitting, setQuickSubmitting] = useState(false)
+  const [quickSubmitted, setQuickSubmitted] = useState(false)
+  const [quickError, setQuickError] = useState('')
+
   // Dashboard
   const [dashRows, setDashRows] = useState<DashRow[]>([])
-  const [dashFrom, setDashFrom] = useState('')
-  const [dashTo, setDashTo] = useState('')
+  const [typeCounts, setTypeCounts] = useState<{ visit_type: string; count: string }[]>([])
+  const [dashViewMode, setDashViewMode] = useState<'monthly' | 'range'>('monthly')
+  const [dashMonth, setDashMonth] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [dashFrom, setDashFrom] = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+  })
+  const [dashTo, setDashTo] = useState(todayLocal)
   const [dashDmId, setDashDmId] = useState('')
   const [dmUsers, setDmUsers] = useState<DmUser[]>([])
 
@@ -128,6 +160,24 @@ export default function DmVisitPage() {
   const [orgAssignStores, setOrgAssignStores] = useState<Set<string>>(new Set())
   const [orgAssigning, setOrgAssigning] = useState(false)
   const [orgAssignResult, setOrgAssignResult] = useState<string | null>(null)
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null)
+  const [editingAddress, setEditingAddress] = useState('')
+  const [editingCapacity, setEditingCapacity] = useState<1 | 2>(1)
+  const [storeSaving, setStoreSaving] = useState(false)
+  const [dmAssignTarget, setDmAssignTarget] = useState('')
+  const [dmAssignOrgFilter, setDmAssignOrgFilter] = useState('')
+  const [dmAssignStores, setDmAssignStores] = useState<Set<string>>(new Set())
+  const [dmAssigning, setDmAssigning] = useState(false)
+  const [dmAssignResult, setDmAssignResult] = useState<string | null>(null)
+  const [bulkCapStores, setBulkCapStores] = useState<Set<string>>(new Set())
+  const [bulkCapValue, setBulkCapValue] = useState<1 | 2>(2)
+  const [bulkCapOrgFilter, setBulkCapOrgFilter] = useState('')
+  const [bulkCapSaving, setBulkCapSaving] = useState(false)
+  const [bulkCapResult, setBulkCapResult] = useState<string | null>(null)
+  // Operating hours
+  const [hoursPanel, setHoursPanel] = useState<string | null>(null)
+  const [editingHours, setEditingHours] = useState<HoursRow[]>([])
+  const [hoursSaving, setHoursSaving] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => {
@@ -183,7 +233,7 @@ export default function DmVisitPage() {
   useEffect(() => {
     if (!session || !canViewAll(session.role)) return
     fetch('/api/team/users').then(r => r.json()).then(d => {
-      if (d.users) setDmUsers(d.users.filter((u: DmUser & { role: string }) => u.role !== 'employee'))
+      if (d.users) setDmUsers(d.users.filter((u: DmUser) => u.role !== 'employee'))
     })
   }, [session])
 
@@ -194,8 +244,18 @@ export default function DmVisitPage() {
     if (dashDmId) p.set('dmId', dashDmId)
     fetch(`/api/dm-store-visits?${p}`).then(r => r.json()).then(d => {
       if (d.rows) setDashRows(d.rows)
+      if (d.typeCounts) setTypeCounts(d.typeCounts)
     })
   }, [dashFrom, dashTo, dashDmId])
+
+  // Sync monthly picker → dashFrom/dashTo
+  useEffect(() => {
+    if (dashViewMode !== 'monthly') return
+    const [y, m] = dashMonth.split('-').map(Number)
+    const lastDay = new Date(y, m, 0).getDate()
+    setDashFrom(`${dashMonth}-01`)
+    setDashTo(`${dashMonth}-${String(lastDay).padStart(2, '0')}`)
+  }, [dashViewMode, dashMonth])
 
   useEffect(() => {
     if (session && tab === 'dashboard') loadDashboard()
@@ -208,6 +268,11 @@ export default function DmVisitPage() {
   function handleStoreChange(id: string) {
     const loc = locations.find(l => l.id === id)
     setForm(f => ({ ...f, store_location_id: id, store_address: loc?.address ?? '' }))
+  }
+
+  function handleQuickStoreChange(id: string) {
+    const loc = locations.find(l => l.id === id)
+    setQuickForm(f => ({ ...f, store_location_id: id, store_address: loc?.address ?? '' }))
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -250,6 +315,34 @@ export default function DmVisitPage() {
       alert(`Error: ${err instanceof Error ? err.message : 'Something went wrong. Please try again.'}`)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  async function handleQuickSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setQuickError('')
+    if (!quickForm.store_address) { setQuickError('Please select a store.'); return }
+    if (!quickForm.quick_takeaways.trim()) { setQuickError('Key Visit Takeaways is required.'); return }
+    if (!quickForm.quick_actions.trim()) { setQuickError('Actions/Commitments is required.'); return }
+    if (!quickForm.quick_impact.trim()) { setQuickError('DM Visit Impact Made is required.'); return }
+    setQuickSubmitting(true)
+    try {
+      const res = await fetch('/api/dm-store-visits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ visit_type: 'quick', ...quickForm }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setQuickError(d.error ?? 'Submission failed.')
+        return
+      }
+      setQuickSubmitted(true)
+      setQuickForm({ store_location_id: '', store_address: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+    } catch {
+      setQuickError('Network error. Please try again.')
+    } finally {
+      setQuickSubmitting(false)
     }
   }
 
@@ -298,6 +391,97 @@ export default function DmVisitPage() {
     loadLocations()
   }
 
+  async function saveCapacity(id: string, capacity: 1 | 2) {
+    await fetch('/api/dm-store-locations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, employee_capacity: capacity }),
+    })
+    loadLocations()
+  }
+
+  async function saveStoreEdit(id: string) {
+    if (!editingAddress.trim()) return
+    setStoreSaving(true)
+    await fetch('/api/dm-store-locations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, address: editingAddress.trim(), employee_capacity: editingCapacity }),
+    })
+    setStoreSaving(false)
+    setEditingStoreId(null)
+    setEditingAddress('')
+    loadLocations()
+  }
+
+  async function saveBulkCapacity() {
+    if (bulkCapStores.size === 0) return
+    setBulkCapSaving(true)
+    setBulkCapResult(null)
+    try {
+      const res = await fetch('/api/dm-store-locations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...bulkCapStores], employee_capacity: bulkCapValue }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Server error')
+      setBulkCapResult(`Updated ${bulkCapStores.size} store${bulkCapStores.size !== 1 ? 's' : ''} to ${bulkCapValue}-employee capacity.`)
+      setBulkCapStores(new Set())
+      loadLocations()
+    } catch (err) {
+      setBulkCapResult(`Error: ${err instanceof Error ? err.message : 'Something went wrong'}`)
+    } finally {
+      setBulkCapSaving(false)
+    }
+  }
+
+  async function loadDmAssignments(managerId: string) {
+    const res = await fetch(`/api/dm-manager-stores?managerId=${managerId}`)
+    const data = await res.json()
+    setDmAssignStores(new Set(data.storeIds || []))
+  }
+
+  async function saveDmAssign() {
+    if (!dmAssignTarget) return
+    setDmAssigning(true)
+    setDmAssignResult(null)
+    try {
+      const res = await fetch('/api/dm-manager-stores', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ managerId: dmAssignTarget, storeIds: [...dmAssignStores] }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Server error')
+      setDmAssignResult(`Saved — ${dmAssignStores.size} store${dmAssignStores.size !== 1 ? 's' : ''} assigned.`)
+    } catch (err) {
+      setDmAssignResult(`Error: ${err instanceof Error ? err.message : 'Something went wrong'}`)
+    } finally {
+      setDmAssigning(false)
+    }
+  }
+
+  async function openHoursPanel(storeId: string) {
+    if (hoursPanel === storeId) { setHoursPanel(null); return }
+    const res = await fetch(`/api/dm-store-hours?storeId=${storeId}`)
+    const data = await res.json()
+    setEditingHours(data.hours ?? [])
+    setHoursPanel(storeId)
+  }
+
+  async function saveHours() {
+    if (!hoursPanel) return
+    setHoursSaving(true)
+    await fetch('/api/dm-store-hours', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: hoursPanel, hours: editingHours }),
+    })
+    setHoursSaving(false)
+    setHoursPanel(null)
+  }
+
   async function assignOrg(removeOrg = false) {
     if (orgAssignStores.size === 0) return
     setOrgAssigning(true)
@@ -336,12 +520,10 @@ export default function DmVisitPage() {
     const res = await fetch(`/api/dm-store-visits/report?${p}`)
     if (res.ok) {
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `dm-visits${repFrom ? `-${repFrom}` : ''}${repTo ? `-to-${repTo}` : ''}.xlsx`
-      a.click()
-      URL.revokeObjectURL(url)
+      await downloadBlob(blob, `dm-visits${repFrom ? `-${repFrom}` : ''}${repTo ? `-to-${repTo}` : ''}.xlsx`)
+    } else {
+      const err = await res.json().catch(() => ({ error: 'Download failed' }))
+      alert(err.error ?? 'Download failed — please try again')
     }
     setDownloading(false)
   }
@@ -368,9 +550,10 @@ export default function DmVisitPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'new', label: 'New Checklist' },
+    { id: 'quick', label: 'Quick Visit' },
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'report', label: 'Download Report' },
-    ...(canManageStores(session.role) ? [{ id: 'stores' as Tab, label: 'Manage Stores' }] : []),
+    ...(canManageStores(session.role) || session.role === 'manager' ? [{ id: 'stores' as Tab, label: 'Manage Stores' }] : []),
   ]
 
   // Dashboard: group by DM, then by store
@@ -383,6 +566,17 @@ export default function DmVisitPage() {
   const totalVisits = dashRows.reduce((s, r) => s + Number(r.count), 0)
 
   const live = form.live_interaction_observed === 'Yes'
+
+  const locationOrgs = [...new Map(
+    locations.filter(l => l.org_id).map(l => [l.org_id, { id: l.org_id!, name: l.org_name! }])
+  ).values()]
+  const dmFilteredLocations = dmAssignOrgFilter
+    ? locations.filter(l => l.org_id === dmAssignOrgFilter)
+    : locations
+  const dmManagers = dmUsers.filter(u => u.role === 'manager')
+  const bulkCapFilteredLocations = bulkCapOrgFilter
+    ? locations.filter(l => l.org_id === bulkCapOrgFilter)
+    : locations
 
   return (
     <div className="min-h-screen bg-gray-950 pb-20 pt-14">
@@ -648,9 +842,128 @@ export default function DmVisitPage() {
         </div>
       )}
 
+      {/* ── QUICK VISIT ── */}
+      {tab === 'quick' && (
+        <div className="max-w-xl mx-auto">
+          {quickSubmitted ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Quick Visit Saved</h2>
+              <p className="text-gray-400 text-sm mb-6">Your quick visit has been recorded.</p>
+              <button onClick={() => setQuickSubmitted(false)} className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors">
+                Submit Another
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleQuickSubmit} className="divide-y divide-gray-800/50">
+              <div className={sectionHeaderCls}>Quick Visit</div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Store Address</label>
+                <select value={quickForm.store_location_id} onChange={e => handleQuickStoreChange(e.target.value)} required className={inputCls}>
+                  <option value="">Select a store</option>
+                  {locations.filter(l => l.active).map(l => (
+                    <option key={l.id} value={l.id}>{l.address}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Observed Customer Interaction Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                <textarea
+                  value={quickForm.quick_interaction_notes}
+                  onChange={e => setQuickForm(f => ({ ...f, quick_interaction_notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Notes on any customer interactions observed…"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Key Visit Takeaways <span className="text-red-500">*</span></label>
+                <textarea
+                  value={quickForm.quick_takeaways}
+                  onChange={e => setQuickForm(f => ({ ...f, quick_takeaways: e.target.value }))}
+                  required
+                  rows={3}
+                  placeholder="What were the main observations from this visit?"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Actions / Commitments <span className="text-red-500">*</span></label>
+                <textarea
+                  value={quickForm.quick_actions}
+                  onChange={e => setQuickForm(f => ({ ...f, quick_actions: e.target.value }))}
+                  required
+                  rows={3}
+                  placeholder="What actions or commitments were made?"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>DM Visit Impact Made <span className="text-red-500">*</span></label>
+                <textarea
+                  value={quickForm.quick_impact}
+                  onChange={e => setQuickForm(f => ({ ...f, quick_impact: e.target.value }))}
+                  required
+                  rows={3}
+                  placeholder="What impact did your visit make?"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              {quickError && (
+                <div className="px-4 py-3 bg-red-900/30 border-b border-red-700/40">
+                  <p className="text-sm text-red-400">{quickError}</p>
+                </div>
+              )}
+
+              <div className="px-4 py-5">
+                <button type="submit" disabled={quickSubmitting}
+                  className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                  {quickSubmitting ? 'Submitting…' : 'Submit Quick Visit'}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
       {/* ── DASHBOARD ── */}
-      {tab === 'dashboard' && (
+      {tab === 'dashboard' && (() => {
+        const normalCount = Number(typeCounts.find(t => t.visit_type === 'normal')?.count ?? 0)
+        const quickCount = Number(typeCounts.find(t => t.visit_type === 'quick')?.count ?? 0)
+        const typeTotal = normalCount + quickCount
+        const normalPct = typeTotal > 0 ? Math.round(normalCount / typeTotal * 100) : 0
+        const quickPct = typeTotal > 0 ? 100 - normalPct : 0
+
+        return (
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
+          {/* View mode toggle */}
+          <div className="flex items-center gap-2">
+            <div className="flex rounded-xl overflow-hidden border border-gray-800">
+              <button
+                onClick={() => setDashViewMode('monthly')}
+                className={`px-4 py-2 text-xs font-semibold transition-colors ${dashViewMode === 'monthly' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setDashViewMode('range')}
+                className={`px-4 py-2 text-xs font-semibold transition-colors ${dashViewMode === 'range' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Custom Range
+              </button>
+            </div>
+          </div>
+
           {/* Filters */}
           <div className="flex flex-wrap gap-2 items-end">
             {canViewAll(session.role) && (
@@ -660,20 +973,53 @@ export default function DmVisitPage() {
                 {dmUsers.map(u => <option key={u.id} value={u.id}>{u.full_name}</option>)}
               </select>
             )}
-            <input type="date" value={dashFrom} onChange={e => setDashFrom(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input type="date" value={dashTo} onChange={e => setDashTo(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <button onClick={loadDashboard}
-              className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-              Filter
-            </button>
+            {dashViewMode === 'monthly' ? (
+              <input
+                type="month"
+                value={dashMonth}
+                onChange={e => setDashMonth(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              />
+            ) : (
+              <>
+                <input type="date" value={dashFrom} onChange={e => setDashFrom(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <input type="date" value={dashTo} onChange={e => setDashTo(e.target.value)}
+                  className="bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <button onClick={loadDashboard}
+                  className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+                  Filter
+                </button>
+              </>
+            )}
           </div>
 
-          {/* Total */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 flex items-center justify-between">
-            <span className="text-gray-400 text-sm font-medium">Total Submissions</span>
-            <span className="text-2xl font-bold text-white">{totalVisits}</span>
+          {/* Summary row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 flex items-center justify-between">
+              <span className="text-gray-400 text-sm font-medium">Total Visits</span>
+              <span className="text-2xl font-bold text-white">{totalVisits}</span>
+            </div>
+            {typeTotal > 0 && (
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
+                <p className="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-2">Visit Types</p>
+                {/* Stacked bar */}
+                <div className="h-2 rounded-full overflow-hidden bg-gray-700 mb-2 flex">
+                  {normalPct > 0 && <div className="bg-violet-500 h-full transition-all" style={{ width: `${normalPct}%` }} />}
+                  {quickPct > 0 && <div className="bg-amber-500 h-full transition-all" style={{ width: `${quickPct}%` }} />}
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
+                    <span className="text-gray-300">{normalPct}% Normal</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
+                    <span className="text-gray-300">{quickPct}% Quick</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* By DM / Store */}
@@ -696,7 +1042,8 @@ export default function DmVisitPage() {
             ))
           )}
         </div>
-      )}
+        )
+      })()}
 
       {/* ── DOWNLOAD REPORT ── */}
       {tab === 'report' && (
@@ -747,8 +1094,10 @@ export default function DmVisitPage() {
       )}
 
       {/* ── MANAGE STORES ── */}
-      {tab === 'stores' && canManageStores(session.role) && (
+      {tab === 'stores' && (canManageStores(session.role) || session.role === 'manager') && (
         <div className="max-w-xl mx-auto px-4 py-4 space-y-4">
+          {/* Admin-only sections: Add/Bulk/Assign — hidden from DMs */}
+          {canManageStores(session.role) && <>
           {/* Add store */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
             <h3 className="text-sm font-bold text-white">Add Store Location</h3>
@@ -845,29 +1194,315 @@ export default function DmVisitPage() {
             </div>
           )}
 
+          {/* Bulk Employee Capacity */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-white">Set Employee Capacity in Bulk</h3>
+            <p className="text-xs text-gray-500">Select stores and set them all to 1 or 2-employee capacity at once.</p>
+
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Set selected to:</span>
+              <button onClick={() => setBulkCapValue(1)}
+                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${bulkCapValue === 1 ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}>
+                1 Employee
+              </button>
+              <button onClick={() => setBulkCapValue(2)}
+                className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition-colors ${bulkCapValue === 2 ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-400 hover:bg-gray-600'}`}>
+                2 Employees
+              </button>
+            </div>
+
+            {locationOrgs.length > 0 && (
+              <select value={bulkCapOrgFilter} onChange={e => setBulkCapOrgFilter(e.target.value)} className={inputCls}>
+                <option value="">— All orgs —</option>
+                {locationOrgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            )}
+
+            <div className="border border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+                <span className="text-xs text-gray-400">{bulkCapStores.size} selected</span>
+                <button
+                  onClick={() => {
+                    const allSelected = bulkCapFilteredLocations.every(l => bulkCapStores.has(l.id))
+                    setBulkCapStores(prev => {
+                      const next = new Set(prev)
+                      if (allSelected) bulkCapFilteredLocations.forEach(l => next.delete(l.id))
+                      else bulkCapFilteredLocations.forEach(l => next.add(l.id))
+                      return next
+                    })
+                  }}
+                  className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors">
+                  {bulkCapFilteredLocations.every(l => bulkCapStores.has(l.id)) ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="max-h-52 overflow-y-auto">
+                {bulkCapFilteredLocations.map(loc => (
+                  <label key={loc.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-gray-800/50 last:border-0 ${
+                    bulkCapStores.has(loc.id) ? 'bg-violet-600/10' : 'hover:bg-gray-800'
+                  }`}>
+                    <input type="checkbox"
+                      checked={bulkCapStores.has(loc.id)}
+                      onChange={() => setBulkCapStores(prev => {
+                        const next = new Set(prev)
+                        next.has(loc.id) ? next.delete(loc.id) : next.add(loc.id)
+                        return next
+                      })}
+                      className="accent-violet-500 w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm text-gray-200 flex-1 min-w-0 truncate">{loc.address}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
+                      (loc.employee_capacity ?? 1) === 2
+                        ? 'text-blue-400 bg-blue-900/30'
+                        : 'text-gray-500 bg-gray-800'
+                    }`}>
+                      {loc.employee_capacity ?? 1} emp
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {bulkCapResult && (
+              <p className={`text-xs font-medium ${bulkCapResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{bulkCapResult}</p>
+            )}
+            <button onClick={saveBulkCapacity}
+              disabled={bulkCapSaving || bulkCapStores.size === 0}
+              className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+              {bulkCapSaving ? 'Saving…' : `Set ${bulkCapStores.size || ''} Store${bulkCapStores.size !== 1 ? 's' : ''} to ${bulkCapValue} Employee${bulkCapValue === 2 ? 's' : ''}`}
+            </button>
+          </div>
+
+          {/* Assign Stores to DM */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+            <h3 className="text-sm font-bold text-white">Assign Stores to DM</h3>
+            <p className="text-xs text-gray-500">Select a DM, optionally filter by org, then check the stores to assign. This replaces their current assignments.</p>
+
+            <select
+              value={dmAssignTarget}
+              onChange={e => {
+                setDmAssignTarget(e.target.value)
+                setDmAssignResult(null)
+                if (e.target.value) loadDmAssignments(e.target.value)
+                else setDmAssignStores(new Set())
+              }}
+              className={inputCls}>
+              <option value="">— Select DM —</option>
+              {dmManagers.map(u => (
+                <option key={u.id} value={u.id}>{u.full_name}</option>
+              ))}
+            </select>
+
+            {locationOrgs.length > 0 && (
+              <select value={dmAssignOrgFilter} onChange={e => setDmAssignOrgFilter(e.target.value)} className={inputCls}>
+                <option value="">— All orgs —</option>
+                {locationOrgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+              </select>
+            )}
+
+            <div className="border border-gray-700 rounded-xl overflow-hidden">
+              <div className="flex items-center justify-between px-3 py-2 bg-gray-800 border-b border-gray-700">
+                <span className="text-xs text-gray-400">
+                  {dmAssignStores.size} assigned total &middot; {dmFilteredLocations.filter(l => dmAssignStores.has(l.id)).length} in view
+                </span>
+                <button
+                  onClick={() => {
+                    const allSelected = dmFilteredLocations.every(l => dmAssignStores.has(l.id))
+                    setDmAssignStores(prev => {
+                      const next = new Set(prev)
+                      if (allSelected) dmFilteredLocations.forEach(l => next.delete(l.id))
+                      else dmFilteredLocations.forEach(l => next.add(l.id))
+                      return next
+                    })
+                  }}
+                  className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors">
+                  {dmFilteredLocations.every(l => dmAssignStores.has(l.id)) ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="max-h-52 overflow-y-auto">
+                {dmFilteredLocations.map(loc => (
+                  <label key={loc.id} className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors border-b border-gray-800/50 last:border-0 ${
+                    dmAssignStores.has(loc.id) ? 'bg-violet-600/10' : 'hover:bg-gray-800'
+                  }`}>
+                    <input type="checkbox"
+                      checked={dmAssignStores.has(loc.id)}
+                      onChange={() => setDmAssignStores(prev => {
+                        const next = new Set(prev)
+                        next.has(loc.id) ? next.delete(loc.id) : next.add(loc.id)
+                        return next
+                      })}
+                      className="accent-violet-500 w-4 h-4 flex-shrink-0" />
+                    <span className="text-sm text-gray-200 flex-1 min-w-0 truncate">{loc.address}</span>
+                    {loc.org_name && (
+                      <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded-full flex-shrink-0">{loc.org_name}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {dmAssignResult && (
+              <p className={`text-xs font-medium ${dmAssignResult.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{dmAssignResult}</p>
+            )}
+            <button onClick={saveDmAssign}
+              disabled={dmAssigning || !dmAssignTarget}
+              className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+              {dmAssigning ? 'Saving…' : 'Save DM Assignments'}
+            </button>
+          </div>
+          </>}
+
           {/* Store list */}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-800">
               <span className="text-sm font-bold text-white">All Locations ({locations.length})</span>
             </div>
             {locations.map(loc => (
-              <div key={loc.id} className="flex items-center gap-3 px-4 py-3 border-b border-gray-800/50 last:border-0">
-                <div className="flex-1 min-w-0">
-                  <span className={`text-sm ${loc.active ? 'text-gray-200' : 'text-gray-600 line-through'}`}>
-                    {loc.address}
-                  </span>
-                  {loc.org_name && (
-                    <span className="ml-2 text-xs text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded-full">{loc.org_name}</span>
+              <div key={loc.id} className="border-b border-gray-800/50 last:border-0">
+                {/* Store row */}
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <div className="flex-1 min-w-0">
+                    {editingStoreId === loc.id ? (
+                      <div className="space-y-1.5">
+                        <input
+                          value={editingAddress}
+                          onChange={e => setEditingAddress(e.target.value)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveStoreEdit(loc.id); if (e.key === 'Escape') { setEditingStoreId(null); setEditingAddress('') } }}
+                          className="w-full bg-gray-800 border border-gray-600 text-gray-200 text-sm rounded-lg px-2 py-1 focus:outline-none focus:border-blue-500"
+                          autoFocus
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-gray-500">Capacity:</span>
+                          <button onClick={() => setEditingCapacity(1)}
+                            className={`text-xs px-2 py-0.5 rounded-md font-semibold transition-colors ${editingCapacity === 1 ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
+                            1 Employee
+                          </button>
+                          <button onClick={() => setEditingCapacity(2)}
+                            className={`text-xs px-2 py-0.5 rounded-md font-semibold transition-colors ${editingCapacity === 2 ? 'bg-violet-600 text-white' : 'bg-gray-700 text-gray-400'}`}>
+                            2 Employees
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <span className={`text-sm ${loc.active ? 'text-gray-200' : 'text-gray-600 line-through'}`}>
+                          {loc.address}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs text-gray-500">{loc.employee_capacity ?? 1} emp</span>
+                          {loc.org_name && (
+                            <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded-full">{loc.org_name}</span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {editingStoreId === loc.id ? (
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={() => saveStoreEdit(loc.id)} disabled={storeSaving}
+                        className="text-xs font-semibold px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white transition-colors">
+                        Save
+                      </button>
+                      <button onClick={() => { setEditingStoreId(null); setEditingAddress(''); setEditingCapacity(1) }}
+                        className="text-xs font-semibold px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 flex-shrink-0">
+                      <button onClick={() => openHoursPanel(loc.id)}
+                        className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors ${hoursPanel === loc.id ? 'bg-amber-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}>
+                        Hours
+                      </button>
+                      {session.role === 'manager' && (
+                        <button
+                          onClick={() => saveCapacity(loc.id, (loc.employee_capacity ?? 1) === 1 ? 2 : 1)}
+                          className="text-xs font-semibold px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                          title="Toggle employee capacity"
+                        >
+                          {loc.employee_capacity ?? 1} emp
+                        </button>
+                      )}
+                      {canManageStores(session.role) && <>
+                      <button onClick={() => { setEditingStoreId(loc.id); setEditingAddress(loc.address); setEditingCapacity((loc.employee_capacity ?? 1) as 1 | 2) }}
+                        className="text-xs font-semibold px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">
+                        Edit
+                      </button>
+                      <button onClick={() => toggleStore(loc.id, loc.active)}
+                        className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors ${
+                          loc.active
+                            ? 'bg-red-900/40 text-red-400 hover:bg-red-900/60'
+                            : 'bg-green-900/40 text-green-400 hover:bg-green-900/60'
+                        }`}>
+                        {loc.active ? 'Deactivate' : 'Reactivate'}
+                      </button>
+                      </>}
+                    </div>
                   )}
                 </div>
-                <button onClick={() => toggleStore(loc.id, loc.active)}
-                  className={`text-xs font-semibold px-3 py-1 rounded-lg transition-colors flex-shrink-0 ${
-                    loc.active
-                      ? 'bg-red-900/40 text-red-400 hover:bg-red-900/60'
-                      : 'bg-green-900/40 text-green-400 hover:bg-green-900/60'
-                  }`}>
-                  {loc.active ? 'Deactivate' : 'Reactivate'}
-                </button>
+
+                {/* Hours panel */}
+                {hoursPanel === loc.id && (
+                  <div className="px-4 pb-4 pt-1 border-t border-gray-800 bg-gray-950/50">
+                    <p className="text-xs font-semibold text-amber-400 mb-3">Operating Hours</p>
+                    <div className="space-y-2">
+                      {editingHours.map((h, i) => (
+                        <div key={h.day_of_week} className="flex items-center gap-2">
+                          <span className="text-xs text-gray-400 w-24 flex-shrink-0">{DAY_NAMES[h.day_of_week]}</span>
+                          <label className="flex items-center gap-1.5 flex-shrink-0">
+                            <input
+                              type="checkbox"
+                              checked={h.is_closed}
+                              onChange={e => {
+                                const next = [...editingHours]
+                                next[i] = { ...h, is_closed: e.target.checked }
+                                setEditingHours(next)
+                              }}
+                              className="accent-red-500 w-3.5 h-3.5"
+                            />
+                            <span className="text-xs text-gray-500">Closed</span>
+                          </label>
+                          {!h.is_closed && (
+                            <>
+                              <input
+                                type="time"
+                                value={h.open_time.slice(0, 5)}
+                                onChange={e => {
+                                  const next = [...editingHours]
+                                  next[i] = { ...h, open_time: e.target.value }
+                                  setEditingHours(next)
+                                }}
+                                className="bg-gray-800 border border-gray-700 text-gray-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500"
+                              />
+                              <span className="text-xs text-gray-600">–</span>
+                              <input
+                                type="time"
+                                value={h.close_time.slice(0, 5)}
+                                onChange={e => {
+                                  const next = [...editingHours]
+                                  next[i] = { ...h, close_time: e.target.value }
+                                  setEditingHours(next)
+                                }}
+                                className="bg-gray-800 border border-gray-700 text-gray-200 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-amber-500"
+                              />
+                            </>
+                          )}
+                          {h.is_closed && (
+                            <span className="text-xs text-red-400 italic">Closed</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 mt-4">
+                      <button onClick={saveHours} disabled={hoursSaving}
+                        className="flex-1 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-semibold py-2 rounded-xl transition-colors">
+                        {hoursSaving ? 'Saving…' : 'Save Hours'}
+                      </button>
+                      <button onClick={() => setHoursPanel(null)}
+                        className="px-4 bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs font-semibold py-2 rounded-xl transition-colors">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

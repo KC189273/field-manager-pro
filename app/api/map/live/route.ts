@@ -1,24 +1,31 @@
 import { NextResponse } from 'next/server'
-import { getSession, isManager, isOwner } from '@/lib/auth'
+import { getSession, isOwner } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
+import { computeStops, matchStopsToStores, type StoreLocation } from '@/lib/gps'
 
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const canViewAll = isManager(session.role) || isOwner(session.role) || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'developer'
+  const isDM = session.role === 'manager'
 
   const orgFilter = await getOrgFilter(session)
   const params: unknown[] = []
   let userFilter = ''
 
-  if (!canViewAll) {
+  if (canViewAll) {
+    // Owners / ops_manager / developer see all users in org
+    userFilter += appendOrgFilter(orgFilter, params, 'u')
+  } else if (isDM) {
+    // DM sees themselves + their direct employees only
+    params.push(session.id)
+    userFilter = ` AND (s.user_id = $${params.length} OR (u.manager_id = $${params.length} AND u.role = 'employee'))`
+  } else {
     // Employees only see themselves
     params.push(session.id)
     userFilter = ` AND s.user_id = $${params.length}`
-  } else {
-    userFilter += appendOrgFilter(orgFilter, params, 'u')
   }
 
   const employees = await query<{
@@ -74,5 +81,22 @@ export async function GET() {
       )
     : []
 
-  return NextResponse.json({ employees, breadcrumbs })
+  const rawStops = computeStops(breadcrumbs)
+
+  // Fetch store locations for all visible DM shifts so we can match stops to stores
+  const dmUserIds = employees.filter(e => e.user_role === 'manager').map(e => e.user_id)
+  let stores: StoreLocation[] = []
+  if (dmUserIds.length > 0) {
+    stores = await query<StoreLocation>(`
+      SELECT DISTINCT dsl.id, dsl.address, dsl.lat::float, dsl.lng::float
+      FROM dm_store_locations dsl
+      JOIN dm_manager_stores dms ON dms.store_location_id = dsl.id
+      WHERE dms.manager_id = ANY($1)
+        AND dsl.lat IS NOT NULL AND dsl.lng IS NOT NULL
+    `, [dmUserIds])
+  }
+
+  const stops = matchStopsToStores(rawStops, stores)
+
+  return NextResponse.json({ employees, breadcrumbs, stops, stores })
 }

@@ -48,12 +48,13 @@ export async function startNativeTracking(shiftId: string): Promise<void> {
         backgroundTitle: 'Location Active',
         requestPermissions: true,
         stale: false,
-        distanceFilter: 50, // metres — skip update if not moved enough
+        distanceFilter: 0, // fire on any GPS update so stationary stops are detected
       },
       async (position: { latitude: number; longitude: number; accuracy: number } | null, error: { code: string } | null) => {
         if (error) {
           if (error.code === 'NOT_AUTHORIZED') {
             console.warn('Background location permission denied')
+            fetch('/api/gps/location-off', { method: 'POST' }).catch(() => {})
           }
           return
         }

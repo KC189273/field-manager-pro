@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import NavBar from '@/components/NavBar'
+import { downloadBlob } from '@/lib/download'
 
 type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
@@ -142,12 +143,7 @@ export default function PayrollPage() {
       return
     }
     const blob = await res.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = `FMP_ADP_Payroll_${periodStart}_to_${periodEnd}_dm.csv`
-    a.click()
-    URL.revokeObjectURL(objectUrl)
+    await downloadBlob(blob, `FMP_ADP_Payroll_${periodStart}_to_${periodEnd}_dm.csv`)
 
     // Mark as downloaded in local state
     setDownloadedDms(prev => {
@@ -172,12 +168,7 @@ export default function PayrollPage() {
         return
       }
       const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `FMP_ADP_Payroll_${from}_to_${to}.csv`
-      a.click()
-      URL.revokeObjectURL(url)
+      await downloadBlob(blob, `FMP_ADP_Payroll_${from}_to_${to}.csv`)
     } finally {
       setDownloading(false)
     }

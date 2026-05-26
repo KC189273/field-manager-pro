@@ -15,6 +15,58 @@
     {
       "path": "/api/cron/payroll-reminder",
       "schedule": "0 14 * * 1"
+    },
+    {
+      "path": "/api/cron/overstaffing-check",
+      "schedule": "0,30 20-23,0-4 * * *"
+    },
+    {
+      "path": "/api/cron/clock-in-reminder",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/schedule-reminder",
+      "schedule": "0 13 * * 1"
+    },
+    {
+      "path": "/api/cron/dm-roster-check",
+      "schedule": "0 16 * * 1"
+    },
+    {
+      "path": "/api/cron/dm-weekend-plan",
+      "schedule": "0 16 * * 3"
+    },
+    {
+      "path": "/api/cron/task-reminder",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/auto-clockout",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/cron/gps-gap-check",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/supply-escalation",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/task-dispatch",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/task-recur",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/accountability-escalation",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/morning-digest",
+      "schedule": "0 12 * * *"
     }
   ]
 }

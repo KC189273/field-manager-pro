@@ -60,7 +60,8 @@ export async function POST(req: NextRequest) {
     const html = scheduleSubmittedHtml(session.fullName, formatWeekRange(weekDate), dayNames)
 
     const recipients = await query<{ email: string }>(
-      `SELECT email FROM users WHERE role IN ('manager','ops_manager') AND is_active = TRUE`
+      `SELECT email FROM users WHERE role IN ('manager','ops_manager') AND is_active = TRUE AND (org_id = (SELECT org_id FROM users WHERE id = $1) OR org_id IS NULL)`,
+      [session.id]
     )
     const devConfig = await queryOne<{ value: string }>(
       `SELECT value FROM dev_config WHERE key = 'schedule_submit_notify_developer'`

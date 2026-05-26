@@ -23,14 +23,14 @@ export async function GET(req: NextRequest) {
     let sql = `
       SELECT s.*, u.full_name, u.username,
         mb.full_name as manual_by_name,
-        EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) as duration_seconds
+        (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN users mb ON mb.id = s.manual_by
       WHERE u.role != 'developer'
     `
 
-    if (isManager(session.role)) {
+    if (session.role === 'manager') {
       params.push(session.id)
       sql += ` AND u.manager_id = $${params.length}`
     } else {
@@ -180,6 +180,40 @@ export async function PATCH(req: NextRequest) {
       manualTimeEntryHtml(employee[0].full_name, date, inStr, outStr, note, session.fullName)
     )
   }
+
+  return NextResponse.json({ ok: true })
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const { shiftId } = await req.json()
+  if (!shiftId) return NextResponse.json({ error: 'shiftId required' }, { status: 400 })
+
+  const shiftRecord = await queryOne<{ user_id: string; clock_in_at: string }>(
+    'SELECT user_id, clock_in_at FROM shifts WHERE id = $1', [shiftId]
+  )
+  if (!shiftRecord) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
+
+  // DMs can only delete shifts for their direct reports
+  if (session.role === 'manager') {
+    const employee = await queryOne<{ manager_id: string | null }>(
+      'SELECT manager_id FROM users WHERE id = $1', [shiftRecord.user_id]
+    )
+    if (employee?.manager_id !== session.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // Timecard locking check (owners and developers bypass)
+  if (!['owner', 'developer'].includes(session.role)) {
+    const shiftDate = new Date(shiftRecord.clock_in_at).toISOString().split('T')[0]
+    if (await isTimecardLocked(shiftRecord.user_id, shiftDate)) {
+      return NextResponse.json({ error: 'Timecards for this period are locked' }, { status: 403 })
+    }
+  }
+
+  await query('DELETE FROM shift_breaks WHERE shift_id = $1', [shiftId])
+  await query('DELETE FROM shifts WHERE id = $1', [shiftId])
 
   return NextResponse.json({ ok: true })
 }

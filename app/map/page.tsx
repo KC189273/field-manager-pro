@@ -11,6 +11,7 @@ interface Session {
 
 interface Shift {
   id: string
+  user_id: string
   user_role: string
   clock_in_at: string
   clock_in_lat: number | null
@@ -42,6 +43,22 @@ interface LiveEmployee {
   last_seen_at: string
 }
 
+interface GpsStop {
+  shift_id: string
+  lat: number
+  lng: number
+  arrived_at: string
+  departed_at: string | null
+  store_name: string | null
+}
+
+interface StoreLocation {
+  id: string
+  address: string
+  lat: number
+  lng: number
+}
+
 interface User {
   id: string
   full_name: string
@@ -50,8 +67,9 @@ interface User {
 
 const PATH_SOURCE = 'shift-paths'
 const PATH_LAYER = 'shift-paths-line'
+const HEAT_SOURCE = 'heat-source'
+const HEAT_LAYER = 'heat-layer'
 
-// Snap a GPS path to roads.
 async function snapToRoads(coords: [number, number][]): Promise<[number, number][]> {
   if (coords.length < 2) return coords
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN!
@@ -109,7 +127,11 @@ export default function MapPage() {
   const mapRef = useRef<any>(null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<any[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const replayMarkerRef = useRef<any>(null)
+  const replayTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const liveIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const [session, setSession] = useState<Session | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState('')
@@ -117,9 +139,21 @@ export default function MapPage() {
   const [to, setTo] = useState(() => new Date().toLocaleDateString('en-CA'))
   const [loaded, setLoaded] = useState(false)
   const [mapReady, setMapReady] = useState(false)
-  const [liveMode, setLiveMode] = useState(false)
+  const [liveMode, setLiveMode] = useState(true)
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
   const [liveCount, setLiveCount] = useState(0)
+
+  // Heat map
+  const [heatMapMode, setHeatMapMode] = useState(false)
+  const heatCrumbsRef = useRef<Breadcrumb[]>([])
+
+  // Route replay
+  const [replayBreadcrumbs, setReplayBreadcrumbs] = useState<Breadcrumb[]>([])
+  const [isReplaying, setIsReplaying] = useState(false)
+  const [replayIdx, setReplayIdx] = useState(0)
+  const [replaySpeed, setReplaySpeed] = useState(30)
+  const replayIdxRef = useRef(0)
+  const replayBreadcrumbsRef = useRef<Breadcrumb[]>([])
 
   const canViewAll = (role: string) =>
     role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
@@ -135,7 +169,7 @@ export default function MapPage() {
     })
   }, [])
 
-  // Initialize Mapbox
+  // Initialize Mapbox — centered on Milwaukee, WI
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) return
     import('mapbox-gl').then(mapboxgl => {
@@ -143,7 +177,7 @@ export default function MapPage() {
       const map = new mapboxgl.default.Map({
         container: mapContainerRef.current!,
         style: 'mapbox://styles/mapbox/dark-v11',
-        center: [-90.2, 38.6],
+        center: [-87.9065, 43.0389],
         zoom: 9,
       })
       mapRef.current = map
@@ -163,6 +197,13 @@ export default function MapPage() {
     if (map.getSource(PATH_SOURCE)) map.removeSource(PATH_SOURCE)
   }
 
+  const clearHeat = () => {
+    const map = mapRef.current
+    if (!map) return
+    if (map.getLayer(HEAT_LAYER)) map.removeLayer(HEAT_LAYER)
+    if (map.getSource(HEAT_SOURCE)) map.removeSource(HEAT_SOURCE)
+  }
+
   function makeMarkerEl(name: string, color: string) {
     const el = document.createElement('div')
     el.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:3px;cursor:pointer;'
@@ -179,15 +220,158 @@ export default function MapPage() {
     return el
   }
 
+  function makeStopMarkerEl() {
+    const el = document.createElement('div')
+    el.style.cssText = 'width:14px;height:14px;border-radius:50%;background:#a855f7;border:2px solid white;box-shadow:0 0 8px #a855f7aa;cursor:pointer;'
+    return el
+  }
+
+  function makeStoreMarkerEl(_shortAddr: string) {
+    const el = document.createElement('div')
+    el.style.cssText = 'cursor:pointer;'
+    const dot = document.createElement('div')
+    dot.style.cssText = 'width:10px;height:10px;border-radius:50%;background:#0ea5e9;border:2px solid white;box-shadow:0 0 5px #0ea5e9aa;'
+    el.appendChild(dot)
+    return el
+  }
+
+  function stopPopupHtml(name: string, stop: GpsStop) {
+    const tz = 'America/Chicago'
+    const fmt = (iso: string) => new Date(iso).toLocaleTimeString('en-US', { timeZone: tz, hour: 'numeric', minute: '2-digit' })
+    const arrivedStr = fmt(stop.arrived_at)
+    const departedStr = stop.departed_at ? fmt(stop.departed_at) : 'Still here'
+    const endMs = stop.departed_at ? new Date(stop.departed_at).getTime() : Date.now()
+    const totalMins = Math.round((endMs - new Date(stop.arrived_at).getTime()) / 60000)
+    const durationStr = totalMins >= 60
+      ? `${Math.floor(totalMins / 60)}h ${totalMins % 60}m`
+      : `${totalMins}m`
+    const storeRow = stop.store_name
+      ? `<div style="color:#38bdf8;font-size:11px;margin-top:4px">📍 ${stop.store_name.split(',')[0]}</div>`
+      : ''
+    return `
+      <div style="font-size:13px;line-height:1.6">
+        <div style="font-weight:700;font-size:14px;margin-bottom:6px;color:#f9fafb">${name}</div>
+        <div style="color:#c084fc;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">● Stop</div>
+        <div style="color:#d1d5db"><span style="color:#9ca3af">Arrived:</span> ${arrivedStr}</div>
+        <div style="color:#d1d5db"><span style="color:#9ca3af">Left:</span> ${departedStr}</div>
+        <div style="color:#d1d5db"><span style="color:#9ca3af">Duration:</span> ${durationStr}</div>
+        ${storeRow}
+      </div>
+    `
+  }
+
+  // ── Heat map toggle ───────────────────────────────────────────────
+  const toggleHeatMap = useCallback(() => {
+    setHeatMapMode(prev => {
+      const next = !prev
+      const map = mapRef.current
+      if (!map) return next
+
+      if (next) {
+        // Build heatmap from stored breadcrumbs
+        const crumbs = heatCrumbsRef.current.filter(b => !b.is_gap)
+        const features = crumbs.map(c => ({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: [Number(c.lng), Number(c.lat)] },
+          properties: {},
+        }))
+        if (map.getSource(HEAT_SOURCE)) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ;(map.getSource(HEAT_SOURCE) as any).setData({ type: 'FeatureCollection', features })
+        } else {
+          map.addSource(HEAT_SOURCE, { type: 'geojson', data: { type: 'FeatureCollection', features } })
+          map.addLayer({
+            id: HEAT_LAYER,
+            type: 'heatmap',
+            source: HEAT_SOURCE,
+            paint: {
+              'heatmap-weight': 1,
+              'heatmap-intensity': ['interpolate', ['linear'], ['zoom'], 0, 1, 15, 3],
+              'heatmap-color': [
+                'interpolate', ['linear'], ['heatmap-density'],
+                0, 'rgba(0,0,255,0)',
+                0.2, 'rgba(103,0,255,0.6)',
+                0.4, 'rgba(168,0,255,0.7)',
+                0.6, 'rgba(220,50,200,0.8)',
+                0.8, 'rgba(255,100,100,0.9)',
+                1, 'rgba(255,200,0,1)',
+              ],
+              'heatmap-radius': ['interpolate', ['linear'], ['zoom'], 0, 4, 15, 20],
+              'heatmap-opacity': 0.85,
+            },
+          })
+        }
+      } else {
+        clearHeat()
+      }
+      return next
+    })
+  }, [])
+
+  // ── Route replay ──────────────────────────────────────────────────
+  const stopReplay = useCallback(() => {
+    if (replayTimerRef.current) { clearInterval(replayTimerRef.current); replayTimerRef.current = null }
+    if (replayMarkerRef.current) { try { replayMarkerRef.current.remove() } catch { /* */ }; replayMarkerRef.current = null }
+    setIsReplaying(false)
+    setReplayIdx(0)
+    replayIdxRef.current = 0
+  }, [])
+
+  const startReplay = useCallback(() => {
+    const crumbs = replayBreadcrumbsRef.current.filter(b => !b.is_gap)
+    if (crumbs.length < 2) return
+    const map = mapRef.current
+    if (!map) return
+
+    import('mapbox-gl').then(mapboxgl => {
+      // Create replay marker
+      const el = document.createElement('div')
+      el.style.cssText = 'width:16px;height:16px;border-radius:50%;background:#f59e0b;border:2px solid white;box-shadow:0 0 10px #f59e0baa;'
+      const marker = new mapboxgl.default.Marker({ element: el, anchor: 'center' })
+        .setLngLat([Number(crumbs[0].lng), Number(crumbs[0].lat)])
+        .addTo(map)
+      replayMarkerRef.current = marker
+
+      replayIdxRef.current = 0
+      setReplayIdx(0)
+      setIsReplaying(true)
+
+      replayTimerRef.current = setInterval(() => {
+        const idx = replayIdxRef.current + 1
+        if (idx >= crumbs.length) {
+          stopReplay()
+          return
+        }
+        replayIdxRef.current = idx
+        setReplayIdx(idx)
+        const c = crumbs[idx]
+        marker.setLngLat([Number(c.lng), Number(c.lat)])
+        map.easeTo({ center: [Number(c.lng), Number(c.lat)], duration: 200 })
+      }, 1000 / replaySpeed)
+    })
+  }, [replaySpeed, stopReplay])
+
+  useEffect(() => {
+    replayBreadcrumbsRef.current = replayBreadcrumbs
+  }, [replayBreadcrumbs])
+
+  // Cleanup replay on unmount
+  useEffect(() => () => stopReplay(), [stopReplay])
+
+  // ── Live map ───────────────────────────────────────────────────────
   const loadLive = useCallback(async () => {
     if (!mapRef.current || !mapReady) return
 
     const res = await fetch('/api/map/live')
     if (!res.ok) return
-    const { employees, breadcrumbs } = await res.json() as {
+    const { employees, breadcrumbs, stops, stores } = await res.json() as {
       employees: LiveEmployee[]
       breadcrumbs: Breadcrumb[]
+      stops: GpsStop[]
+      stores: StoreLocation[]
     }
+
+    heatCrumbsRef.current = breadcrumbs
 
     const empWithCoords = employees
       .map(emp => ({ ...emp, lat: Number(emp.lat), lng: Number(emp.lng) }))
@@ -198,7 +382,6 @@ export default function MapPage() {
       clearMarkers()
       clearPaths()
 
-      // Build road-matched paths for DM shifts (only for roles that can see paths)
       const role = session?.role ?? ''
       let pathFeatures: object[] = []
 
@@ -265,6 +448,38 @@ export default function MapPage() {
         hasPoints = true
       }
 
+      // Store pins (for roles that can see paths)
+      if (canSeePaths(role) && stores.length > 0) {
+        for (const store of stores) {
+          const shortAddr = store.address.split(',')[0]
+          const el = makeStoreMarkerEl(shortAddr)
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([store.lng, store.lat])
+            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(`
+              <div style="font-size:13px;line-height:1.6">
+                <div style="color:#38bdf8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">● Store</div>
+                <div style="color:#f9fafb;font-weight:600">${store.address}</div>
+              </div>
+            `))
+            .addTo(map)
+          markersRef.current.push(marker)
+        }
+      }
+
+      // Purple stop markers
+      if (canSeePaths(role) && stops.length > 0) {
+        for (const stop of stops) {
+          const emp = empWithCoords.find(e => e.shift_id === stop.shift_id)
+          if (!emp) continue
+          const el = makeStopMarkerEl()
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'center' })
+            .setLngLat([Number(stop.lng), Number(stop.lat)])
+            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(stopPopupHtml(emp.full_name, stop)))
+            .addTo(map)
+          markersRef.current.push(marker)
+        }
+      }
+
       if (hasPoints && !bounds.isEmpty()) {
         map.fitBounds(bounds, { padding: 80, maxZoom: 15 })
       }
@@ -274,8 +489,10 @@ export default function MapPage() {
     })
   }, [mapReady, session])
 
+  // ── Historical map ─────────────────────────────────────────────────
   async function loadMap() {
     if (!mapRef.current || !mapReady || !session) return
+    stopReplay()
 
     const params = new URLSearchParams()
     if (selectedUser) params.set('userId', selectedUser)
@@ -284,17 +501,31 @@ export default function MapPage() {
 
     const res = await fetch(`/api/map?${params}`)
     if (!res.ok) return
-    const { shifts, breadcrumbs }: { shifts: Shift[]; breadcrumbs: Breadcrumb[] } = await res.json()
+    const { shifts, breadcrumbs, stops, stores }: {
+      shifts: Shift[]
+      breadcrumbs: Breadcrumb[]
+      stops: GpsStop[]
+      stores: StoreLocation[]
+    } = await res.json()
+
+    // Store breadcrumbs for heat map and replay
+    heatCrumbsRef.current = breadcrumbs
+    const dmCrumbs = breadcrumbs.filter(b => {
+      const shift = shifts.find(s => s.id === b.shift_id)
+      return shift?.user_role === 'manager'
+    })
+    setReplayBreadcrumbs(dmCrumbs)
+    replayBreadcrumbsRef.current = dmCrumbs
 
     import('mapbox-gl').then(async mapboxgl => {
       const map = mapRef.current
       clearMarkers()
       clearPaths()
+      if (heatMapMode) clearHeat()
 
       const bounds = new mapboxgl.default.LngLatBounds()
       let hasPoints = false
 
-      // Build road-snapped paths for DM shifts (higher roles only)
       let pathFeatures: object[] = []
       if (canSeePaths(session.role) && breadcrumbs.length > 0) {
         const dmShifts = shifts.filter(s => s.user_role === 'manager')
@@ -303,7 +534,7 @@ export default function MapPage() {
           if (shift.clock_in_lat && shift.clock_in_lng)
             coords.push([shift.clock_in_lng, shift.clock_in_lat])
           const crumbs = breadcrumbs.filter(b => b.shift_id === shift.id && !b.is_gap)
-          for (const c of crumbs) coords.push([c.lng, c.lat])
+          for (const c of crumbs) coords.push([Number(c.lng), Number(c.lat)])
           if (shift.clock_out_lat && shift.clock_out_lng)
             coords.push([shift.clock_out_lng, shift.clock_out_lat])
 
@@ -370,6 +601,42 @@ export default function MapPage() {
         }
       }
 
+      // Store pins
+      if (canSeePaths(session.role) && stores.length > 0) {
+        for (const store of stores) {
+          const shortAddr = store.address.split(',')[0]
+          const el = makeStoreMarkerEl(shortAddr)
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'bottom' })
+            .setLngLat([store.lng, store.lat])
+            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(`
+              <div style="font-size:13px;line-height:1.6">
+                <div style="color:#38bdf8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">● Store</div>
+                <div style="color:#f9fafb;font-weight:600">${store.address}</div>
+              </div>
+            `))
+            .addTo(map)
+          markersRef.current.push(marker)
+          bounds.extend([store.lng, store.lat])
+          hasPoints = true
+        }
+      }
+
+      // Purple stop markers
+      if (canSeePaths(session.role) && stops.length > 0) {
+        for (const stop of stops) {
+          const shift = shifts.find(s => s.id === stop.shift_id)
+          if (!shift) continue
+          const el = makeStopMarkerEl()
+          const marker = new mapboxgl.default.Marker({ element: el, anchor: 'center' })
+            .setLngLat([Number(stop.lng), Number(stop.lat)])
+            .setPopup(new mapboxgl.default.Popup({ offset: 10 }).setHTML(stopPopupHtml(shift.full_name, stop)))
+            .addTo(map)
+          markersRef.current.push(marker)
+          bounds.extend([Number(stop.lng), Number(stop.lat)])
+          hasPoints = true
+        }
+      }
+
       if (hasPoints && !bounds.isEmpty()) {
         map.fitBounds(bounds, { padding: 60, maxZoom: 15 })
       }
@@ -410,11 +677,10 @@ export default function MapPage() {
   }, [liveMode, mapReady])
 
   useEffect(() => {
-    if (mapReady && session) loadMap()
+    if (mapReady && session && !liveMode) loadMap()
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapReady, session])
 
-  // Auto-reload when employee filter changes
   useEffect(() => {
     if (mapReady && session && loaded) loadMap()
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -427,6 +693,9 @@ export default function MapPage() {
         return `${Math.floor(secs / 60)}m ago`
       })()
     : null
+
+  const replayCurrentTime = replayBreadcrumbs.filter(b => !b.is_gap)[replayIdx]?.recorded_at
+  const replayTotal = replayBreadcrumbs.filter(b => !b.is_gap).length
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col pb-16 pt-14">
@@ -499,6 +768,62 @@ export default function MapPage() {
               className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
               Load
             </button>
+
+            {/* Heat map toggle */}
+            {session && canSeePaths(session.role) && loaded && (
+              <button
+                onClick={toggleHeatMap}
+                className={`text-sm font-semibold px-4 py-2 rounded-xl transition-colors ${
+                  heatMapMode
+                    ? 'bg-orange-600 hover:bg-orange-500 text-white'
+                    : 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700'
+                }`}
+              >
+                Heat Map
+              </button>
+            )}
+
+            {/* Route replay controls */}
+            {session && canSeePaths(session.role) && replayTotal > 1 && (
+              <div className="flex items-center gap-2">
+                {!isReplaying ? (
+                  <button
+                    onClick={startReplay}
+                    className="bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    ▶ Replay Route
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      onClick={stopReplay}
+                      className="bg-gray-700 hover:bg-gray-600 text-white text-sm font-semibold px-3 py-2 rounded-xl transition-colors"
+                    >
+                      ■ Stop
+                    </button>
+                    <div className="flex items-center gap-1.5 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2">
+                      <span className="text-xs text-amber-400 font-mono">
+                        {replayCurrentTime
+                          ? new Date(replayCurrentTime).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })
+                          : '--'}
+                      </span>
+                      <span className="text-gray-600 text-xs">·</span>
+                      <span className="text-xs text-gray-400">{Math.round((replayIdx / Math.max(replayTotal - 1, 1)) * 100)}%</span>
+                    </div>
+                    <select
+                      value={replaySpeed}
+                      onChange={e => setReplaySpeed(Number(e.target.value))}
+                      className="bg-gray-800 border border-gray-700 rounded-xl px-2 py-2 text-white text-xs"
+                    >
+                      <option value={10}>10×</option>
+                      <option value={30}>30×</option>
+                      <option value={60}>60×</option>
+                      <option value={120}>120×</option>
+                    </select>
+                  </>
+                )}
+              </div>
+            )}
           </>
         )}
 
@@ -513,7 +838,7 @@ export default function MapPage() {
       </div>
 
       {/* Legend */}
-      <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex items-center gap-4">
+      <div className="px-4 py-2 bg-gray-900 border-b border-gray-800 flex items-center gap-4 flex-wrap">
         {liveMode ? (
           <>
             <div className="flex items-center gap-1.5">
@@ -521,10 +846,20 @@ export default function MapPage() {
               <span className="text-xs text-gray-400">Currently clocked in</span>
             </div>
             {session && canSeePaths(session.role) && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-8 block rounded" style={{ height: '3px', background: '#22c55e' }} />
-                <span className="text-xs text-gray-400">DM route</span>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-8 block rounded" style={{ height: '3px', background: '#22c55e' }} />
+                  <span className="text-xs text-gray-400">DM route</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full block" style={{ background: '#a855f7', boxShadow: '0 0 6px #a855f7aa' }} />
+                  <span className="text-xs text-gray-400">30+ min stop</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full block" style={{ background: '#0ea5e9', boxShadow: '0 0 5px #0ea5e9aa' }} />
+                  <span className="text-xs text-gray-400">Store</span>
+                </div>
+              </>
             )}
           </>
         ) : (
@@ -538,10 +873,30 @@ export default function MapPage() {
               <span className="text-xs text-gray-400">Clock Out</span>
             </div>
             {session && canSeePaths(session.role) && (
-              <div className="flex items-center gap-1.5">
-                <span className="w-8 block rounded" style={{ height: '3px', background: '#818cf8' }} />
-                <span className="text-xs text-gray-400">DM route</span>
-              </div>
+              <>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-8 block rounded" style={{ height: '3px', background: '#818cf8' }} />
+                  <span className="text-xs text-gray-400">DM route</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full block" style={{ background: '#a855f7', boxShadow: '0 0 6px #a855f7aa' }} />
+                  <span className="text-xs text-gray-400">30+ min stop</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-3 rounded-full block" style={{ background: '#0ea5e9', boxShadow: '0 0 5px #0ea5e9aa' }} />
+                  <span className="text-xs text-gray-400">Store</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-4 h-2 rounded block" style={{ background: 'linear-gradient(to right, #6300ff, #ff64c8, #ffc800)' }} />
+                  <span className="text-xs text-gray-400">Heat</span>
+                </div>
+                {replayTotal > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full block" style={{ background: '#f59e0b', boxShadow: '0 0 6px #f59e0baa' }} />
+                    <span className="text-xs text-gray-400">Replay marker</span>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}

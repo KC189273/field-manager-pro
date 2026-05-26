@@ -18,11 +18,19 @@ let registered = false
 /**
  * Request push permission and register device token with the server.
  * Safe to call multiple times — only runs once per session.
+ * Pass force=true to re-run even if already called this session.
  */
-export async function registerForPushNotifications(): Promise<void> {
-  if (registered) return
+export async function registerForPushNotifications(force = false): Promise<string> {
+  if (registered && !force) return 'already-registered-this-session'
+
+  if (typeof window === 'undefined') return 'server-side'
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const Capacitor = (window as any).Capacitor
+  if (!Capacitor) return 'capacitor-not-loaded'
+  if (!Capacitor.isNativePlatform?.()) return 'not-native-platform'
+
   const plugin = getPushPlugin()
-  if (!plugin) return
+  if (!plugin) return 'push-plugin-not-available (app may need update)'
   registered = true
 
   try {
@@ -31,28 +39,45 @@ export async function registerForPushNotifications(): Promise<void> {
     if (permStatus.receive === 'prompt') {
       permStatus = await plugin.requestPermissions()
     }
-    if (permStatus.receive !== 'granted') return
+    if (permStatus.receive !== 'granted') return `permission-${permStatus.receive}`
 
-    // Register with APNs / FCM
-    await plugin.register()
+    // Add listeners BEFORE calling register() to avoid missing the event
+    return await new Promise<string>((resolve) => {
+      plugin.addListener('registration', async (token: { value: string }) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const platform = (window as any).Capacitor?.getPlatform?.() ?? 'ios'
+        try {
+          await fetch('/api/push/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: token.value, platform }),
+          })
+          resolve('registered:' + token.value.slice(0, 8) + '…')
+        } catch (e) {
+          resolve('fetch-failed:' + String(e))
+        }
+      })
 
-    // On successful registration, send token to server
-    plugin.addListener('registration', async (token: { value: string }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const platform = (window as any).Capacitor?.getPlatform?.() ?? 'ios'
-      try {
-        await fetch('/api/push/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: token.value, platform }),
-        })
-      } catch { /* non-fatal */ }
-    })
+      plugin.addListener('registrationError', (err: unknown) => {
+        resolve('apns-error:' + String(err))
+      })
 
-    plugin.addListener('registrationError', (err: unknown) => {
-      console.error('Push registration error:', err)
+      // Handle notification taps — navigate to the relevant section
+      plugin.addListener('pushNotificationActionPerformed', (action: { notification: { data?: Record<string, string> } }) => {
+        const path = action.notification?.data?.path
+        if (path && typeof window !== 'undefined') {
+          window.location.href = path
+        }
+      })
+
+      // Timeout after 10s
+      setTimeout(() => resolve('timeout'), 10000)
+
+      // Register with APNs after listeners are in place
+      plugin.register().catch((e: unknown) => resolve('register-failed:' + String(e)))
     })
   } catch (e) {
     console.error('registerForPushNotifications error:', e)
+    return 'exception:' + String(e)
   }
 }

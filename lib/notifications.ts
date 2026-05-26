@@ -2,13 +2,19 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
-export async function sendEmail(to: string | string[], subject: string, html: string): Promise<void> {
+export async function sendEmail(
+  to: string | string[],
+  subject: string,
+  html: string,
+  attachments?: { filename: string; content: string }[]
+): Promise<void> {
   try {
     await resend.emails.send({
       from: process.env.REPORT_EMAIL_FROM!,
       to: Array.isArray(to) ? to : [to],
       subject,
       html,
+      ...(attachments?.length ? { attachments } : {}),
     })
   } catch (e) {
     console.error('Email send failed:', e)
@@ -251,6 +257,109 @@ export function passwordResetHtml(fullName: string, resetUrl: string): string {
   `
 }
 
+export function overstaffingAlertHtml(dmName: string, storeAddress: string, employeeNames: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#dc2626;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Overstaffing Alert</p>
+      </div>
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:16px;font-weight:700;color:#b91c1c;margin:0 0 12px;">Action Required: Too Many Employees Clocked In</p>
+        <p style="font-size:14px;color:#555;margin:0 0 6px;">Hi ${dmName},</p>
+        <p style="font-size:14px;color:#555;margin:0 0 16px;">Your 1-employee store has had two employees clocked in together for over an hour. One needs to be sent home.</p>
+        <div style="background:white;border:1px solid #fca5a5;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <p style="font-size:13px;color:#8e8e93;font-weight:600;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;">Store</p>
+          <p style="font-size:15px;font-weight:600;color:#1c1c1e;margin:0 0 12px;">${storeAddress}</p>
+          <p style="font-size:13px;color:#8e8e93;font-weight:600;margin:0 0 4px;text-transform:uppercase;letter-spacing:0.5px;">Employees Clocked In</p>
+          <p style="font-size:15px;font-weight:600;color:#b91c1c;margin:0;">${employeeNames}</p>
+        </div>
+        <a href="${appUrl}/timecards" style="display:inline-block;background:#dc2626;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Timecards</a>
+      </div>
+    </div>
+  `
+}
+
+export function timeOffRequestedHtml(approverName: string, requesterName: string, startDate: string, endDate: string, reason: string | null): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const dateRange = startDate === endDate ? startDate : `${startDate} – ${endDate}`
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Time Off Request</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;color:#1c1c1e;margin:0 0 16px;">Hi ${approverName}, <strong>${requesterName}</strong> has submitted a time off request for your approval.</p>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:80px;">Dates</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;">${dateRange}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Reason</td><td style="padding:5px 0;color:#1c1c1e;">${reason ?? '—'}</td></tr>
+          </table>
+        </div>
+        <a href="${appUrl}/time-off" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">Review Request</a>
+      </div>
+    </div>
+  `
+}
+
+export function timeOffDecisionHtml(requesterName: string, status: 'approved' | 'denied', startDate: string, endDate: string, notes: string | null): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const dateRange = startDate === endDate ? startDate : `${startDate} – ${endDate}`
+  const isApproved = status === 'approved'
+  const headerBg = isApproved ? '#16a34a' : '#b91c1c'
+  const badgeBg = isApproved ? '#e8f5e9' : '#fbe9e7'
+  const badgeColor = isApproved ? '#2e7d32' : '#bf360c'
+  const label = isApproved ? 'Time Off Approved' : 'Time Off Request Denied'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:${headerBg};padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">${label}</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <div style="background:${badgeBg};border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+          <p style="font-size:16px;font-weight:700;color:${badgeColor};margin:0 0 4px;">${label}</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${requesterName}, your time off request has been ${status}.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:${notes ? '16px' : '20px'};">
+          <table style="width:100%;border-collapse:collapse;font-size:14px;">
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;width:80px;">Dates</td><td style="padding:5px 0;color:#1c1c1e;font-weight:700;">${dateRange}</td></tr>
+            <tr><td style="padding:5px 0;color:#8e8e93;font-weight:600;">Status</td><td style="padding:5px 0;color:${badgeColor};font-weight:700;">${status.charAt(0).toUpperCase() + status.slice(1)}</td></tr>
+          </table>
+        </div>
+        ${notes ? `<div style="background:#fff3e0;border-radius:8px;padding:12px 14px;margin-bottom:20px;"><p style="font-size:13px;font-weight:600;color:#e65100;margin:0 0 4px;">Note:</p><p style="font-size:14px;color:#555;margin:0;">${notes}</p></div>` : ''}
+        <a href="${appUrl}/time-off" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View in FMP</a>
+      </div>
+    </div>
+  `
+}
+
+export function taskReminderHtml(assigneeName: string, title: string, description: string | null, dueDate: string, assignerName: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#b45309;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Task Reminder</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <div style="background:#fff7ed;border-radius:10px;padding:14px 18px;margin-bottom:16px;">
+          <p style="font-size:16px;font-weight:700;color:#92400e;margin:0 0 4px;">⏰ Reminder: Task Pending</p>
+          <p style="font-size:14px;color:#555;margin:0;">Hi ${assigneeName}, you have an incomplete task assigned by <strong>${assignerName}</strong>.</p>
+        </div>
+        <div style="background:#f2f2f7;border-radius:10px;padding:16px 20px;margin-bottom:20px;">
+          <p style="font-size:15px;font-weight:600;color:#1c1c1e;margin:0 0 6px;">${title}</p>
+          ${description ? `<p style="font-size:14px;color:#555;margin:0 0 8px;">${description}</p>` : ''}
+          <p style="font-size:13px;color:#b91c1c;font-weight:600;margin:0;">Due: ${dueDate}</p>
+        </div>
+        <a href="${appUrl}/tasks" style="display:inline-block;background:#b45309;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">Complete Task</a>
+      </div>
+    </div>
+  `
+}
+
 export function taskCompletedHtml(assignerName: string, assigneeName: string, title: string, note: string | null, completedAt: string): string {
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
   return `
@@ -270,6 +379,140 @@ export function taskCompletedHtml(assignerName: string, assigneeName: string, ti
         </div>
         ${note ? `<div style="background:#fff3e0;border-radius:8px;padding:12px 14px;margin-bottom:20px;"><p style="font-size:13px;font-weight:600;color:#e65100;margin:0 0 4px;">Note:</p><p style="font-size:14px;color:#555;margin:0;">${note}</p></div>` : ''}
         <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Tasks</a>
+      </div>
+    </div>
+  `
+}
+
+
+export function shiftSwapRequestedHtml(targetName: string, requesterName: string, shiftDateLabel: string): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Shift Swap Request</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;color:#1c1c1e;">Hi ${targetName},</p>
+        <p style="font-size:14px;color:#555;"><strong>${requesterName}</strong> has requested to swap their <strong>${shiftDateLabel}</strong> shift with one of yours.</p>
+        <p style="font-size:14px;color:#555;">Open the app to review the details and accept or decline.</p>
+        <a href="${appUrl}/shift-swaps" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;margin-top:8px;">View Swap Request</a>
+      </div>
+    </div>
+  `
+}
+
+interface SwapShiftInfo {
+  shift_date: string
+  start_time: string
+  end_time: string
+}
+
+interface SwapHoursImpact {
+  currentPeriodHours: number
+  projectedPeriodHours: number
+  weekOtRisk: boolean
+  periodOtRisk: boolean
+}
+
+export function shiftSwapDmReviewHtml(opts: {
+  managerName: string
+  requesterName: string
+  targetName: string
+  requesterShift: SwapShiftInfo
+  targetShift: SwapShiftInfo
+  requesterImpact: SwapHoursImpact
+  targetImpact: SwapHoursImpact
+  requesterNote: string | null
+  targetNote: string | null
+}): string {
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+
+  function fmtDate(d: string) {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  }
+  function fmtTime(t: string) {
+    const [h, m] = t.split(':').map(Number)
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+  }
+  function hoursRow(impact: SwapHoursImpact, name: string) {
+    const otBadge = (impact.weekOtRisk || impact.periodOtRisk)
+      ? `<span style="background:#fee2e2;color:#b91c1c;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:700;margin-left:6px;">⚠ OT RISK</span>`
+      : ''
+    const delta = impact.projectedPeriodHours - impact.currentPeriodHours
+    const deltaStr = delta >= 0 ? `+${delta.toFixed(1)}` : delta.toFixed(1)
+    return `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#374151;">${name}</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;text-align:center;">${impact.currentPeriodHours.toFixed(1)}h</td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;text-align:center;">
+          <strong style="color:${impact.periodOtRisk ? '#dc2626' : '#059669'};">${impact.projectedPeriodHours.toFixed(1)}h</strong>
+          <span style="color:#9ca3af;font-size:12px;margin-left:4px;">(${deltaStr}h)</span>
+          ${otBadge}
+        </td>
+      </tr>
+    `
+  }
+
+  const anyOt = opts.requesterImpact.weekOtRisk || opts.requesterImpact.periodOtRisk || opts.targetImpact.weekOtRisk || opts.targetImpact.periodOtRisk
+
+  return `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Shift Swap — Needs Your Approval</p>
+      </div>
+      <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;color:#1c1c1e;">Hi ${opts.managerName},</p>
+        <p style="font-size:14px;color:#555;margin-bottom:20px;"><strong>${opts.requesterName}</strong> and <strong>${opts.targetName}</strong> both agreed to swap shifts and are awaiting your approval.</p>
+
+        ${anyOt ? `<div style="background:#fee2e2;border-radius:8px;padding:12px 16px;margin-bottom:20px;border:1px solid #fca5a5;">
+          <p style="margin:0;color:#b91c1c;font-weight:700;font-size:14px;">⚠ Overtime Alert</p>
+          <p style="margin:4px 0 0;color:#b91c1c;font-size:13px;">If approved, one or more employees may exceed overtime thresholds (40h/week or 80h/period).</p>
+        </div>` : ''}
+
+        <h3 style="color:#374151;font-size:13px;margin:0 0 10px;text-transform:uppercase;letter-spacing:0.05em;">Proposed Swap</h3>
+        <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:8px;overflow:hidden;margin-bottom:20px;font-size:13px;">
+          <tr style="background:#f3f4f6;">
+            <th style="padding:10px 12px;text-align:left;color:#6b7280;font-weight:600;">Employee</th>
+            <th style="padding:10px 12px;text-align:left;color:#6b7280;font-weight:600;">Gives Up</th>
+            <th style="padding:10px 12px;text-align:left;color:#6b7280;font-weight:600;">Takes On</th>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;font-weight:600;color:#111827;">${opts.requesterName}</td>
+            <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${fmtDate(opts.requesterShift.shift_date)}<br><span style="color:#6b7280;">${fmtTime(opts.requesterShift.start_time)} – ${fmtTime(opts.requesterShift.end_time)}</span></td>
+            <td style="padding:10px 12px;border-bottom:1px solid #e5e7eb;color:#374151;">${fmtDate(opts.targetShift.shift_date)}<br><span style="color:#6b7280;">${fmtTime(opts.targetShift.start_time)} – ${fmtTime(opts.targetShift.end_time)}</span></td>
+          </tr>
+          <tr>
+            <td style="padding:10px 12px;font-weight:600;color:#111827;">${opts.targetName}</td>
+            <td style="padding:10px 12px;color:#374151;">${fmtDate(opts.targetShift.shift_date)}<br><span style="color:#6b7280;">${fmtTime(opts.targetShift.start_time)} – ${fmtTime(opts.targetShift.end_time)}</span></td>
+            <td style="padding:10px 12px;color:#374151;">${fmtDate(opts.requesterShift.shift_date)}<br><span style="color:#6b7280;">${fmtTime(opts.requesterShift.start_time)} – ${fmtTime(opts.requesterShift.end_time)}</span></td>
+          </tr>
+        </table>
+
+        <h3 style="color:#374151;font-size:13px;margin:0 0 10px;text-transform:uppercase;letter-spacing:0.05em;">Pay Period Hours (Scheduled)</h3>
+        <table style="width:100%;border-collapse:collapse;background:#f9fafb;border-radius:8px;overflow:hidden;margin-bottom:20px;font-size:13px;">
+          <tr style="background:#f3f4f6;">
+            <th style="padding:10px 12px;text-align:left;color:#6b7280;font-weight:600;">Employee</th>
+            <th style="padding:10px 12px;text-align:center;color:#6b7280;font-weight:600;">Current</th>
+            <th style="padding:10px 12px;text-align:center;color:#6b7280;font-weight:600;">If Approved</th>
+          </tr>
+          ${hoursRow(opts.requesterImpact, opts.requesterName)}
+          ${hoursRow(opts.targetImpact, opts.targetName)}
+        </table>
+
+        ${opts.requesterNote ? `<div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:12px;">
+          <p style="margin:0 0 4px;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Note from ${opts.requesterName}</p>
+          <p style="margin:0;color:#374151;font-size:14px;">${opts.requesterNote}</p>
+        </div>` : ''}
+
+        ${opts.targetNote ? `<div style="background:#f3f4f6;border-radius:8px;padding:12px 16px;margin-bottom:20px;">
+          <p style="margin:0 0 4px;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:0.05em;">Note from ${opts.targetName}</p>
+          <p style="margin:0;color:#374151;font-size:14px;">${opts.targetNote}</p>
+        </div>` : ''}
+
+        <a href="${appUrl}/shift-swaps" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">Review in App</a>
       </div>
     </div>
   `

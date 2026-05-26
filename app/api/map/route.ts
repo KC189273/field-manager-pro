@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession, isManager, isOwner } from '@/lib/auth'
+import { getSession, isOwner } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
+import { computeStops, matchStopsToStores, type StoreLocation } from '@/lib/gps'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -12,9 +13,10 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const canViewAll = isManager(session.role) || isOwner(session.role) || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'developer'
+  const isDM = session.role === 'manager'
 
-  if (userId && userId !== session.id && !canViewAll) {
+  if (userId && userId !== session.id && !canViewAll && !isDM) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -27,9 +29,15 @@ export async function GET(req: NextRequest) {
   let shifts: unknown[]
 
   if (userId) {
-    // Specific user requested
-    params.unshift(userId)
-    // Renumber date params (they were added assuming no userId prefix)
+    // Specific user requested — DMs may only request themselves or their direct employees
+    if (isDM && userId !== session.id) {
+      const allowed = await query<{ id: string }>(
+        `SELECT id FROM users WHERE id = $1 AND manager_id = $2 AND role = 'employee'`,
+        [userId, session.id]
+      )
+      if (allowed.length === 0) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     const reIndexed: unknown[] = [userId]
     if (from) reIndexed.push(from)
     if (to) reIndexed.push(to)
@@ -42,7 +50,7 @@ export async function GET(req: NextRequest) {
     if (to) { df += ` AND s.clock_in_at <= $${i++}` }
 
     shifts = await query(`
-      SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
+      SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
              u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
@@ -50,19 +58,18 @@ export async function GET(req: NextRequest) {
       ORDER BY s.clock_in_at DESC LIMIT 50
     `, params)
   } else if (canViewAll) {
-    // All users in org (or all orgs for developer with no filter)
+    // Owners / developer see all users in org
     const orgClause = appendOrgFilter(orgFilter, params)
     shifts = await query(`
-      SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
+      SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
              u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE 1=1${dateFilter}${orgClause}
       ORDER BY s.clock_in_at DESC LIMIT 200
     `, params)
-  } else {
-    // Employee sees only their own
-    params.unshift(session.id)
+  } else if (isDM) {
+    // DM sees only themselves + their direct employees (role = 'employee')
     const reIndexed: unknown[] = [session.id]
     if (from) reIndexed.push(from)
     if (to) reIndexed.push(to)
@@ -75,7 +82,28 @@ export async function GET(req: NextRequest) {
     if (to) { df += ` AND s.clock_in_at <= $${i++}` }
 
     shifts = await query(`
-      SELECT s.id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
+      SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
+             s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
+             u.full_name, u.username, u.role AS user_role
+      FROM shifts s JOIN users u ON u.id = s.user_id
+      WHERE (s.user_id = $1 OR (u.manager_id = $1 AND u.role = 'employee'))${df}
+      ORDER BY s.clock_in_at DESC LIMIT 200
+    `, params)
+  } else {
+    // Employee sees only their own
+    const reIndexed: unknown[] = [session.id]
+    if (from) reIndexed.push(from)
+    if (to) reIndexed.push(to)
+    params.length = 0
+    params.push(...reIndexed)
+
+    let df = ''
+    let i = 2
+    if (from) { df += ` AND s.clock_in_at >= $${i++}` }
+    if (to) { df += ` AND s.clock_in_at <= $${i++}` }
+
+    shifts = await query(`
+      SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
              u.full_name, u.username, u.role AS user_role
       FROM shifts s JOIN users u ON u.id = s.user_id
@@ -100,5 +128,27 @@ export async function GET(req: NextRequest) {
       `, [dmShiftIds])
     : []
 
-  return NextResponse.json({ shifts, breadcrumbs })
+  const rawStops = computeStops(
+    (breadcrumbs as { shift_id: string; lat: number; lng: number; recorded_at: string; is_gap: boolean }[])
+      .filter(b => !b.is_gap)
+  )
+
+  // Fetch store locations for all DM shifts to match stops + render store pins
+  const dmUserIds = (shifts as { id: string; user_role: string; user_id?: string }[])
+    .filter(s => s.user_role === 'manager' && s.user_id)
+    .map(s => s.user_id!)
+  let stores: StoreLocation[] = []
+  if (dmUserIds.length > 0) {
+    stores = await query<StoreLocation>(`
+      SELECT DISTINCT dsl.id, dsl.address, dsl.lat::float, dsl.lng::float
+      FROM dm_store_locations dsl
+      JOIN dm_manager_stores dms ON dms.store_location_id = dsl.id
+      WHERE dms.manager_id = ANY($1)
+        AND dsl.lat IS NOT NULL AND dsl.lng IS NOT NULL
+    `, [dmUserIds])
+  }
+
+  const stops = matchStopsToStores(rawStops, stores)
+
+  return NextResponse.json({ shifts, breadcrumbs, stops, stores })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, FormEvent } from 'react'
+import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react'
 import NavBar from '@/components/NavBar'
 
 interface Org { id: string; name: string }
@@ -18,7 +18,15 @@ interface User {
   full_name: string
   role: string
   is_active: boolean
+  is_floater: boolean
+  is_ops_collab: boolean
   manager_id: string | null
+  approval_status: string | null
+  created_by: string | null
+  avatar_url: string | null
+  temp_password: string | null
+  must_change_password: boolean | null
+  pay_type: 'salary' | 'hourly'
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -31,7 +39,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '' }
+const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -58,6 +66,13 @@ export default function TeamPage() {
   const [bulkResults, setBulkResults] = useState<{ created: number; errors: number; results: { row: number; username: string; fullName: string; status: 'created' | 'error'; reason?: string }[] } | null>(null)
   const bulkFileRef = useRef<HTMLInputElement>(null)
 
+  const [roleFilter, setRoleFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [viewMode, setViewMode] = useState<'list' | 'tree'>('list')
+  const [treeSelected, setTreeSelected] = useState<User | null>(null)
+  const [showCreatePw, setShowCreatePw] = useState(false)
+  const [showTempPw, setShowTempPw] = useState(false)
+
   const isDev = session?.role === 'developer'
   const isOwner = session?.role === 'owner' || session?.role === 'sales_director'
   const isDevOrOwner = isDev || isOwner
@@ -65,6 +80,20 @@ export default function TeamPage() {
   const canBulkImport = isDev || isOwner || session?.role === 'ops_manager'
   const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
   const employees = users.filter(u => u.role === 'employee')
+
+  const pendingUsers = users.filter(u => u.approval_status === 'pending')
+  const activeUsers = users.filter(u => u.approval_status !== 'pending')
+  const activeMgrs = activeUsers.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
+  const activeEmps = activeUsers.filter(u => u.role === 'employee')
+  const allUsersOrdered = [...activeMgrs, ...activeEmps]
+  const presentRoles = Array.from(new Set(allUsersOrdered.map(u => u.role)))
+  const searchFiltered = searchQuery.trim()
+    ? allUsersOrdered.filter(u =>
+        u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.username.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : allUsersOrdered
+  const filteredUsers = roleFilter === 'all' ? searchFiltered : searchFiltered.filter(u => u.role === roleFilter)
 
   async function loadUsers() {
     const res = await fetch('/api/team/users')
@@ -86,7 +115,26 @@ export default function TeamPage() {
 
   function showMsg(text: string, type: 'success' | 'error' = 'success') {
     setMessage({ text, type })
-    setTimeout(() => setMessage({ text: '', type: 'success' }), 3000)
+    setTimeout(() => setMessage({ text: '', type: 'success' }), 4000)
+  }
+
+  function fullName(role: string) { return ROLE_LABELS[role] ?? 'User' }
+
+  async function approveUser(userId: string, action: 'approve' | 'reject') {
+    const res = await fetch('/api/team/users/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, action }),
+    })
+    const data = await res.json()
+    if (res.ok) {
+      showMsg(action === 'approve'
+        ? 'Employee approved — welcome email sent with login credentials.'
+        : 'Employee rejected and removed.')
+      await loadUsers()
+    } else {
+      showMsg(data.error || 'Action failed', 'error')
+    }
   }
 
   function openCreate(type: 'employee' | 'manager') {
@@ -98,8 +146,9 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '' })
+    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false })
     setShowCreate(false)
+    setShowTempPw(false)
   }
 
   async function createUser(e: FormEvent) {
@@ -113,7 +162,9 @@ export default function TeamPage() {
     const data = await res.json()
     setLoading(false)
     if (res.ok) {
-      showMsg(`${ROLE_LABELS[form.role]} created successfully`)
+      showMsg(data.pending
+        ? `${fullName(form.role)} submitted for approval — they'll receive login details once approved.`
+        : `${fullName(form.role)} created successfully`)
       setShowCreate(false)
       setForm(emptyForm)
       await loadUsers()
@@ -133,6 +184,9 @@ export default function TeamPage() {
     if (editForm.role !== editUser.role) body.role = editForm.role
     if (editForm.role !== 'developer' && editForm.role !== 'owner') body.managerId = editForm.managerId || null
     if (isDev) body.orgId = editForm.orgId || null
+    if (editForm.payType !== (editUser.pay_type ?? 'hourly')) body.payType = editForm.payType
+    if (editUser.role === 'employee' && editForm.isFloater !== (editUser.is_floater ?? false)) body.isFloater = editForm.isFloater
+    if (editUser.role === 'manager' && editForm.isOpsCollab !== (editUser.is_ops_collab ?? false)) body.isOpsCollab = editForm.isOpsCollab
 
     const res = await fetch('/api/team/users', {
       method: 'PATCH',
@@ -240,7 +294,7 @@ export default function TeamPage() {
     <div className="min-h-screen bg-gray-950 pb-20 pt-14">
       {session && <NavBar role={session.role} fullName={session.fullName} />}
 
-      <div className="px-4 pt-6 max-w-lg mx-auto">
+      <div className={`px-4 pt-6 ${viewMode === 'tree' ? '' : 'max-w-lg mx-auto'}`}>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-white">Team</h1>
           {canBulkImport && (
@@ -374,9 +428,15 @@ export default function TeamPage() {
             <input required placeholder="Email" type="email" value={form.email}
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input required placeholder="Temporary password" type="password" value={form.password}
-              onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            <div className="relative">
+              <input required placeholder="Temporary password" type={showCreatePw ? 'text' : 'password'} value={form.password}
+                onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-16 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              <button type="button" onClick={() => setShowCreatePw(p => !p)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-gray-400 hover:text-gray-200 transition-colors">
+                {showCreatePw ? 'Hide' : 'Show'}
+              </button>
+            </div>
             <div>
               <label className="block text-xs text-gray-500 mb-1">Role</label>
               <select value={form.role} onChange={e => setForm(p => ({ ...p, role: e.target.value }))}
@@ -411,66 +471,154 @@ export default function TeamPage() {
           </form>
         )}
 
-        {/* Edit form */}
+        {/* Edit form — modal overlay */}
         {editUser && (
-          <form onSubmit={updateUser} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-3">
-            <h2 className="font-semibold text-white">Edit — {editUser.full_name}</h2>
-            <input placeholder="Full name" value={editForm.fullName}
-              onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input placeholder="Email" type="email" value={editForm.email}
-              onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input placeholder="New password (leave blank to keep)" type="password" value={editForm.password}
-              onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <div>
-              <label className="block text-xs text-gray-500 mb-1">Role</label>
-              <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                <option value="employee">Employee</option>
-                <option value="manager">DM</option>
-                <option value="ops_manager">Ops Manager</option>
-                {(isDev || isOwner) && <option value="sales_director">Sales Director</option>}
-                {isDev && <option value="owner">Owner</option>}
-              </select>
-              {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
-                <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
-              )}
-            </div>
-            {canManageAll && editForm.role !== 'developer' && editForm.role !== 'owner' && editForm.role !== 'sales_director' && managers.length > 0 && (
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
-                <select value={editForm.managerId}
-                  onChange={e => setEditForm(p => ({ ...p, managerId: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                  <option value="">Unassigned</option>
-                  {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
-                </select>
+          <div className="fixed inset-0 z-50 bg-black/60 flex flex-col justify-end" onClick={() => setEditUser(null)}>
+            <div className="bg-gray-900 rounded-t-3xl border-t border-gray-800 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 bg-gray-700 rounded-full" />
               </div>
-            )}
-            {isDev && orgs.length > 0 && (
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Organization</label>
-                <select value={editForm.orgId}
-                  onChange={e => setEditForm(p => ({ ...p, orgId: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
-                  <option value="">Unassigned</option>
-                  {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-                </select>
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button type="submit" disabled={loading}
-                className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-                {loading ? 'Saving…' : 'Save Changes'}
-              </button>
-              <button type="button" onClick={() => setEditUser(null)}
-                className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
-                Cancel
-              </button>
+              <form onSubmit={updateUser} className="px-5 pb-8 pt-3 space-y-3">
+                <h2 className="font-semibold text-white mb-1">Edit — {editUser.full_name}</h2>
+                <input placeholder="Full name" value={editForm.fullName}
+                  onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <input placeholder="Email" type="email" value={editForm.email}
+                  onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                {editUser.temp_password && (
+                  <div className="bg-amber-950/30 border border-amber-700/50 rounded-xl px-4 py-3 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-amber-400">Temporary Password</p>
+                      <button type="button" onClick={() => setShowTempPw(p => !p)}
+                        className="text-xs font-semibold text-gray-400 hover:text-gray-200 transition-colors">
+                        {showTempPw ? 'Hide' : 'Show'}
+                      </button>
+                    </div>
+                    <p className="text-sm font-mono text-white tracking-wide">
+                      {showTempPw ? editUser.temp_password : '••••••••••••'}
+                    </p>
+                    <p className="text-xs text-amber-600">Employee must change this on first login</p>
+                  </div>
+                )}
+                <div className="relative">
+                  <input placeholder="Reset password (leave blank to keep)" type="password" value={editForm.password}
+                    onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Role</label>
+                  <select value={editForm.role} onChange={e => setEditForm(p => ({ ...p, role: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                    <option value="employee">Employee</option>
+                    <option value="manager">DM</option>
+                    <option value="ops_manager">Ops Manager</option>
+                    {(isDev || isOwner) && <option value="sales_director">Sales Director</option>}
+                    {isDev && <option value="owner">Owner</option>}
+                  </select>
+                  {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
+                    <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
+                  )}
+                </div>
+                {editUser.role === 'employee' && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">Floater Status</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(p => ({ ...p, isFloater: !p.isFloater }))}
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-colors ${
+                        editForm.isFloater
+                          ? 'bg-sky-600/15 border-sky-500'
+                          : 'bg-gray-800 border-gray-700'
+                      }`}
+                    >
+                      <div className={`w-10 h-5 rounded-full relative flex-shrink-0 transition-colors ${editForm.isFloater ? 'bg-sky-500' : 'bg-gray-600'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editForm.isFloater ? 'left-5' : 'left-0.5'}`} />
+                      </div>
+                      <span className={`text-sm font-medium ${editForm.isFloater ? 'text-sky-400' : 'text-gray-400'}`}>
+                        {editForm.isFloater ? 'Floater — available across districts' : 'Not a floater'}
+                      </span>
+                    </button>
+                    {editForm.isFloater && (
+                      <p className="text-xs text-gray-500 mt-1">This employee can be scheduled and assigned tasks by any DM in the org.</p>
+                    )}
+                  </div>
+                )}
+                {editUser.role === 'manager' && canManageAll && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">Ops Collaborator</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(p => ({ ...p, isOpsCollab: !p.isOpsCollab }))}
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-colors ${
+                        editForm.isOpsCollab
+                          ? 'bg-violet-600/15 border-violet-500'
+                          : 'bg-gray-800 border-gray-700'
+                      }`}
+                    >
+                      <div className={`w-10 h-5 rounded-full relative flex-shrink-0 transition-colors ${editForm.isOpsCollab ? 'bg-violet-500' : 'bg-gray-600'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editForm.isOpsCollab ? 'left-5' : 'left-0.5'}`} />
+                      </div>
+                      <span className={`text-sm font-medium ${editForm.isOpsCollab ? 'text-violet-400' : 'text-gray-400'}`}>
+                        {editForm.isOpsCollab ? 'Ops Collaborator — sees all org tickets' : 'Standard DM visibility'}
+                      </span>
+                    </button>
+                    {editForm.isOpsCollab && (
+                      <p className="text-xs text-gray-500 mt-1">This DM will see all facility, supply, and merch requests org-wide and receive submission notifications.</p>
+                    )}
+                  </div>
+                )}
+                {canManageAll && editForm.role !== 'developer' && editForm.role !== 'owner' && managers.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
+                    <select value={editForm.managerId}
+                      onChange={e => setEditForm(p => ({ ...p, managerId: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                      <option value="">Unassigned</option>
+                      {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                    </select>
+                  </div>
+                )}
+                {isDev && orgs.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Organization</label>
+                    <select value={editForm.orgId}
+                      onChange={e => setEditForm(p => ({ ...p, orgId: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                      <option value="">Unassigned</option>
+                      {orgs.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1.5">Pay Type</label>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEditForm(p => ({ ...p, payType: 'hourly' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${editForm.payType === 'hourly' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                      Hourly
+                    </button>
+                    <button type="button" onClick={() => setEditForm(p => ({ ...p, payType: 'salary' }))}
+                      className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-colors ${editForm.payType === 'salary' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>
+                      Salary
+                    </button>
+                  </div>
+                  {editForm.payType === 'salary' && (
+                    <p className="text-xs text-gray-500 mt-1">Salary employees won&apos;t be flagged for overtime or scheduling hour limits.</p>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button type="submit" disabled={loading}
+                    className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                    {loading ? 'Saving…' : 'Save Changes'}
+                  </button>
+                  <button type="button" onClick={() => setEditUser(null)}
+                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </form>
             </div>
-          </form>
+          </div>
         )}
 
         {/* Delete confirmation */}
@@ -491,30 +639,132 @@ export default function TeamPage() {
           </div>
         )}
 
+        {/* PENDING APPROVAL SECTION — visible to approvers */}
+        {canManageAll && pendingUsers.length > 0 && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Pending Approval</p>
+              <span className="bg-amber-500 text-black text-xs font-bold px-2 py-0.5 rounded-full">{pendingUsers.length}</span>
+            </div>
+            <div className="space-y-2">
+              {pendingUsers.map(user => {
+                const addedBy = users.find(u => u.id === user.created_by)
+                return (
+                  <div key={user.id} className="bg-amber-950/30 border border-amber-800/50 rounded-2xl px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-white text-sm font-medium">{user.full_name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">@{user.username} · {user.email}</p>
+                        {addedBy && (
+                          <p className="text-xs text-amber-500/80 mt-1">Added by {addedBy.full_name}</p>
+                        )}
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0 mt-0.5">
+                        <button
+                          onClick={() => approveUser(user.id, 'approve')}
+                          className="bg-green-700 hover:bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => approveUser(user.id, 'reject')}
+                          className="bg-gray-800 hover:bg-red-900 text-red-400 hover:text-red-300 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* DEVELOPER / OWNER / OPS MANAGER VIEW */}
         {canManageAll && (
           <>
-            <div className="flex justify-end mb-4">
-              <button onClick={() => { setForm({ ...emptyForm, role: 'employee' }); setShowCreate(true); setEditUser(null) }}
-                className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
-                + Add User
-              </button>
+            {/* Search */}
+            <div className="mb-3">
+              <input
+                type="search"
+                placeholder="Search by name or username…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-600"
+              />
             </div>
 
-            {/* Managers section */}
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">DMs</p>
+            <div className="flex items-center justify-between mb-4 gap-2">
+              {viewMode === 'list' ? (
+                /* Role filter pills */
+                <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                  <button
+                    onClick={() => setRoleFilter('all')}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                      roleFilter === 'all'
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    All
+                  </button>
+                  {presentRoles.map(role => (
+                    <button
+                      key={role}
+                      onClick={() => setRoleFilter(role)}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        roleFilter === role
+                          ? 'bg-violet-600 text-white'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
+                      }`}
+                    >
+                      {ROLE_LABELS[role] ?? role}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex-1">Org Chart</p>
+              )}
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {/* View toggle */}
+                <div className="flex bg-gray-800 rounded-lg p-0.5">
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                      viewMode === 'list' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    List
+                  </button>
+                  <button
+                    onClick={() => setViewMode('tree')}
+                    className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-colors ${
+                      viewMode === 'tree' ? 'bg-gray-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    Org Chart
+                  </button>
+                </div>
+                <button onClick={() => { setForm({ ...emptyForm, role: 'employee' }); setShowCreate(true); setEditUser(null) }}
+                  className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
+                  + Add User
+                </button>
               </div>
-              {managers.length === 0 ? (
-                <p className="text-gray-600 text-sm py-3">No DMs yet</p>
+            </div>
+
+            {viewMode === 'list' ? (
+              filteredUsers.length === 0 ? (
+                <p className="text-gray-600 text-sm py-3">No users found</p>
               ) : (
                 <div className="space-y-2">
-                  {managers.map(user => (
+                  {filteredUsers.map(user => (
                     <div key={user.id}>
                       <UserCard
                         user={user}
-                        subtitle={`${ROLE_LABELS[user.role]} · ${user.email}`}
+                        subtitle={user.role === 'employee'
+                          ? `Employee · Under: ${getManagerName(user.manager_id)} · ${user.pay_type === 'salary' ? 'Salary · ' : ''}${user.email}`
+                          : `${ROLE_LABELS[user.role]}${user.pay_type === 'salary' ? ' · Salary' : ''} · ${user.email}`}
                         onEdit={() => openEdit(user)}
                         onToggle={() => toggleActive(user)}
                         onDelete={() => setConfirmDelete(user)}
@@ -582,32 +832,26 @@ export default function TeamPage() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
-
-            {/* Employees section — grouped by manager */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Employees</p>
-              </div>
-              {employees.length === 0 ? (
-                <p className="text-gray-600 text-sm py-3">No employees yet</p>
-              ) : (
-                <div className="space-y-2">
-                  {employees.map(user => (
-                    <UserCard
-                      key={user.id}
-                      user={user}
-                      subtitle={`Under: ${getManagerName(user.manager_id)} · ${user.email}`}
-                      onEdit={() => openEdit(user)}
-                      onToggle={() => toggleActive(user)}
-                      onDelete={() => setConfirmDelete(user)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+              )
+            ) : (
+              /* Org chart horizontal tree */
+              <OrgChart users={allUsersOrdered} onSelect={setTreeSelected} />
+            )}
           </>
+        )}
+
+        {/* Node detail sheet */}
+        {treeSelected && (
+          <NodeDetailSheet
+            user={treeSelected}
+            allUsers={allUsersOrdered}
+            onClose={() => setTreeSelected(null)}
+            onEdit={u => { openEdit(u); setTreeSelected(null) }}
+            onToggle={u => { toggleActive(u); setTreeSelected(null) }}
+            onDelete={u => { setConfirmDelete(u); setTreeSelected(null) }}
+            canManage={canManageAll}
+            onRefresh={() => { loadUsers(); setTreeSelected(null) }}
+          />
         )}
 
         {/* MANAGER VIEW */}
@@ -620,25 +864,383 @@ export default function TeamPage() {
                 + Add Employee
               </button>
             </div>
+            <div className="mb-3">
+              <input
+                type="search"
+                placeholder="Search by name or username…"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-600"
+              />
+            </div>
             {users.length === 0 ? (
               <p className="text-gray-600 text-sm py-3">No employees assigned yet</p>
             ) : (
               <div className="space-y-2">
-                {users.map(user => (
-                  <UserCard
-                    key={user.id}
-                    user={user}
-                    subtitle={user.email}
-                    onEdit={() => openEdit(user)}
-                    onToggle={() => toggleActive(user)}
-                    onDelete={() => setConfirmDelete(user)}
-                  />
+                {users.filter(u =>
+                  !searchQuery.trim() ||
+                  u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                  u.username.toLowerCase().includes(searchQuery.toLowerCase())
+                ).map(user => (
+                  user.approval_status === 'pending' ? (
+                    <div key={user.id} className="bg-gray-900 border border-amber-800/40 rounded-2xl px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-white text-sm font-medium">{user.full_name}</p>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-900/40 text-amber-400">Pending Approval</span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5">@{user.username} · {user.email}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <UserCard
+                      key={user.id}
+                      user={user}
+                      subtitle={`${user.is_floater ? 'Floater · ' : ''}${user.pay_type === 'salary' ? 'Salary · ' : ''}${user.email}`}
+                      onEdit={() => openEdit(user)}
+                      onToggle={() => toggleActive(user)}
+                      onDelete={() => setConfirmDelete(user)}
+                    />
+                  )
                 ))}
               </div>
             )}
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+const ROLE_COLORS: Record<string, string> = {
+  developer: 'text-red-400 bg-red-900/30',
+  owner: 'text-amber-400 bg-amber-900/30',
+  sales_director: 'text-orange-400 bg-orange-900/30',
+  ops_manager: 'text-blue-400 bg-blue-900/30',
+  manager: 'text-violet-400 bg-violet-900/30',
+  employee: 'text-gray-400 bg-gray-800',
+}
+
+function initials(name: string) {
+  return name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+}
+
+const SIBLING_GAP = 12 // px — gap between sibling subtrees (gap-3)
+const SIBLING_GAP_HALF = SIBLING_GAP / 2
+
+function OrgChart({ users, onSelect }: { users: User[]; onSelect: (u: User) => void }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
+  function toggleCollapse(id: string) {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  // Developers are platform admins — exclude from the field team hierarchy
+  const chartUsers = users.filter(u => u.role !== 'developer')
+  const userIds = new Set(chartUsers.map(u => u.id))
+  const roleOrder: Record<string, number> = { owner: 0, sales_director: 1, ops_manager: 2, manager: 3, employee: 4 }
+  const roots = chartUsers
+    .filter(u => !u.manager_id || !userIds.has(u.manager_id))
+    .sort((a, b) => (roleOrder[a.role] ?? 5) - (roleOrder[b.role] ?? 5) || a.full_name.localeCompare(b.full_name))
+
+  return (
+    <div
+      className="overflow-x-auto pb-6"
+      style={{ scrollbarWidth: 'thin', scrollbarColor: '#4B5563 #111827' }}
+    >
+      <div className="flex gap-3 min-w-max px-6 pt-6 pb-4 justify-center">
+        {roots.map(root => (
+          <OrgNodeGroup
+            key={root.id}
+            user={root}
+            allUsers={chartUsers}
+            collapsed={collapsed}
+            toggleCollapse={toggleCollapse}
+            onSelect={onSelect}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OrgNodeGroup({
+  user,
+  allUsers,
+  collapsed,
+  toggleCollapse,
+  onSelect,
+}: {
+  user: User
+  allUsers: User[]
+  collapsed: Set<string>
+  toggleCollapse: (id: string) => void
+  onSelect: (u: User) => void
+}) {
+  const children = allUsers.filter(u => u.manager_id === user.id)
+  const isCollapsed = collapsed.has(user.id)
+  const hasChildren = children.length > 0
+  const colorClass = ROLE_COLORS[user.role] ?? ROLE_COLORS.employee
+
+  return (
+    <div className="flex flex-col items-center">
+      {/* Node card */}
+      <div className="relative flex-shrink-0">
+        <button
+          onClick={() => onSelect(user)}
+          className={`w-24 bg-gray-900 border rounded-xl px-2 py-2 flex flex-col items-center gap-1 transition-all hover:border-gray-600 active:scale-[0.98] ${
+            user.is_active ? 'border-gray-800' : 'border-gray-700/50 opacity-60'
+          }`}
+        >
+          {user.avatar_url ? (
+            <img src={user.avatar_url} alt={user.full_name} className="w-7 h-7 rounded-lg object-cover" />
+          ) : (
+            <div className={`w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold ${colorClass}`}>
+              {initials(user.full_name)}
+            </div>
+          )}
+          <p className={`text-[10px] font-semibold text-center leading-tight w-full truncate ${user.is_active ? 'text-white' : 'text-gray-500 line-through'}`}>
+            {user.full_name}
+          </p>
+          <span className={`text-[9px] font-semibold px-1 py-0.5 rounded-full ${colorClass}`}>
+            {ROLE_LABELS[user.role] ?? user.role}
+          </span>
+        </button>
+
+        {hasChildren && (
+          <button
+            onClick={e => { e.stopPropagation(); toggleCollapse(user.id) }}
+            className="absolute -bottom-2.5 left-1/2 -translate-x-1/2 w-5 h-5 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded-full text-[10px] font-bold text-gray-400 flex items-center justify-center z-10 shadow-md transition-colors"
+          >
+            {isCollapsed ? '+' : '−'}
+          </button>
+        )}
+      </div>
+
+      {hasChildren && !isCollapsed && (
+        <div className="flex flex-col items-center">
+          {/* Vertical stem from card down to branch */}
+          <div className="w-px bg-gray-700" style={{ height: children.length === 1 ? 14 : 20 }} />
+
+          {children.length === 1 ? (
+            <OrgNodeGroup
+              user={children[0]}
+              allUsers={allUsers}
+              collapsed={collapsed}
+              toggleCollapse={toggleCollapse}
+              onSelect={onSelect}
+            />
+          ) : (
+            /* Each child gets left/right arm connectors that together form
+               a horizontal bar running exactly between sibling node centers */
+            <div className="flex items-start" style={{ gap: SIBLING_GAP }}>
+              {children.map((child, i) => (
+                <div key={child.id} className="relative flex flex-col items-center">
+                  {/* Left arm — reaches left to meet right arm of previous sibling */}
+                  {i > 0 && (
+                    <div
+                      className="absolute h-px bg-gray-700"
+                      style={{ top: 0, right: '50%', left: -SIBLING_GAP_HALF }}
+                    />
+                  )}
+                  {/* Right arm — reaches right to meet left arm of next sibling */}
+                  {i < children.length - 1 && (
+                    <div
+                      className="absolute h-px bg-gray-700"
+                      style={{ top: 0, left: '50%', right: -SIBLING_GAP_HALF }}
+                    />
+                  )}
+                  {/* Vertical drop from arm to child card */}
+                  <div className="w-px bg-gray-700" style={{ height: 12 }} />
+                  <OrgNodeGroup
+                    user={child}
+                    allUsers={allUsers}
+                    collapsed={collapsed}
+                    toggleCollapse={toggleCollapse}
+                    onSelect={onSelect}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NodeDetailSheet({
+  user,
+  allUsers,
+  onClose,
+  onEdit,
+  onToggle,
+  onDelete,
+  canManage,
+  onRefresh,
+}: {
+  user: User
+  allUsers: User[]
+  onClose: () => void
+  onEdit: (u: User) => void
+  onToggle: (u: User) => void
+  onDelete: (u: User) => void
+  canManage: boolean
+  onRefresh: () => void
+}) {
+  const manager = allUsers.find(u => u.id === user.manager_id)
+  const reports = allUsers.filter(u => u.manager_id === user.id)
+  const colorClass = ROLE_COLORS[user.role] ?? ROLE_COLORS.employee
+  const ini = initials(user.full_name)
+  const avatarFileRef = useRef<HTMLInputElement>(null)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+
+  async function handleAvatarChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setAvatarUploading(true)
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase().replace(/[^a-z0-9]/g, '') ?? 'jpg'
+      const res = await fetch(`/api/team/users/avatar?userId=${user.id}&ext=${ext}`)
+      const { uploadUrl, avatarKey } = await res.json()
+      await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      await fetch('/api/team/users', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id, avatarKey }),
+      })
+      onRefresh()
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 flex flex-col justify-end" onClick={onClose}>
+      <div
+        className="bg-gray-900 rounded-t-3xl border-t border-gray-800 max-h-[85vh] overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="w-10 h-1 bg-gray-700 rounded-full" />
+        </div>
+
+        <div className="px-6 pb-8 pt-4">
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-6">
+            <div className="relative flex-shrink-0">
+              {user.avatar_url ? (
+                <img
+                  src={user.avatar_url}
+                  alt={user.full_name}
+                  className="w-16 h-16 rounded-2xl object-cover"
+                />
+              ) : (
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-bold ${colorClass}`}>
+                  {ini}
+                </div>
+              )}
+              {canManage && (
+                <button
+                  onClick={() => avatarFileRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-full flex items-center justify-center text-gray-300 text-xs transition-colors disabled:opacity-50"
+                  title="Change photo"
+                >
+                  {avatarUploading ? '…' : '📷'}
+                </button>
+              )}
+              <input
+                ref={avatarFileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-white font-bold text-lg leading-tight">{user.full_name}</p>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full mt-1 inline-block ${colorClass}`}>
+                {ROLE_LABELS[user.role] ?? user.role}
+              </span>
+              {user.is_floater && (
+                <span className="text-xs bg-sky-900/40 text-sky-400 px-2 py-0.5 rounded-full ml-1.5 font-semibold">Floater</span>
+              )}
+              {!user.is_active && (
+                <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded-full ml-1.5">Inactive</span>
+              )}
+            </div>
+          </div>
+
+          {/* Info rows */}
+          <div className="bg-gray-800/50 rounded-2xl divide-y divide-gray-700/50 mb-5">
+            <InfoRow label="Username" value={`@${user.username}`} />
+            <InfoRow label="Email" value={user.email} />
+            {manager && <InfoRow label="Reports to" value={`${manager.full_name} (${ROLE_LABELS[manager.role] ?? manager.role})`} />}
+            {reports.length > 0 && (
+              <div className="px-4 py-3">
+                <p className="text-xs text-gray-500 mb-2">Direct Reports ({reports.length})</p>
+                <div className="space-y-1">
+                  {reports.map(r => (
+                    <div key={r.id} className="flex items-center gap-2">
+                      {r.avatar_url ? (
+                        <img src={r.avatar_url} alt={r.full_name} className="w-5 h-5 rounded-md object-cover flex-shrink-0" />
+                      ) : (
+                        <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${ROLE_COLORS[r.role] ?? ROLE_COLORS.employee}`}>
+                          {initials(r.full_name)}
+                        </div>
+                      )}
+                      <p className="text-sm text-gray-300">{r.full_name}</p>
+                      <span className="text-xs text-gray-600">{ROLE_LABELS[r.role] ?? r.role}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          {canManage && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => onEdit(user)}
+                className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 text-white rounded-2xl text-sm font-semibold transition-colors"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => onToggle(user)}
+                className="flex-1 py-3 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-2xl text-sm font-semibold transition-colors"
+              >
+                {user.is_active ? 'Deactivate' : 'Reactivate'}
+              </button>
+              <button
+                onClick={() => onDelete(user)}
+                className="px-4 py-3 bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded-2xl text-sm font-semibold border border-red-800/40 transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 px-4 py-3">
+      <span className="text-xs text-gray-500 flex-shrink-0 pt-0.5">{label}</span>
+      <span className="text-sm text-gray-200 text-right break-all">{value}</span>
     </div>
   )
 }
@@ -664,10 +1266,13 @@ function UserCard({
     <div className={`bg-gray-900 border px-4 py-3 ${storesPanelOpen ? 'rounded-t-2xl border-gray-700' : 'rounded-2xl'} ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className={`font-medium text-sm ${user.is_active ? 'text-white' : 'text-gray-400 line-through'}`}>
               {user.full_name}
             </p>
+            {user.is_floater && (
+              <span className="text-xs bg-sky-900/40 text-sky-400 px-2 py-0.5 rounded-full font-semibold">Floater</span>
+            )}
             {!user.is_active && (
               <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded-full">Inactive</span>
             )}

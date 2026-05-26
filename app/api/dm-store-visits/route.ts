@@ -9,6 +9,14 @@ const resend = new Resend(process.env.RESEND_API_KEY!)
 const canAccess = (role: Role) => role !== 'employee'
 const canViewAll = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
 
+async function ensureQuickColumns() {
+  await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS visit_type TEXT NOT NULL DEFAULT 'normal'`)
+  await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_interaction_notes TEXT`)
+  await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_takeaways TEXT`)
+  await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_actions TEXT`)
+  await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_impact TEXT`)
+}
+
 async function ensureTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS dm_store_visits (
@@ -67,6 +75,7 @@ const RDM_EMAILS: Record<string, string> = {
   'Jeff Goodman': 'Jeffery.Goodman2@T-Mobile.com',
   'Gary Meier': 'Garry.Meier2@T-Mobile.com',
   'Zac Okerstrom': 'Zachary.2.Okerstrom@T-Mobile.com',
+  'Curt Hauk': 'Curt.hauk@t-mobile.com',
 }
 
 function yesNo(v: boolean | null) {
@@ -169,6 +178,7 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canAccess(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try { await ensureTable() } catch { /* already exists */ }
+  try { await ensureQuickColumns() } catch {}
 
   const { searchParams } = new URL(req.url)
   const from = searchParams.get('from')
@@ -207,7 +217,15 @@ export async function GET(req: NextRequest) {
     ORDER BY u.full_name, count DESC
   `, params)
 
-  return NextResponse.json({ rows })
+  const typeCounts = await query<{ visit_type: string; count: string }>(`
+    SELECT COALESCE(v.visit_type, 'normal') AS visit_type, COUNT(*)::text AS count
+    FROM dm_store_visits v
+    JOIN users u ON u.id = v.submitted_by_id
+    ${where}
+    GROUP BY COALESCE(v.visit_type, 'normal')
+  `, params)
+
+  return NextResponse.json({ rows, typeCounts })
 }
 
 // POST — submit new checklist
@@ -216,8 +234,52 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!canAccess(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   try { await ensureTable() } catch { /* already exists */ }
+  try { await ensureQuickColumns() } catch {}
 
   const body = await req.json()
+
+  // ── Quick Visit ──────────────────────────────────────────────────────────
+  if (body.visit_type === 'quick') {
+    if (!body.store_address) return NextResponse.json({ error: 'store_address required' }, { status: 400 })
+    if (!body.quick_takeaways?.trim()) return NextResponse.json({ error: 'quick_takeaways required' }, { status: 400 })
+    if (!body.quick_actions?.trim()) return NextResponse.json({ error: 'quick_actions required' }, { status: 400 })
+    if (!body.quick_impact?.trim()) return NextResponse.json({ error: 'quick_impact required' }, { status: 400 })
+
+    const [visit] = await query<{ id: string }>(`
+      INSERT INTO dm_store_visits (
+        org_id, submitted_by_id,
+        store_location_id, store_address, employees_working, dm_name,
+        assigned_rdm, reason_for_visit,
+        pre_visit_1, pre_visit_2, pre_visit_3,
+        scorecard_grade, scorecard_1, scorecard_2, scorecard_3,
+        live_interaction_observed,
+        ops_check_1, ops_check_2, ops_check_3, ops_check_4, ops_check_5,
+        coaching_1, coaching_2, coaching_3,
+        impact_1, impact_2, impact_3, impact_4,
+        visit_type, quick_interaction_notes, quick_takeaways, quick_actions, quick_impact
+      ) VALUES (
+        $1, $2,
+        $3, $4, '', $5,
+        'Quick Visit', 'Quick Visit',
+        '', '', '',
+        'N/A', '', '', '',
+        false,
+        false, false, false, false, false,
+        '', '', '',
+        '', '', '', '',
+        'quick', $6, $7, $8, $9
+      ) RETURNING id
+    `, [
+      session.org_id ?? null, session.id,
+      body.store_location_id || null, body.store_address, session.fullName,
+      body.quick_interaction_notes || null,
+      body.quick_takeaways.trim(),
+      body.quick_actions.trim(),
+      body.quick_impact.trim(),
+    ])
+    return NextResponse.json({ id: visit.id })
+  }
+
   const live = body.live_interaction_observed === true
 
   try {

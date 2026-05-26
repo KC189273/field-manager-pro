@@ -43,12 +43,19 @@ export default function ConfigPage() {
   const [renameValue, setRenameValue] = useState('')
   const [orgMessage, setOrgMessage] = useState('')
 
+  // Push test state
+  const [pushTesting, setPushTesting] = useState(false)
+  const [pushResult, setPushResult] = useState<string | null>(null)
+  const [pushUsers, setPushUsers] = useState<{ id: string; full_name: string; role: string }[]>([])
+  const [pushTargetId, setPushTargetId] = useState('')
+
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(s => {
       setSession(s)
       if (s.role === 'developer') {
         fetch('/api/config').then(r => r.json()).then(d => setConfig(d.config))
         loadOrgs()
+        fetch('/api/dev/test-push').then(r => r.json()).then(d => setPushUsers(d.users ?? []))
       }
     })
   }, [])
@@ -98,6 +105,24 @@ export default function ConfigPage() {
     } else {
       const d = await res.json()
       showOrgMsg(d.error ?? 'Failed to rename')
+    }
+  }
+
+  async function testPush() {
+    setPushTesting(true)
+    setPushResult(null)
+    try {
+      const res = await fetch('/api/dev/test-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pushTargetId ? { userId: pushTargetId } : {}),
+      })
+      const data = await res.json()
+      setPushResult(JSON.stringify(data, null, 2))
+    } catch (e) {
+      setPushResult('Error: ' + String(e))
+    } finally {
+      setPushTesting(false)
     }
   }
 
@@ -262,6 +287,56 @@ export default function ConfigPage() {
               {saving ? 'Saving…' : 'Save Settings'}
             </button>
           )}
+        </div>
+
+        {/* Push notification test */}
+        <div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Push Notifications</h2>
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3">
+            <p className="text-sm text-gray-400">Test push delivery to any user with a registered device token.</p>
+            <select
+              value={pushTargetId}
+              onChange={e => setPushTargetId(e.target.value)}
+              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+            >
+              <option value="">— Me (developer) —</option>
+              {pushUsers.map(u => (
+                <option key={u.id} value={u.id}>{u.full_name} ({u.role})</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <button
+                onClick={testPush}
+                disabled={pushTesting}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+              >
+                {pushTesting ? 'Testing…' : 'Send Test Push'}
+              </button>
+              <button
+                onClick={async () => {
+                  if (!pushTargetId) { setPushResult('Select a user first'); return }
+                  if (!confirm('Clear all device tokens for this user? They will need to reopen the app to re-register.')) return
+                  const res = await fetch('/api/dev/test-push', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: pushTargetId }),
+                  })
+                  const d = await res.json()
+                  setPushResult(`Cleared ${d.deleted} token(s). Have the user reopen the app, then test again.`)
+                  fetch('/api/dev/test-push').then(r => r.json()).then(d => setPushUsers(d.users ?? []))
+                }}
+                disabled={!pushTargetId}
+                className="bg-red-900/60 hover:bg-red-800/60 disabled:opacity-30 text-red-400 font-semibold px-4 py-3 rounded-xl transition-colors text-sm"
+              >
+                Clear
+              </button>
+            </div>
+            {pushResult && (
+              <pre className="text-xs text-gray-300 bg-gray-950 border border-gray-800 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap break-all">
+                {pushResult}
+              </pre>
+            )}
+          </div>
         </div>
 
         {/* Cron info */}

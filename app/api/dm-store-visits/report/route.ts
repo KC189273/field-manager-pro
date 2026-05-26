@@ -113,8 +113,18 @@ export async function GET(req: NextRequest) {
     ws.getCell('A1').value = 'No visits found for the selected filters.'
   }
 
+  const usedTabNames = new Set<string>()
+
   for (const v of visits) {
-    const tabName = `${fmtDate(v.submitted_at).replace(',', '')} — ${v.store_address}`.slice(0, 31)
+    const base = `${fmtDate(v.submitted_at).replace(',', '')} — ${v.store_address}`.slice(0, 31)
+    let tabName = base
+    let counter = 2
+    while (usedTabNames.has(tabName)) {
+      const suffix = ` (${counter})`
+      tabName = base.slice(0, 31 - suffix.length) + suffix
+      counter++
+    }
+    usedTabNames.add(tabName)
     const ws = workbook.addWorksheet(tabName)
     ws.getColumn(1).width = 34
     ws.getColumn(2).width = 52
@@ -205,7 +215,7 @@ export async function GET(req: NextRequest) {
   const buffer = await workbook.xlsx.writeBuffer()
   const filename = `dm-visits-${from ?? 'all'}${to ? `-to-${to}` : ''}.xlsx`
 
-  return new NextResponse(buffer as unknown as BodyInit, {
+  return new NextResponse(new Uint8Array(buffer as unknown as ArrayBuffer), {
     headers: {
       'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       'Content-Disposition': `attachment; filename="${filename}"`,

@@ -10,7 +10,7 @@ import {
   expenseRejectedHtml,
   expensePaidHtml,
 } from '@/lib/notifications'
-import { sendPushToUsers } from '@/lib/apns'
+import { sendPushToUsers, isEmailEnabled } from '@/lib/apns'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       params
     ) as Record<string, unknown>[]
   } else {
-    // Manager/employee sees their own + their employees' expenses
+    // Each user sees only their own expenses
     const params: unknown[] = [session.id]
     const statusClause = status ? (params.push(status), `AND e.status = $${params.length}`) : ''
     const fromClause = from ? (params.push(from), `AND e.date >= $${params.length}`) : ''
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
        JOIN users u ON u.id = e.user_id
        JOIN users s ON s.id = e.submitted_by
        LEFT JOIN users a ON a.id = e.approved_by
-       WHERE (e.user_id = $1 OR u.manager_id = $1) ${statusClause} ${fromClause} ${toClause}
+       WHERE e.user_id = $1 ${statusClause} ${fromClause} ${toClause}
        ORDER BY e.date DESC, e.created_at DESC`,
       params
     ) as Record<string, unknown>[]
@@ -106,15 +106,17 @@ export async function POST(req: NextRequest) {
 
   // Notify owner(s) of new expense
   const owners = await query<{ id: string; email: string }>(
-    `SELECT id, email FROM users WHERE role IN ('owner','sales_director') AND is_active = true`
+    `SELECT id, email FROM users WHERE role IN ('owner','sales_director') AND is_active = true AND (org_id = (SELECT org_id FROM users WHERE id = $1) OR org_id IS NULL)`,
+    [session.id]
   )
-  const ownerEmails = owners.map((o) => o.email)
-  if (ownerEmails.length > 0) {
-    await sendEmail(
-      ownerEmails,
-      `New Expense: ${category} — $${parseFloat(amount).toFixed(2)}`,
-      expenseSubmittedHtml(session.fullName, parseFloat(amount).toFixed(2), category, description || '', date)
-    )
+  for (const owner of owners) {
+    if (await isEmailEnabled(owner.id)) {
+      await sendEmail(
+        owner.email,
+        `New Expense: ${category} — $${parseFloat(amount).toFixed(2)}`,
+        expenseSubmittedHtml(session.fullName, parseFloat(amount).toFixed(2), category, description || '', date)
+      ).catch(() => {})
+    }
   }
 
   sendPushToUsers(

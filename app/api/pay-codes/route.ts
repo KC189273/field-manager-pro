@@ -47,7 +47,7 @@ export async function GET(req: NextRequest) {
       WHERE u.role != 'developer'
     `
 
-    if (isManager(session.role)) {
+    if (session.role === 'manager') {
       params.push(session.id)
       sql += ` AND u.manager_id = $${params.length}`
     } else {

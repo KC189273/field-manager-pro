@@ -4,7 +4,7 @@ import { getReceiptUploadUrl } from '@/lib/s3'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || session.role === 'employee') {
+  if (!session) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

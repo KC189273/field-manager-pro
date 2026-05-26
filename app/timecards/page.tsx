@@ -147,6 +147,10 @@ function TimecardsPage() {
   const [codeNote, setCodeNote] = useState<string>('')
   const [codeSaving, setCodeSaving] = useState(false)
 
+  // Role filter (ops+ only)
+  const [roleFilter, setRoleFilter] = useState<'all' | 'employee' | 'manager'>('all')
+  const [clockedInOnly, setClockedInOnly] = useState(false)
+
   // Download state
   const [dlFrom, setDlFrom] = useState('')
   const [dlTo, setDlTo] = useState('')
@@ -449,6 +453,22 @@ function TimecardsPage() {
     await loadPayCodes()
   }
 
+  async function deleteShift(shift: Shift) {
+    const label = `${fmtTime(shift.clock_in_at)} – ${shift.clock_out_at ? fmtTime(shift.clock_out_at) : 'in progress'}`
+    if (!confirm(`Delete time punch: ${label}?\n\nThis cannot be undone.`)) return
+    const res = await fetch('/api/shifts', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftId: shift.id }),
+    })
+    if (!res.ok) {
+      const d = await res.json()
+      alert(d.error ?? 'Delete failed')
+      return
+    }
+    await loadShifts()
+  }
+
   async function sendDownload() {
     if (!dlFrom || !dlTo) return
     setDlSending(true)
@@ -473,7 +493,17 @@ function TimecardsPage() {
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const isMgr = canManage(session.role)
+  const isOpsPlus = session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
   const selectedUser = teamUsers.find(u => u.id === selectedUserId)
+
+  // Role filter map for fast lookup
+  const userRoleMap = new Map(teamUsers.map(u => [u.id, u.role]))
+  const filteredSummaries = employeeSummaries
+    .filter(emp => roleFilter === 'all' || userRoleMap.get(emp.userId) === roleFilter)
+    .filter(emp => !clockedInOnly || emp.stillClockedIn)
+  const filteredTeamUsers = roleFilter === 'all'
+    ? teamUsers
+    : teamUsers.filter(u => u.role === roleFilter)
   const viewingName = selectedUser?.full_name ?? session.fullName
 
   return (
@@ -526,13 +556,49 @@ function TimecardsPage() {
         {/* ── ALL EMPLOYEES VIEW ── */}
         {activeView === 'all' && isMgr && (
           <>
+            {/* Filters row */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              {/* Role filter — ops+ only */}
+              {isOpsPlus && (
+                <>
+                  {(['all', 'employee', 'manager'] as const).map(r => (
+                    <button
+                      key={r}
+                      onClick={() => setRoleFilter(r)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                        roleFilter === r
+                          ? 'bg-violet-600 border-violet-500 text-white'
+                          : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+                      }`}
+                    >
+                      {r === 'all' ? 'All' : r === 'employee' ? 'Employees' : 'DMs'}
+                    </button>
+                  ))}
+                  <div className="w-px h-4 bg-gray-700 mx-1" />
+                </>
+              )}
+              {/* Clocked-in toggle — all managers */}
+              <button
+                onClick={() => setClockedInOnly(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors border ${
+                  clockedInOnly
+                    ? 'bg-green-700/30 border-green-600/50 text-green-400'
+                    : 'bg-gray-900 border-gray-700 text-gray-400 hover:text-white hover:border-gray-500'
+                }`}
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${clockedInOnly ? 'bg-green-400' : 'bg-gray-600'}`} />
+                Clocked In
+              </button>
+            </div>
             {teamLoading ? (
               <div className="text-center text-gray-500 py-12">Loading…</div>
-            ) : employeeSummaries.length === 0 ? (
-              <div className="text-center text-gray-600 py-8 text-sm">No time entries found for this week.</div>
+            ) : filteredSummaries.length === 0 ? (
+              <div className="text-center text-gray-600 py-8 text-sm">
+                {clockedInOnly ? 'No one is currently clocked in.' : 'No time entries found for this week.'}
+              </div>
             ) : (
               <div className="space-y-2">
-                {employeeSummaries.map(emp => (
+                {filteredSummaries.map(emp => (
                   <button
                     key={emp.userId}
                     onClick={() => drillIntoEmployee(emp.userId)}
@@ -715,12 +781,20 @@ function TimecardsPage() {
                                     {shift.shift_note ? 'Edit note' : 'Add note'}
                                   </button>
                                   {isMgr && selectedUserId && selectedUserId !== session.id && (
-                                    <button
-                                      onClick={() => openEdit(shift)}
-                                      className="text-xs text-gray-500 hover:text-violet-400 transition-colors font-medium"
-                                    >
-                                      Edit
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => openEdit(shift)}
+                                        className="text-xs text-gray-500 hover:text-violet-400 transition-colors font-medium"
+                                      >
+                                        Edit
+                                      </button>
+                                      <button
+                                        onClick={() => deleteShift(shift)}
+                                        className="text-xs text-gray-600 hover:text-red-400 transition-colors font-medium"
+                                      >
+                                        Delete
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               </div>

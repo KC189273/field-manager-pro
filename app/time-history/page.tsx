@@ -69,10 +69,15 @@ export default function TimeHistoryPage() {
     }
   }, [session])
 
-  async function loadShifts(userId?: string) {
+  async function loadShifts(userId?: string, asManager?: boolean) {
     setLoading(true)
     const params = new URLSearchParams()
-    if (userId) params.set('userId', userId)
+    if (userId) {
+      params.set('userId', userId)
+    } else if (asManager) {
+      // "All employees" selected — use team mode to fetch all employees under this manager
+      params.set('team', 'true')
+    }
     if (from) params.set('from', from)
     if (to) params.set('to', to + 'T23:59:59')
     const res = await fetch(`/api/shifts?${params}`)
@@ -84,7 +89,8 @@ export default function TimeHistoryPage() {
   }
 
   function handleSearch() {
-    loadShifts(selectedUser || undefined)
+    const isManager = session && isManagerRole(session.role)
+    loadShifts(selectedUser || undefined, !selectedUser && !!isManager)
   }
 
   return (

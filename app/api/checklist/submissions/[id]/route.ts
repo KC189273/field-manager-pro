@@ -22,10 +22,21 @@ export async function GET(
     submitted_at: string
     items_completed: unknown
     inventory_photo_key: string | null
+    inventory_photo_2_key: string | null
+    pos_photo_key: string | null
+    aframe_photo_key: string | null
+    sales_floor_photo_key: string | null
+    cash_drawer_photo_key: string | null
+    reconciliation_photo_key: string | null
+    reconciliation_photo_2_key: string | null
     org_id: string | null
   }>(
     `SELECT id, checklist_type, store_address, submitted_by_name, dm_id, dm_name,
-            submitted_at, items_completed, inventory_photo_key, org_id
+            submitted_at, items_completed, inventory_photo_key,
+            inventory_photo_2_key, pos_photo_key, aframe_photo_key,
+            sales_floor_photo_key, cash_drawer_photo_key,
+            reconciliation_photo_key, reconciliation_photo_2_key,
+            org_id, comment
      FROM checklist_submissions WHERE id = $1`,
     [id]
   )
@@ -39,9 +50,48 @@ export async function GET(
   }
 
   let inventory_photo_url: string | null = null
-  if (row.inventory_photo_key) {
-    try { inventory_photo_url = await getReceiptViewUrl(row.inventory_photo_key) } catch { /* non-fatal */ }
+  let inventory_photo_2_url: string | null = null
+  let pos_photo_url: string | null = null
+  let aframe_photo_url: string | null = null
+  let sales_floor_photo_url: string | null = null
+  let cash_drawer_photo_url: string | null = null
+  let reconciliation_photo_url: string | null = null
+  let reconciliation_photo_2_url: string | null = null
+
+  const resolveUrl = async (key: string | null): Promise<string | null> => {
+    if (!key) return null
+    try { return await getReceiptViewUrl(key) } catch { return null }
   }
 
-  return NextResponse.json({ ...row, inventory_photo_url })
+  ;[
+    inventory_photo_url,
+    inventory_photo_2_url,
+    pos_photo_url,
+    aframe_photo_url,
+    sales_floor_photo_url,
+    cash_drawer_photo_url,
+    reconciliation_photo_url,
+    reconciliation_photo_2_url,
+  ] = await Promise.all([
+    resolveUrl(row.inventory_photo_key),
+    resolveUrl(row.inventory_photo_2_key),
+    resolveUrl(row.pos_photo_key),
+    resolveUrl(row.aframe_photo_key),
+    resolveUrl(row.sales_floor_photo_key),
+    resolveUrl(row.cash_drawer_photo_key),
+    resolveUrl(row.reconciliation_photo_key),
+    resolveUrl(row.reconciliation_photo_2_key),
+  ])
+
+  return NextResponse.json({
+    ...row,
+    inventory_photo_url,
+    inventory_photo_2_url,
+    pos_photo_url,
+    aframe_photo_url,
+    sales_floor_photo_url,
+    cash_drawer_photo_url,
+    reconciliation_photo_url,
+    reconciliation_photo_2_url,
+  })
 }

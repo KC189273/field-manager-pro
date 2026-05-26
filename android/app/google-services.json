@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "177986389994",
+    "project_id": "field-manager-pro-f7ffb",
+    "storage_bucket": "field-manager-pro-f7ffb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:177986389994:android:3815d98e41e16200aa1493",
+        "android_client_info": {
+          "package_name": "app.fieldmanagerpro"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDi02f1xxxAId3rS-sk6iZ0BdUBunIrLpI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

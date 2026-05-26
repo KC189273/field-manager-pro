@@ -6,14 +6,23 @@ async function ensureTable() {
   await query(`
     CREATE TABLE IF NOT EXISTS notification_preferences (
       user_id UUID PRIMARY KEY,
+      email_enabled BOOLEAN NOT NULL DEFAULT true,
+      push_enabled BOOLEAN NOT NULL DEFAULT true,
       task_assigned BOOLEAN NOT NULL DEFAULT true,
+      task_completed BOOLEAN NOT NULL DEFAULT true,
       checklist_submitted BOOLEAN NOT NULL DEFAULT true,
       flag_created BOOLEAN NOT NULL DEFAULT true,
       expense_submitted BOOLEAN NOT NULL DEFAULT true,
       schedule_published BOOLEAN NOT NULL DEFAULT true,
+      time_off_request BOOLEAN NOT NULL DEFAULT true,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `)
+  // Add new columns to existing tables lazily
+  await query(`ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS email_enabled BOOLEAN NOT NULL DEFAULT true`)
+  await query(`ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS push_enabled BOOLEAN NOT NULL DEFAULT true`)
+  await query(`ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS time_off_request BOOLEAN NOT NULL DEFAULT true`)
+  await query(`ALTER TABLE notification_preferences ADD COLUMN IF NOT EXISTS task_completed BOOLEAN NOT NULL DEFAULT true`)
 }
 
 export async function GET() {
@@ -23,7 +32,7 @@ export async function GET() {
   try { await ensureTable() } catch { /* already exists */ }
 
   const prefs = await queryOne(
-    `SELECT task_assigned, checklist_submitted, flag_created, expense_submitted, schedule_published
+    `SELECT email_enabled, push_enabled, task_assigned, task_completed, checklist_submitted, flag_created, expense_submitted, schedule_published, time_off_request
      FROM notification_preferences WHERE user_id = $1`,
     [session.id]
   )
@@ -31,11 +40,15 @@ export async function GET() {
   // Return defaults if no row yet
   return NextResponse.json({
     prefs: prefs ?? {
+      email_enabled: true,
+      push_enabled: true,
       task_assigned: true,
+      task_completed: true,
       checklist_submitted: true,
       flag_created: true,
       expense_submitted: true,
       schedule_published: true,
+      time_off_request: true,
     }
   })
 }
@@ -47,7 +60,7 @@ export async function PUT(req: NextRequest) {
   try { await ensureTable() } catch { /* already exists */ }
 
   const body = await req.json()
-  const allowed = ['task_assigned', 'checklist_submitted', 'flag_created', 'expense_submitted', 'schedule_published']
+  const allowed = ['email_enabled', 'push_enabled', 'task_assigned', 'task_completed', 'checklist_submitted', 'flag_created', 'expense_submitted', 'schedule_published', 'time_off_request']
 
   // Build update clause from only valid keys
   const updates: string[] = []

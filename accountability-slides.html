@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accountability Process — Team Presentation</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .slide {
+      display: none;
+      width: 100vw;
+      height: 100vh;
+      padding: 60px 80px;
+      flex-direction: column;
+      justify-content: center;
+      position: relative;
+    }
+
+    .slide.active { display: flex; }
+
+    /* Slide 1 */
+    #slide1 { background: linear-gradient(135deg, #0f172a 0%, #1e3a5f 100%); }
+
+    /* Slide 2 */
+    #slide2 { background: linear-gradient(135deg, #0f172a 0%, #1a2e1a 100%); }
+
+    .slide-number {
+      position: absolute;
+      top: 24px;
+      right: 40px;
+      font-size: 13px;
+      color: #64748b;
+      letter-spacing: 1px;
+    }
+
+    .eyebrow {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #60a5fa;
+      margin-bottom: 16px;
+    }
+
+    #slide2 .eyebrow { color: #4ade80; }
+
+    h1 {
+      font-size: 48px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 12px;
+      color: #f8fafc;
+    }
+
+    .subtitle {
+      font-size: 18px;
+      color: #94a3b8;
+      margin-bottom: 24px;
+      font-weight: 400;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      max-width: 1100px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 24px 28px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #60a5fa;
+      margin-bottom: 12px;
+    }
+
+    #slide2 .card-title { color: #4ade80; }
+
+    .card ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .card ul li {
+      font-size: 16px;
+      color: #cbd5e1;
+      padding: 5px 0 5px 20px;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .card ul li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: #475569;
+    }
+
+    .card ul li strong {
+      color: #f1f5f9;
+      font-weight: 600;
+    }
+
+    .highlight-box {
+      background: rgba(96, 165, 250, 0.1);
+      border: 1px solid rgba(96, 165, 250, 0.25);
+      border-radius: 10px;
+      padding: 14px 24px;
+      margin-top: 16px;
+      max-width: 1100px;
+      font-size: 14px;
+      color: #bfdbfe;
+      line-height: 1.6;
+    }
+
+    #slide2 .highlight-box {
+      background: rgba(74, 222, 128, 0.07);
+      border-color: rgba(74, 222, 128, 0.2);
+      color: #bbf7d0;
+    }
+
+    .highlight-box strong { color: #fff; }
+
+    .divider {
+      width: 48px;
+      height: 3px;
+      background: #3b82f6;
+      border-radius: 2px;
+      margin-bottom: 20px;
+    }
+
+    /* Three-step process visual */
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      max-width: 1100px;
+      margin-bottom: 20px;
+    }
+
+    .step {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      position: relative;
+    }
+
+    .step-verbal  { background: rgba(234, 179, 8, 0.12);  border: 1px solid rgba(234, 179, 8, 0.3); }
+    .step-written { background: rgba(249, 115, 22, 0.12); border: 1px solid rgba(249, 115, 22, 0.3); }
+    .step-final   { background: rgba(239, 68, 68, 0.12);  border: 1px solid rgba(239, 68, 68, 0.3); }
+
+    .step-num {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 800;
+      flex-shrink: 0;
+    }
+
+    .step-verbal  .step-num { background: #ca8a04; color: #fff; }
+    .step-written .step-num { background: #ea580c; color: #fff; }
+    .step-final   .step-num { background: #dc2626; color: #fff; }
+
+    .step-text { display: flex; flex-direction: column; }
+
+    .step-label {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .step-verbal  .step-label { color: #fde047; }
+    .step-written .step-label { color: #fb923c; }
+    .step-final   .step-label { color: #f87171; }
+
+    .step-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .step-arrow {
+      font-size: 18px;
+      color: #334155;
+      padding: 0 10px;
+      flex-shrink: 0;
+    }
+
+    #slide2 .divider { background: #22c55e; }
+
+    .nav {
+      position: fixed;
+      bottom: 28px;
+      right: 40px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .nav button {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #e2e8f0;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .nav button:hover { background: rgba(255,255,255,0.15); }
+    .nav button:disabled { opacity: 0.3; cursor: default; }
+  </style>
+</head>
+<body>
+
+<!-- SLIDE 1 -->
+<div class="slide active" id="slide1">
+  <div class="slide-number">1 / 2</div>
+  <div class="eyebrow">Field Manager Pro — Team Update</div>
+  <h1>Accountability Tracking</h1>
+  <p class="subtitle">What it is, why it matters, and how it protects everyone.</p>
+  <div class="divider"></div>
+
+  <!-- Three-step process -->
+  <div class="steps">
+    <div class="step step-verbal">
+      <div class="step-num">1</div>
+      <div class="step-text">
+        <div class="step-label">Verbal Warning</div>
+        <div class="step-desc">Documented conversation logged in the app</div>
+      </div>
+    </div>
+    <div class="step-arrow">&#8594;</div>
+    <div class="step step-written">
+      <div class="step-num">2</div>
+      <div class="step-text">
+        <div class="step-label">Written Warning</div>
+        <div class="step-desc">Formal document — signature &amp; acknowledgment required</div>
+      </div>
+    </div>
+    <div class="step-arrow">&#8594;</div>
+    <div class="step step-final">
+      <div class="step-num">3</div>
+      <div class="step-text">
+        <div class="step-label">Final Warning</div>
+        <div class="step-desc">Last step before further disciplinary action</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Why It Matters</div>
+      <ul>
+        <li><strong>Consistency</strong> — every concern is handled the same way, regardless of who is involved</li>
+        <li><strong>Clarity</strong> — issues are documented clearly so there is no ambiguity later</li>
+        <li><strong>Protection</strong> — a written record protects both the employee and the company equally</li>
+        <li><strong>Accountability</strong> — expectations are set and tracked fairly across the entire team</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">How It Benefits You</div>
+      <ul>
+        <li><strong>Transparency</strong> — you always know exactly where you stand and why</li>
+        <li><strong>A fair process</strong> — nothing happens behind the scenes; everything is documented</li>
+        <li><strong>Your voice matters</strong> — acknowledgment is not agreement; you can always respond</li>
+        <li><strong>Open door</strong> — the Sales Director is available if any situation warrants escalation</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <strong>The goal is not to penalize — it is to create a clear, fair, and documented process that everyone can trust.</strong>
+    Accountability works in both directions. When expectations are documented and acknowledged, it creates a workplace where problems get resolved, not ignored.
+  </div>
+</div>
+
+<!-- SLIDE 2 -->
+<div class="slide" id="slide2">
+  <div class="slide-number">2 / 2</div>
+  <div class="eyebrow">What This Means for You</div>
+  <h1>Your Responsibilities</h1>
+  <p class="subtitle">Simple steps to stay informed and in good standing.</p>
+  <div class="divider"></div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="card-title">Signature Requirement</div>
+      <ul>
+        <li>All accountability documents <strong>require your digital signature</strong> to be considered compliant</li>
+        <li>Your signature confirms you have <strong>received and read</strong> the document — nothing more</li>
+        <li>It is <strong>not an admission of guilt</strong> or agreement with the content</li>
+        <li>Unsigned documents cannot be used to fulfill compliance requirements on either side</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div class="card-title">24-Hour Acknowledgment Window</div>
+      <ul>
+        <li>Once an accountability document is issued, you have <strong>24 hours to acknowledge</strong> receipt</li>
+        <li>You will receive a notification through the Field Manager Pro app</li>
+        <li><strong>Failure to acknowledge</strong> within 24 hours may result in a <strong>clock-in restriction</strong> until completed</li>
+        <li>If you have questions or concerns, reach out to your manager or the Sales Director immediately</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <strong>Open Door Policy:</strong> Should any accountability matter feel unclear, unjust, or require further discussion, the Sales Director maintains an open door for all team members.
+    You are encouraged to use it. Transparency and trust go both ways — we are committed to making sure every situation is handled with fairness and respect.
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="nav">
+  <button id="prevBtn" onclick="changeSlide(-1)" disabled>&#8592; Back</button>
+  <button id="nextBtn" onclick="changeSlide(1)">Next &#8594;</button>
+</div>
+
+<script>
+  let current = 1;
+  const total = 2;
+
+  function changeSlide(dir) {
+    document.getElementById('slide' + current).classList.remove('active');
+    current += dir;
+    document.getElementById('slide' + current).classList.add('active');
+    document.getElementById('prevBtn').disabled = current === 1;
+    document.getElementById('nextBtn').disabled = current === total;
+  }
+
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'ArrowRight' || e.key === 'ArrowDown') && current < total) changeSlide(1);
+    if ((e.key === 'ArrowLeft' || e.key === 'ArrowUp') && current > 1) changeSlide(-1);
+  });
+</script>
+
+</body>
+</html>

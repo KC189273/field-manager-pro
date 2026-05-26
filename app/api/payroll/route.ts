@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { getOrgFilter } from '@/lib/org'
 
 const CST = 'America/Chicago'
 const ANCHOR = new Date('2026-03-30T12:00:00.000Z')
@@ -38,6 +39,11 @@ function getLastClosedPeriod(): { start: string; end: string } | null {
 }
 
 async function getOrgId(session: { role: string; id: string; org_id?: string | null }): Promise<string | null> {
+  // For developer, respect the fmp-dev-org cookie set by the org switcher
+  if (session.role === 'developer') {
+    const { orgId } = await getOrgFilter(session as Parameters<typeof getOrgFilter>[0])
+    return orgId
+  }
   if (session.org_id) return session.org_id
   const row = await queryOne<{ org_id: string | null }>('SELECT org_id FROM users WHERE id = $1', [session.id])
   return row?.org_id ?? null
@@ -60,7 +66,10 @@ async function getPeriodHours(orgId: string, periodStart: string, periodEnd: str
         u.username,
         u.manager_id,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $4)::date AS week_start,
-        SUM(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0) AS total_hours
+        SUM(
+          EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
+          - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
+        ) AS total_hours
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       WHERE s.clock_out_at IS NOT NULL

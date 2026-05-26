@@ -16,24 +16,26 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10)
 
-  const dateStart = `${date}T00:00:00Z`
-  const dateEnd = `${date}T23:59:59Z`
-
   let submissions: unknown[]
 
   if (session.role === 'manager') {
-    // DM sees only submissions for their stores
+    // DM sees submissions for stores currently assigned to them
+    // Filter by store assignment (not stored dm_id) so reassignments don't cause gaps
+    // Date comparison done in CST so late-night submissions don't fall off
     submissions = await query(
       `SELECT id, checklist_type, store_id, store_address,
               submitted_by_name, dm_id, dm_name, submitted_at
        FROM checklist_submissions
-       WHERE dm_id = $1 AND submitted_at BETWEEN $2 AND $3
+       WHERE store_id IN (
+         SELECT store_location_id FROM dm_manager_stores WHERE manager_id = $1
+       )
+       AND DATE(submitted_at AT TIME ZONE 'America/Chicago') = $2::date
        ORDER BY submitted_at DESC`,
-      [session.id, dateStart, dateEnd]
+      [session.id, date]
     )
   } else {
     const orgFilter = await getOrgFilter(session)
-    const params: unknown[] = [dateStart, dateEnd]
+    const params: unknown[] = [date]
     let orgClause = ''
     if (orgFilter.filterByOrg && orgFilter.orgId) {
       params.push(orgFilter.orgId)
@@ -43,7 +45,7 @@ export async function GET(req: NextRequest) {
       `SELECT id, checklist_type, store_id, store_address,
               submitted_by_name, dm_id, dm_name, submitted_at
        FROM checklist_submissions
-       WHERE submitted_at BETWEEN $1 AND $2${orgClause}
+       WHERE DATE(submitted_at AT TIME ZONE 'America/Chicago') = $1::date${orgClause}
        ORDER BY submitted_at DESC`,
       params
     )

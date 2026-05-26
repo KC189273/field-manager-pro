@@ -20,12 +20,41 @@ interface Flag {
   full_name: string
   username: string
   created_at: string
+  resolution_note: string | null
+  resolved_by_name: string | null
+  resolved_at: string | null
 }
 
 const FLAG_LABELS: Record<string, string> = {
-  missing_clockout: 'Missing Clock-Out',
+  missing_clock_out: 'Missing Clock-Out',
+  missing_clock_in: 'Missing Clock-In',
   no_activity: 'No Activity',
   overtime: 'Overtime',
+  schedule_no_opener: 'No Opener Scheduled',
+  schedule_no_closer: 'No Closer Scheduled',
+  schedule_gap: 'Coverage Gap',
+  schedule_overlap: 'Double-Booked Employee',
+  schedule_overtime: 'Scheduled Overtime',
+  break_long: 'Long Break',
+  break_multiple: 'Multiple Breaks',
+  auto_clock_out: 'Auto Clock-Out',
+  late_clock_in: 'Late Clock-In',
+}
+
+const FLAG_COLORS: Record<string, string> = {
+  missing_clock_out: 'text-red-400 bg-red-900/30 border-red-800/50',
+  missing_clock_in: 'text-red-400 bg-red-900/30 border-red-800/50',
+  no_activity: 'text-gray-400 bg-gray-800/50 border-gray-700/50',
+  overtime: 'text-orange-400 bg-orange-900/30 border-orange-800/50',
+  schedule_no_opener: 'text-amber-400 bg-amber-900/30 border-amber-800/50',
+  schedule_no_closer: 'text-amber-400 bg-amber-900/30 border-amber-800/50',
+  schedule_gap: 'text-amber-400 bg-amber-900/30 border-amber-800/50',
+  schedule_overlap: 'text-red-400 bg-red-900/30 border-red-800/50',
+  schedule_overtime: 'text-orange-400 bg-orange-900/30 border-orange-800/50',
+  break_long: 'text-yellow-400 bg-yellow-900/30 border-yellow-800/50',
+  break_multiple: 'text-yellow-400 bg-yellow-900/30 border-yellow-800/50',
+  auto_clock_out: 'text-blue-400 bg-blue-900/30 border-blue-800/50',
+  late_clock_in: 'text-rose-400 bg-rose-900/30 border-rose-800/50',
 }
 
 export default function FlagsPage() {
@@ -36,6 +65,7 @@ export default function FlagsPage() {
   const [loading, setLoading] = useState(false)
   const [resolving, setResolving] = useState<string | null>(null)
   const [activeFlag, setActiveFlag] = useState<Flag | null>(null)
+  const [resolutionNote, setResolutionNote] = useState('')
 
   async function loadFlags(resolved: boolean) {
     setLoading(true)
@@ -55,12 +85,17 @@ export default function FlagsPage() {
 
   const isManager = session && (session.role === 'manager' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer')
 
+  function openResolve(flag: Flag) {
+    setActiveFlag(flag)
+    setResolutionNote('')
+  }
+
   async function resolve(flagId: string) {
     setResolving(flagId)
     const res = await fetch('/api/flags', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ flagId }),
+      body: JSON.stringify({ flagId, note: resolutionNote }),
     })
     if (res.ok) {
       setFlags(prev => prev.filter(f => f.id !== flagId))
@@ -74,7 +109,7 @@ export default function FlagsPage() {
     const res = await fetch('/api/flags', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ flagId: flag.id }),
+      body: JSON.stringify({ flagId: flag.id, note: resolutionNote }),
     })
     if (res.ok) {
       setFlags(prev => prev.filter(f => f.id !== flag.id))
@@ -83,11 +118,7 @@ export default function FlagsPage() {
     router.push(`/timecards?userId=${flag.user_id}`)
   }
 
-  const flagColors: Record<string, string> = {
-    missing_clockout: 'text-amber-400 bg-amber-950 border-amber-800',
-    no_activity: 'text-blue-400 bg-blue-950 border-blue-800',
-    overtime: 'text-red-400 bg-red-950 border-red-800',
-  }
+  // FLAG_COLORS defined at module level
 
   return (
     <div className="min-h-screen bg-gray-950 pb-20 pt-14">
@@ -121,7 +152,7 @@ export default function FlagsPage() {
         ) : (
           <div className="space-y-3">
             {flags.map(flag => {
-              const colorClass = flagColors[flag.type] ?? 'text-gray-400 bg-gray-900 border-gray-800'
+              const colorClass = FLAG_COLORS[flag.type] ?? 'text-gray-400 bg-gray-900 border-gray-800'
               return (
                 <div key={flag.id} className={`rounded-2xl p-4 border ${colorClass}`}>
                   <div className="flex items-start justify-between gap-3">
@@ -132,10 +163,19 @@ export default function FlagsPage() {
                         {new Date(flag.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </p>
                       <p className="text-xs text-gray-300 mt-1.5">{flag.detail}</p>
+                      {showResolved && flag.resolution_note && (
+                        <div className="mt-2 bg-black/20 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wide mb-0.5">Resolution Note</p>
+                          <p className="text-xs text-gray-300">{flag.resolution_note}</p>
+                          {flag.resolved_by_name && (
+                            <p className="text-[10px] text-gray-600 mt-1">— {flag.resolved_by_name}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
                     {isManager && !showResolved && (
                       <button
-                        onClick={() => setActiveFlag(flag)}
+                        onClick={() => openResolve(flag)}
                         className="flex-shrink-0 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Resolve
@@ -160,7 +200,7 @@ export default function FlagsPage() {
             onClick={e => e.stopPropagation()}
           >
             {/* Flag type badge */}
-            <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border mb-4 ${flagColors[activeFlag.type] ?? 'text-gray-400 bg-gray-900 border-gray-800'}`}>
+            <div className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border mb-4 ${FLAG_COLORS[activeFlag.type] ?? 'text-gray-400 bg-gray-900 border-gray-800'}`}>
               {FLAG_LABELS[activeFlag.type] ?? activeFlag.type}
             </div>
 
@@ -168,7 +208,18 @@ export default function FlagsPage() {
             <p className="text-sm text-gray-400 mb-1">
               {new Date(activeFlag.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>
-            <p className="text-sm text-gray-300 mb-6">{activeFlag.detail}</p>
+            <p className="text-sm text-gray-300 mb-4">{activeFlag.detail}</p>
+
+            <div className="mb-4">
+              <label className="block text-xs text-gray-400 mb-1.5">Resolution Note <span className="text-gray-600">(optional)</span></label>
+              <textarea
+                rows={3}
+                placeholder="e.g. Employee called in sick on Wednesday — hours came in under 40 without that day."
+                value={resolutionNote}
+                onChange={e => setResolutionNote(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 resize-none"
+              />
+            </div>
 
             <div className="space-y-2">
               {/* Primary: go to timecard and resolve */}

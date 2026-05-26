@@ -26,18 +26,24 @@ export async function POST(req: NextRequest) {
   )
   if (!shift) return NextResponse.json({ error: 'No active shift' }, { status: 404 })
 
-  // Check last breadcrumb to detect GPS jumps
+  // Check last breadcrumb for dedup and GPS jump detection
   let markAsGap = isGap ?? false
-  if (!markAsGap) {
-    const last = await queryOne<{ lat: number; lng: number; recorded_at: string }>(
-      `SELECT lat, lng, recorded_at FROM gps_breadcrumbs
-       WHERE shift_id = $1 AND is_gap = false AND lat IS NOT NULL AND lng IS NOT NULL
-       ORDER BY recorded_at DESC LIMIT 1`,
-      [shift.id]
-    )
-    if (last) {
-      const dist = distanceKm(Number(last.lat), Number(last.lng), lat, lng)
-      const minutes = (Date.now() - new Date(last.recorded_at).getTime()) / 60000
+  const last = await queryOne<{ lat: number; lng: number; recorded_at: string }>(
+    `SELECT lat, lng, recorded_at FROM gps_breadcrumbs
+     WHERE shift_id = $1 AND is_gap = false AND lat IS NOT NULL AND lng IS NOT NULL
+     ORDER BY recorded_at DESC LIMIT 1`,
+    [shift.id]
+  )
+  if (last) {
+    const dist = distanceKm(Number(last.lat), Number(last.lng), lat, lng)
+    const minutes = (Date.now() - new Date(last.recorded_at).getTime()) / 60000
+
+    // Dedup: skip if < 3 min since last AND < 30m movement (avoids DB flood with distanceFilter:0)
+    if (minutes < 3 && dist < 0.03) {
+      return NextResponse.json({ ok: true, skipped: true })
+    }
+
+    if (!markAsGap) {
       const speedKph = dist / (minutes / 60)
       // Mark as gap if speed would exceed 200 km/h (GPS jump) or distance > 100km
       if (speedKph > 200 || dist > 100) {

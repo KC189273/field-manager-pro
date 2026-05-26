@@ -3,45 +3,96 @@ import bcrypt from 'bcryptjs'
 import { getSession, isManager, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, welcomeEmailHtml } from '@/lib/notifications'
+import { sendPushToUsers } from '@/lib/apns'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
+import { getReceiptViewUrl } from '@/lib/s3'
 
-export async function GET() {
+async function ensureApprovalColumn() {
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT NULL`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_name TEXT DEFAULT NULL`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT DEFAULT NULL`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_password TEXT DEFAULT NULL`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS pay_type TEXT NOT NULL DEFAULT 'hourly'`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_floater BOOLEAN NOT NULL DEFAULT FALSE`)
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_ops_collab BOOLEAN NOT NULL DEFAULT FALSE`)
+  // Auto-set all managers to salary
+  await query(`UPDATE users SET pay_type = 'salary' WHERE role = 'manager' AND pay_type = 'hourly'`)
+}
+
+async function addAvatarUrls(users: Record<string, unknown>[]): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    users.map(async u => {
+      if (!u.avatar_key) return { ...u, avatar_url: null }
+      const avatar_url = await getReceiptViewUrl(u.avatar_key as string)
+      return { ...u, avatar_url }
+    })
+  )
+}
+
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session || (!isManager(session.role) && session.role !== 'developer' && !isOwner(session.role))) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  try { await ensureApprovalColumn() } catch {}
+
   const orgFilter = await getOrgFilter(session)
+  const withPeers = new URL(req.url).searchParams.get('withPeers') === 'true'
 
   if (session.role === 'developer') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at
+      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
        FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
       params
     )
-    return NextResponse.json({ users })
+    return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
   }
 
   if (isOwner(session.role) || session.role === 'ops_manager') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at
+      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
        FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
       params
     )
-    return NextResponse.json({ users })
+    return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
   }
 
-  // Manager sees only their assigned employees (within same org implicitly)
-  const users = await query(
-    `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at
+  // Manager: their employees + peer DMs if withPeers=true + org-wide floaters for scheduling
+  const employees = await query(
+    `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
      FROM users WHERE manager_id = $1 AND role = 'employee' ORDER BY full_name`,
     [session.id]
   )
-  return NextResponse.json({ users })
+
+  let peers: Record<string, unknown>[] = []
+  if (withPeers && session.org_id) {
+    peers = await query(
+      `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
+       FROM users WHERE role = 'manager' AND org_id = $1 AND id != $2 AND is_active = TRUE ORDER BY full_name`,
+      [session.org_id, session.id]
+    )
+  }
+
+  // Org floaters from other DMs — available for scheduling and task assignment
+  let orgFloaters: Record<string, unknown>[] = []
+  if (session.org_id) {
+    orgFloaters = await query(
+      `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
+       FROM users WHERE is_floater = TRUE AND role = 'employee' AND is_active = TRUE
+         AND org_id = $1 AND (manager_id IS NULL OR manager_id != $2)
+       ORDER BY full_name`,
+      [session.org_id, session.id]
+    )
+  }
+
+  const combined = [...(peers as Record<string, unknown>[]), ...(employees as Record<string, unknown>[]), ...(orgFloaters as Record<string, unknown>[])]
+  return NextResponse.json({ users: await addAvatarUrls(combined) })
 }
 
 export async function POST(req: NextRequest) {
@@ -72,9 +123,9 @@ export async function POST(req: NextRequest) {
   // Determine manager_id
   let finalManagerId: string | null = null
   if (finalRole !== 'developer' && finalRole !== 'owner' && finalRole !== 'sales_director') {
-    if ((session.role === 'developer' || isOwner(session.role)) && managerId) {
+    if ((session.role === 'developer' || isOwner(session.role) || session.role === 'ops_manager') && managerId) {
       finalManagerId = managerId
-    } else if (isManager(session.role) && finalRole === 'employee') {
+    } else if (session.role === 'manager' && finalRole === 'employee') {
       finalManagerId = session.id
     }
   }
@@ -90,11 +141,45 @@ export async function POST(req: NextRequest) {
   }
 
   const hash = await bcrypt.hash(password, 12)
+
+  // DMs create pending users — higher roles create immediately active users
+  const isDMCreating = session.role === 'manager'
+  if (isDMCreating) {
+    try { await ensureApprovalColumn() } catch {}
+  }
+
   const user = await queryOne<{ id: string }>(
-    `INSERT INTO users (username, email, password_hash, role, full_name, manager_id, org_id, created_by)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
-    [username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(), finalManagerId, finalOrgId, session.id]
+    `INSERT INTO users (username, email, password_hash, role, full_name, manager_id, org_id, created_by, is_active, approval_status, temp_password, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    [
+      username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(),
+      finalManagerId, finalOrgId, session.id,
+      isDMCreating ? false : true,
+      isDMCreating ? 'pending' : null,
+      password,
+      true,
+    ]
   )
+
+  if (isDMCreating) {
+    // Notify approvers in the org via push
+    const approvers = await query<{ id: string }>(
+      `SELECT id FROM users
+       WHERE role IN ('owner', 'sales_director', 'ops_manager', 'developer')
+         AND is_active = TRUE
+         AND (org_id = $1 OR ($1 IS NULL AND org_id IS NULL))`,
+      [finalOrgId]
+    )
+    if (approvers.length > 0) {
+      await sendPushToUsers(
+        approvers.map(a => a.id),
+        'New Employee Pending Approval',
+        `${session.fullName} added ${fullName.trim()} — tap to review in Team.`,
+        'pending_approval'
+      ).catch(() => {})
+    }
+    return NextResponse.json({ ok: true, id: user!.id, pending: true })
+  }
 
   await sendEmail(
     email.trim(),
@@ -111,7 +196,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, isActive, password, fullName, email, managerId, role, orgId } = await req.json()
+  const { userId, isActive, password, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab } = await req.json()
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -138,7 +223,10 @@ export async function PATCH(req: NextRequest) {
   }
   if (password) {
     const hash = await bcrypt.hash(password, 12)
-    await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, userId])
+    await query(
+      `UPDATE users SET password_hash = $1, temp_password = $2, must_change_password = TRUE WHERE id = $3`,
+      [hash, password, userId]
+    )
   }
   if (fullName) await query(`UPDATE users SET full_name = $1 WHERE id = $2`, [fullName.trim(), userId])
   if (email) await query(`UPDATE users SET email = $1 WHERE id = $2`, [email.trim(), userId])
@@ -147,6 +235,18 @@ export async function PATCH(req: NextRequest) {
   }
   if (orgId !== undefined && session.role === 'developer') {
     await query(`UPDATE users SET org_id = $1 WHERE id = $2`, [orgId || null, userId])
+  }
+  if (avatarKey !== undefined) {
+    await query(`UPDATE users SET avatar_key = $1 WHERE id = $2`, [avatarKey || null, userId])
+  }
+  if (payType !== undefined && (payType === 'salary' || payType === 'hourly')) {
+    await query(`UPDATE users SET pay_type = $1 WHERE id = $2`, [payType, userId])
+  }
+  if (isFloater !== undefined) {
+    await query(`UPDATE users SET is_floater = $1 WHERE id = $2`, [!!isFloater, userId])
+  }
+  if (isOpsCollab !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_manager')) {
+    await query(`UPDATE users SET is_ops_collab = $1 WHERE id = $2`, [!!isOpsCollab, userId])
   }
 
   return NextResponse.json({ ok: true })

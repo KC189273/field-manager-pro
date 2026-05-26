@@ -7,10 +7,13 @@ const PUBLIC_PATHS = [
   '/forgot-password',
   '/reset-password',
   '/get-started',
+  '/ack/',
   '/api/auth/login',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/get-started',
+  '/api/ack/',
+  '/service-analysis.pdf',
 ]
 
 export async function proxy(request: NextRequest) {

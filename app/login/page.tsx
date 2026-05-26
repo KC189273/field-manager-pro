@@ -18,9 +18,8 @@ export default function LoginPage() {
     try {
       const saved = localStorage.getItem(REMEMBER_KEY)
       if (saved) {
-        const { username: u, password: p } = JSON.parse(saved)
+        const { username: u } = JSON.parse(saved)
         if (u) setUsername(u)
-        if (p) setPassword(p)
         setRememberMe(true)
       }
     } catch {}
@@ -42,11 +41,15 @@ export default function LoginPage() {
         return
       }
       if (rememberMe) {
-        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username, password }))
+        localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username }))
       } else {
         localStorage.removeItem(REMEMBER_KEY)
       }
-      router.push('/dashboard')
+      if (data.mustChangePassword) {
+        window.location.href = '/change-password'
+      } else {
+        window.location.href = '/dashboard'
+      }
     } catch {
       setError('Network error')
     } finally {
@@ -105,7 +108,7 @@ export default function LoginPage() {
               onChange={e => setRememberMe(e.target.checked)}
               className="accent-violet-500 w-4 h-4"
             />
-            <span className="text-sm text-gray-400">Remember username &amp; password</span>
+            <span className="text-sm text-gray-400">Remember my username</span>
           </label>
           <button
             type="submit"

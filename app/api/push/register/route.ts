@@ -23,15 +23,28 @@ export async function POST(req: NextRequest) {
 
   try { await ensureTable() } catch { /* already exists */ }
 
-  const { token, platform = 'ios' } = await req.json()
-  if (!token || typeof token !== 'string') {
+  const { token: rawToken, platform = 'ios' } = await req.json()
+  if (!rawToken || typeof rawToken !== 'string') {
     return NextResponse.json({ error: 'Missing token' }, { status: 400 })
   }
+
+  // iOS/APNs: strip angle brackets, spaces, dashes and lowercase (hex token)
+  // Android/FCM: keep token exactly as-is (case-sensitive base64url)
+  const token = platform === 'android'
+    ? rawToken.trim()
+    : rawToken.replace(/[<>\s-]/g, '').toLowerCase()
+
+  // Remove any stale tokens for this user+platform before inserting the fresh one.
+  // This handles rotated FCM tokens and fixes previously-lowercased bad tokens.
+  await query(
+    `DELETE FROM device_tokens WHERE user_id = $1 AND platform = $2 AND token != $3`,
+    [session.id, platform, token]
+  )
 
   await query(
     `INSERT INTO device_tokens (user_id, token, platform)
      VALUES ($1, $2, $3)
-     ON CONFLICT (user_id, token) DO UPDATE SET updated_at = NOW()`,
+     ON CONFLICT (user_id, token) DO UPDATE SET platform = $3, updated_at = NOW()`,
     [session.id, token, platform]
   )
 

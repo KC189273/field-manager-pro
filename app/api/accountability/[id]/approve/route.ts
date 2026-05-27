@@ -7,7 +7,10 @@ import { sendPushToUser } from '@/lib/apns'
 import { buildFormalDocHtml, levelLabel, APP_URL } from '@/lib/accountability-email'
 import crypto from 'crypto'
 
+let ensured = false
 async function ensureConversationColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_status TEXT`)
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_approved_at TIMESTAMPTZ`)
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_reminder_sent_at TIMESTAMPTZ`)

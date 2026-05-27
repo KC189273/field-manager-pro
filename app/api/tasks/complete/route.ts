@@ -3,7 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, taskCompletedHtml } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
-import { getS3ObjectBuffer } from '@/lib/s3'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 const canAlwaysComplete = (role: string) => isOwner(role as never) || role === 'developer'
 
@@ -86,24 +86,20 @@ export async function POST(req: NextRequest) {
       `SELECT email, full_name FROM users WHERE id = $1`,
       [task.created_by]
     )
-    if (creator?.email && await isEmailEnabled(task.created_by)) {
+    if (creator?.email) {
       const completedAt = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-      // Attach completion photos
-      const allKeys = [...(photoKeys ?? []), ...(photoKey && !photoKeys?.includes(photoKey) ? [photoKey] : [])].filter(Boolean) as string[]
-      const attachments: { filename: string; content: string }[] = []
-      await Promise.all(allKeys.map(async (key, i) => {
-        const buf = await getS3ObjectBuffer(key)
-        if (buf) {
-          const ext = key.split('.').pop() ?? 'jpg'
-          attachments.push({ filename: `completion-photo-${i + 1}.${ext}`, content: buf.toString('base64') })
-        }
-      }))
-      sendEmail(
-        creator.email,
-        `Task completed: ${task.title}`,
-        taskCompletedHtml(creator.full_name, session.fullName, task.title, note || null, completedAt),
-        attachments
-      ).catch(() => {})
+      // Build photo URLs (presigned) and send email non-blocking
+      isEmailEnabled(task.created_by).then(async enabled => {
+        if (!enabled) return
+        const allKeys = [...(photoKeys ?? []), ...(photoKey && !photoKeys?.includes(photoKey) ? [photoKey] : [])].filter(Boolean) as string[]
+        const photoUrls = await Promise.all(allKeys.map(key => getReceiptViewUrl(key).catch(() => null)))
+        const validUrls = photoUrls.filter(Boolean) as string[]
+        return sendEmail(
+          creator!.email,
+          `Task completed: ${task.title}`,
+          taskCompletedHtml(creator!.full_name, session.fullName, task.title, note || null, completedAt, validUrls)
+        )
+      }).catch(() => {})
     }
     sendPushToUser(task.created_by, 'Task Completed', `${session.fullName} completed: ${task.title}`, 'task_completed').catch(() => {})
   }

@@ -2,14 +2,18 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
 
+let ensured = false
+async function ensureMyStoresColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE dm_store_locations ADD COLUMN IF NOT EXISTS employee_capacity SMALLINT NOT NULL DEFAULT 1`)
+}
+
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Ensure employee_capacity column exists
-  try {
-    await query(`ALTER TABLE dm_store_locations ADD COLUMN IF NOT EXISTS employee_capacity SMALLINT NOT NULL DEFAULT 1`)
-  } catch { /* already exists */ }
+  try { await ensureMyStoresColumns() } catch {}
 
   let stores: { id: string; address: string; employee_capacity: number }[]
 

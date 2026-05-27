@@ -360,8 +360,11 @@ export function taskReminderHtml(assigneeName: string, title: string, descriptio
   `
 }
 
-export function taskCompletedHtml(assignerName: string, assigneeName: string, title: string, note: string | null, completedAt: string): string {
+export function taskCompletedHtml(assignerName: string, assigneeName: string, title: string, note: string | null, completedAt: string, photoUrls?: string[]): string {
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const photosHtml = photoUrls?.length
+    ? `<div style="margin-top:16px;"><p style="font-size:13px;font-weight:600;color:#374151;margin:0 0 8px;">Completion Photos</p>${photoUrls.map(u => `<img src="${u}" alt="Completion photo" style="max-width:100%;border-radius:8px;border:1px solid #e5e7eb;margin-bottom:8px;display:block;" />`).join('')}</div>`
+    : ''
   return `
     <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
       <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
@@ -378,7 +381,8 @@ export function taskCompletedHtml(assignerName: string, assigneeName: string, ti
           <p style="font-size:13px;color:#8e8e93;margin:0;">Completed ${completedAt}</p>
         </div>
         ${note ? `<div style="background:#fff3e0;border-radius:8px;padding:12px 14px;margin-bottom:20px;"><p style="font-size:13px;font-weight:600;color:#e65100;margin:0 0 4px;">Note:</p><p style="font-size:14px;color:#555;margin:0;">${note}</p></div>` : ''}
-        <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Tasks</a>
+        ${photosHtml}
+        <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;margin-top:${photosHtml ? '16px' : '0'};">View Tasks</a>
       </div>
     </div>
   `

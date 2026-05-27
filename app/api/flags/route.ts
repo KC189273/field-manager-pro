@@ -3,6 +3,14 @@ import { getSession, isManager, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
+let ensured = false
+async function ensureFlagColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE flags ADD COLUMN IF NOT EXISTS resolution_note TEXT`)
+  await query(`ALTER TABLE flags ADD COLUMN IF NOT EXISTS resolved_by_name TEXT`)
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -52,9 +60,7 @@ export async function PATCH(req: NextRequest) {
   const { flagId, note } = await req.json()
   if (!flagId) return NextResponse.json({ error: 'Missing flagId' }, { status: 400 })
 
-  // Ensure resolution columns exist
-  await query(`ALTER TABLE flags ADD COLUMN IF NOT EXISTS resolution_note TEXT`).catch(() => {})
-  await query(`ALTER TABLE flags ADD COLUMN IF NOT EXISTS resolved_by_name TEXT`).catch(() => {})
+  try { await ensureFlagColumns() } catch {}
 
   await queryOne(
     `UPDATE flags SET resolved = TRUE, resolved_by = $1, resolved_by_name = $2, resolved_at = NOW(), resolution_note = $3 WHERE id = $4`,

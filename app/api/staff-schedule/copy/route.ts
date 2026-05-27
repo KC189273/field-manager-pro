@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 
+let ensured = false
+async function ensureScheduledShiftsColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE scheduled_shifts ALTER COLUMN employee_id DROP NOT NULL`).catch(() => {})
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || session.role === 'employee') {
@@ -23,7 +30,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Allow employee_id to be null (idempotent)
-  await query(`ALTER TABLE scheduled_shifts ALTER COLUMN employee_id DROP NOT NULL`).catch(() => {})
+  try { await ensureScheduledShiftsColumns() } catch {}
 
   // Compute target week end
   const targetEnd = new Date(targetWeekStart + 'T12:00:00')

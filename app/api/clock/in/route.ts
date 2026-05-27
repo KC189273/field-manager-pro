@@ -2,16 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 
+let ensured = false
+async function ensureShiftColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS store_location_id UUID`)
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lat, lng, address, storeId } = await req.json()
 
-  // Ensure store_location_id column exists on shifts
-  try {
-    await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS store_location_id UUID`)
-  } catch { /* already exists */ }
+  try { await ensureShiftColumns() } catch {}
 
   // Check if already clocked in
   const active = await queryOne(

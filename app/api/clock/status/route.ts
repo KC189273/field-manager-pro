@@ -3,14 +3,19 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { nextWeekStart, nextWeekDeadline, daysUntilDeadline } from '@/lib/schedule'
 
+let ensured = false
+async function ensureShiftColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS store_location_id UUID`)
+}
+
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   // Ensure store_location_id column exists before joining on it
-  try {
-    await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS store_location_id UUID`)
-  } catch { /* already exists */ }
+  try { await ensureShiftColumns() } catch {}
 
   // Active shift
   const activeShift = await queryOne<{ id: string; clock_in_at: string; clock_in_lat: string; clock_in_lng: string; clock_in_address: string; store_location_id: string | null; store_address: string | null }>(

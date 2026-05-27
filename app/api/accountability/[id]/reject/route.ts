@@ -8,6 +8,17 @@ import crypto from 'crypto'
 
 const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
+let ensured = false
+async function ensureRevisionColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_notes TEXT`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_requested_by_name TEXT`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_requested_at TIMESTAMPTZ`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs DROP CONSTRAINT IF EXISTS accountability_docs_status_check`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD CONSTRAINT accountability_docs_status_check CHECK (status IN ('pending_approval','approved','rejected','needs_revision'))`).catch(() => {})
+}
+
 function levelLabel(level: string): string {
   if (level === 'verbal') return 'Verbal Notice'
   if (level === 'written') return 'Written Notice — 2nd Level'
@@ -82,13 +93,7 @@ export async function POST(
 
   // ── Send Back for Revision ────────────────────────────────────────────────
   if (rejectionType === 'revision') {
-    // Ensure revision columns exist
-    await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_notes TEXT`).catch(() => {})
-    await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_requested_by_name TEXT`).catch(() => {})
-    await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_requested_at TIMESTAMPTZ`).catch(() => {})
-    // Update status constraint to allow needs_revision
-    await query(`ALTER TABLE accountability_docs DROP CONSTRAINT IF EXISTS accountability_docs_status_check`).catch(() => {})
-    await query(`ALTER TABLE accountability_docs ADD CONSTRAINT accountability_docs_status_check CHECK (status IN ('pending_approval','approved','rejected','needs_revision'))`).catch(() => {})
+    try { await ensureRevisionColumns() } catch {}
 
     await query(
       `UPDATE accountability_docs

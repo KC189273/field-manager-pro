@@ -4,14 +4,20 @@ import { query, queryOne } from '@/lib/db'
 import { sendEmail, flagAlertHtml } from '@/lib/notifications'
 import { sendPushToUsers, isEmailEnabled } from '@/lib/apns'
 
+let ensured = false
+async function ensureShiftColumns() {
+  if (ensured) return
+  ensured = true
+  await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS handoff_note TEXT`)
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lat, lng, address, handoffNote } = await req.json()
 
-  // Ensure handoff_note column exists
-  await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS handoff_note TEXT`).catch(() => {})
+  try { await ensureShiftColumns() } catch {}
 
   const shift = await queryOne<{ id: string; clock_in_at: string }>(
     `SELECT id, clock_in_at FROM shifts

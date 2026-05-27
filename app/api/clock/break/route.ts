@@ -3,7 +3,10 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUsers } from '@/lib/apns'
 
+let ensured = false
 async function ensureBreaksTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS shift_breaks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

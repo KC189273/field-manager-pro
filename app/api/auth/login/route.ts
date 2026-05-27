@@ -6,7 +6,10 @@ import { createSession, setSessionCookie } from '@/lib/auth'
 const MAX_ATTEMPTS = 10
 const WINDOW_MS = 15 * 60 * 1000 // 15 minutes
 
+let ensured = false
 async function ensureRateLimitTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS login_attempts (
       ip           TEXT PRIMARY KEY,

@@ -4,7 +4,10 @@ import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 
+let ensured = false
 async function ensureTerminationTables() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS termination_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

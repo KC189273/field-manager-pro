@@ -477,7 +477,7 @@ export async function GET(req: NextRequest) {
     created_at: string
   }>(
     `SELECT id, ref_number, org_id, subject_id, subject_name, subject_role,
-            author_id, author_name, author_role, level, title, incident_date,
+            author_id, author_name, author_role, level, title, incident_date::text,
             status, ack_status, ack_at, sd_name, approver_name, approved_at,
             rejected_at, rejected_by_name, rejection_notes,
             revision_notes, revision_requested_by_name, conversation_status,
@@ -507,7 +507,7 @@ export async function GET(req: NextRequest) {
 
     pendingApproval = await query(
       `SELECT id, ref_number, org_id, subject_id, subject_name, subject_role,
-              author_id, author_name, author_role, level, title, incident_date,
+              author_id, author_name, author_role, level, title, incident_date::text,
               status, ack_status, ack_at, sd_name, approver_name, approved_at,
               rejected_at, rejected_by_name, rejection_notes, created_at
        FROM accountability_docs d

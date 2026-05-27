@@ -162,7 +162,7 @@ function DocCard({ doc, onClick }: { doc: Doc; onClick: () => void }) {
             {STATUS_LABELS[doc.status] ?? doc.status}
           </span>
         </div>
-        <span className="text-xs text-gray-500 shrink-0">{fmtDate(doc.incident_date)}</span>
+        <span className="text-xs text-gray-500 shrink-0 text-right"><span className="block text-[10px] uppercase tracking-wide text-gray-600">Date Submitted</span>{new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' })}</span>
       </div>
       <p className="text-sm font-semibold text-white mb-1 leading-snug">{doc.title}</p>
       <div className="flex items-center justify-between gap-2">

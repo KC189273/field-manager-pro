@@ -70,6 +70,10 @@ function fmtDuration(seconds: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
+function fmtDecimalHours(seconds: number) {
+  return (seconds / 3600).toFixed(2) + 'h'
+}
+
 function getWeekMonday(offsetWeeks = 0): Date {
   // Derive today's calendar date in CST/CDT so server (UTC) and client agree
   const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: CST })
@@ -609,7 +613,7 @@ function TimecardsPage() {
                         <p className="font-semibold text-white text-sm truncate">{emp.fullName}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <span className="text-xs text-violet-400 font-semibold">
-                            {(emp.totalSeconds / 3600).toFixed(1)}h
+                            {(emp.totalSeconds / 3600).toFixed(2)}h
                           </span>
                           <span className="text-xs text-gray-600">{emp.shiftCount} shift{emp.shiftCount !== 1 ? 's' : ''}</span>
                           {emp.correctionCount > 0 && (
@@ -668,7 +672,7 @@ function TimecardsPage() {
             <div className="flex gap-3 mb-5">
               <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">Total Hours</p>
-                <p className="font-bold text-violet-400">{(totalSeconds / 3600).toFixed(1)}h</p>
+                <p className="font-bold text-violet-400">{(totalSeconds / 3600).toFixed(2)}h</p>
               </div>
               <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">Shifts</p>
@@ -719,7 +723,7 @@ function TimecardsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3">
-                          {daySeconds > 0 && <p className="text-xs font-semibold text-gray-400">{fmtDuration(daySeconds)}</p>}
+                          {daySeconds > 0 && <p className="text-xs font-semibold text-gray-400">{fmtDecimalHours(daySeconds)}</p>}
                           {isMgr && selectedUserId && selectedUserId !== session.id && (
                             <>
                               <button
@@ -755,7 +759,7 @@ function TimecardsPage() {
                                     <span className="text-sm font-medium text-white">
                                       {shift.clock_out_at ? fmtTime(shift.clock_out_at) : <span className="text-yellow-400">Still clocked in</span>}
                                     </span>
-                                    <span className="text-xs text-gray-500">{fmtDuration(shiftDuration(shift, now))}</span>
+                                    <span className="text-xs text-gray-500">{fmtDecimalHours(shiftDuration(shift, now))}</span>
                                     {shiftDuration(shift, now) > 10 * 3600 && (
                                       <span className="text-[10px] font-semibold bg-red-500/15 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full">⚠ 10h+</span>
                                     )}

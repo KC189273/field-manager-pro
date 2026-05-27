@@ -3,7 +3,12 @@ import { Pool } from 'pg'
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
-  max: 5,
+  // max: 2 — each Vercel worker has its own pool; keeping this low prevents
+  // exhausting Neon/Supabase connection limits when many workers scale up.
+  // Queries that use Promise.all() still run in parallel up to this limit.
+  // For higher concurrency, switch DATABASE_URL to Neon's pooler endpoint
+  // (-pooler.neon.tech) which supports thousands of connections via PgBouncer.
+  max: 2,
   connectionTimeoutMillis: 8000,
   idleTimeoutMillis: 10000,
 })

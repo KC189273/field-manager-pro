@@ -91,40 +91,35 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     return () => clearInterval(interval)
   }, [])
 
-  const fetchNotifs = useCallback(() => {
-    fetch('/api/notifications')
+  // Single combined fetch replaces 3 separate API calls per page load
+  const fetchNavStatus = useCallback(() => {
+    fetch('/api/nav/status')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return
         setNotifications(d.notifications ?? [])
         setUnread(d.unread ?? 0)
+        setChatUnread(d.chatUnread ?? 0)
+        // Store active shift for GPS tracking decision
+        if (d.activeShift !== undefined) {
+          navActiveShiftRef.current = d.activeShift
+        }
       })
       .catch(() => {})
   }, [])
 
-  useEffect(() => {
-    fetchNotifs()
-    const interval = setInterval(fetchNotifs, 60 * 1000)
-    return () => clearInterval(interval)
-  }, [fetchNotifs])
+  const navActiveShiftRef = useRef<{ id: string } | null>(null)
 
   useEffect(() => {
-    if (!CHAT_ROLES.includes(role)) return
-    const load = () => {
-      fetch('/api/chat/unread')
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) setChatUnread(d.unread ?? 0) })
-        .catch(() => {})
-    }
-    load()
-    const interval = setInterval(load, 30 * 1000)
+    fetchNavStatus()
+    const interval = setInterval(fetchNavStatus, 45 * 1000)
     return () => clearInterval(interval)
-  }, [role])
+  }, [fetchNavStatus])
 
   function openNotifs() {
     setNotifOpen(true)
     setProfileOpen(false)
-    fetch('/api/notifications', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }).catch(() => {})
+    fetch('/api/nav/status', { method: 'PATCH' }).catch(() => {})
     setUnread(0)
     setNotifications(prev => prev.map(n => ({ ...n, read: true })))
   }
@@ -185,14 +180,11 @@ export default function NavBar({ role, fullName }: NavBarProps) {
       resumeNativeTrackingIfClocked()
       return
     }
+    // Use activeShift from the combined nav/status fetch (already in navActiveShiftRef)
+    // instead of a separate /api/clock/status call
     const checkAndTrack = () => {
-      fetch('/api/clock/status')
-        .then(r => r.json())
-        .then(data => {
-          if (data?.activeShift) startTracking()
-          else stopTracking()
-        })
-        .catch(() => {})
+      if (navActiveShiftRef.current) startTracking()
+      else stopTracking()
     }
     checkAndTrack()
     const interval = setInterval(checkAndTrack, 5 * 60 * 1000)

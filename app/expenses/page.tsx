@@ -21,6 +21,8 @@ interface Expense {
   description: string | null
   receipt_key: string | null
   receipt_url: string | null
+  receipt_keys: string[] | null
+  receipt_urls: string[] | null
   status: 'pending' | 'approved' | 'rejected' | 'paid'
   rejection_reason: string | null
   approved_at: string | null
@@ -64,11 +66,11 @@ export default function ExpensesPage() {
     description: '',
     onBehalfOf: '',
   })
-  const [receiptFile, setReceiptFile] = useState<File | null>(null)
-  const [receiptKey, setReceiptKey] = useState<string | null>(null)
-  const [receiptPreview, setReceiptPreview] = useState<string | null>(null)
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([])
+  const [receiptKeys, setReceiptKeys] = useState<(string | null)[]>([])
+  const [receiptPreviews, setReceiptPreviews] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
-  const [uploading, setUploading] = useState(false)
+  const [uploadingCount, setUploadingCount] = useState(0)
   const [submitting, setSubmitting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -115,42 +117,64 @@ export default function ExpensesPage() {
   }
 
   async function handleReceiptChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setReceiptFile(file)
-    setReceiptPreview(URL.createObjectURL(file))
-    setReceiptKey(null)
+    const files = Array.from(e.target.files ?? [])
+    if (!files.length) return
+    // Reset input so the same file can be re-selected if removed
+    e.target.value = ''
 
-    // Auto-upload
-    setUploading(true)
-    try {
-      const urlRes = await fetch('/api/expenses/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
-      })
-      if (!urlRes.ok) {
-        const err = await urlRes.json()
-        alert('Receipt upload failed: ' + (err.error ?? urlRes.status))
-        setUploading(false)
-        return
+    for (const file of files) {
+      const preview = URL.createObjectURL(file)
+      const idx = receiptFiles.length  // capture index before state updates
+      setReceiptFiles(prev => [...prev, file])
+      setReceiptPreviews(prev => [...prev, preview])
+      setReceiptKeys(prev => [...prev, null])
+      setUploadingCount(c => c + 1)
+
+      try {
+        const urlRes = await fetch('/api/expenses/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: file.name, contentType: file.type }),
+        })
+        if (!urlRes.ok) {
+          const err = await urlRes.json()
+          alert('Receipt upload failed: ' + (err.error ?? urlRes.status))
+          setReceiptFiles(prev => prev.filter((_, i) => i !== idx))
+          setReceiptPreviews(prev => prev.filter((_, i) => i !== idx))
+          setReceiptKeys(prev => prev.filter((_, i) => i !== idx))
+          setUploadingCount(c => c - 1)
+          continue
+        }
+        const { url, key } = await urlRes.json()
+        const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+        if (!s3Res.ok) {
+          const text = await s3Res.text()
+          alert('S3 upload failed (' + s3Res.status + '): ' + text.slice(0, 200))
+          setReceiptFiles(prev => prev.filter((_, i) => i !== idx))
+          setReceiptPreviews(prev => prev.filter((_, i) => i !== idx))
+          setReceiptKeys(prev => prev.filter((_, i) => i !== idx))
+          setUploadingCount(c => c - 1)
+          continue
+        }
+        setReceiptKeys(prev => prev.map((k, i) => i === idx ? key : k))
+      } catch (err) {
+        alert('Receipt upload failed: ' + String(err))
+        setReceiptFiles(prev => prev.filter((_, i) => i !== idx))
+        setReceiptPreviews(prev => prev.filter((_, i) => i !== idx))
+        setReceiptKeys(prev => prev.filter((_, i) => i !== idx))
       }
-      const { url, key } = await urlRes.json()
-      const s3Res = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      if (!s3Res.ok) {
-        const text = await s3Res.text()
-        alert('S3 upload failed (' + s3Res.status + '): ' + text.slice(0, 200))
-        setUploading(false)
-        return
-      }
-      setReceiptKey(key)
-    } catch (err) {
-      alert('Receipt upload failed: ' + String(err))
+      setUploadingCount(c => c - 1)
     }
-    setUploading(false)
+  }
+
+  function removeReceipt(idx: number) {
+    setReceiptFiles(prev => prev.filter((_, i) => i !== idx))
+    setReceiptPreviews(prev => prev.filter((_, i) => i !== idx))
+    setReceiptKeys(prev => prev.filter((_, i) => i !== idx))
   }
 
   async function handleScan() {
+    const receiptKey = receiptKeys[0]
     if (!receiptKey) return
     setScanning(true)
     try {
@@ -185,7 +209,7 @@ export default function ExpensesPage() {
         amount: parseFloat(form.amount),
         category: form.category,
         description: form.description || null,
-        receiptKey: receiptKey || null,
+        receiptKeys: receiptKeys.filter(Boolean),
       }
       if (form.onBehalfOf) body.userId = form.onBehalfOf
 
@@ -201,9 +225,9 @@ export default function ExpensesPage() {
       }
       setShowForm(false)
       setForm({ date: new Date().toISOString().slice(0, 10), amount: '', category: 'Meals', description: '', onBehalfOf: '' })
-      setReceiptFile(null)
-      setReceiptPreview(null)
-      setReceiptKey(null)
+      setReceiptFiles([])
+      setReceiptPreviews([])
+      setReceiptKeys([])
       await loadExpenses()
     } finally {
       setSubmitting(false)
@@ -535,41 +559,61 @@ export default function ExpensesPage() {
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Receipt upload */}
+              {/* Receipt photos */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Receipt Photo (optional)</label>
-                {receiptPreview ? (
-                  <div className="relative">
-                    <img src={receiptPreview} alt="Receipt" className="w-full max-h-48 object-contain rounded-xl bg-gray-800" />
-                    <div className="flex gap-2 mt-2">
+                <label className="block text-sm font-medium text-gray-300 mb-2">Receipt Photos (optional)</label>
+                {receiptPreviews.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2 mb-2">
+                    {receiptPreviews.map((preview, idx) => (
+                      <div key={idx} className="relative aspect-square rounded-xl overflow-hidden bg-gray-800">
+                        <img src={preview} alt={`Receipt ${idx + 1}`} className="w-full h-full object-cover" />
+                        {receiptKeys[idx] === null && (
+                          <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                            <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => removeReceipt(idx)}
+                          className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs leading-none hover:bg-black/80"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  {receiptPreviews.length === 0 ? (
+                    <button
+                      onClick={() => fileRef.current?.click()}
+                      className="flex-1 border-2 border-dashed border-gray-700 rounded-xl py-6 text-center text-gray-500 hover:border-violet-500 hover:text-violet-400 transition-colors"
+                    >
+                      <p className="text-sm font-medium">Tap to attach receipt</p>
+                      <p className="text-xs mt-1">JPG, PNG, or PDF · Multiple allowed</p>
+                    </button>
+                  ) : (
+                    <>
                       <button
                         onClick={handleScan}
-                        disabled={scanning || !receiptKey || uploading}
+                        disabled={scanning || receiptKeys[0] === null || uploadingCount > 0}
                         className="flex-1 text-sm bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white px-4 py-2 rounded-xl font-medium transition-colors"
                       >
-                        {scanning ? 'Scanning...' : uploading ? 'Uploading...' : 'Scan Receipt'}
+                        {scanning ? 'Scanning...' : uploadingCount > 0 ? 'Uploading...' : 'Scan Receipt'}
                       </button>
                       <button
-                        onClick={() => { setReceiptFile(null); setReceiptPreview(null); setReceiptKey(null) }}
+                        onClick={() => fileRef.current?.click()}
                         className="text-sm text-gray-400 hover:text-white px-3 py-2 rounded-xl border border-gray-700"
                       >
-                        Remove
+                        + Add
                       </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => fileRef.current?.click()}
-                    className="w-full border-2 border-dashed border-gray-700 rounded-xl py-8 text-center text-gray-500 hover:border-violet-500 hover:text-violet-400 transition-colors"
-                  >
-                    <p className="text-sm font-medium">Tap to attach receipt</p>
-                    <p className="text-xs mt-1">JPG, PNG, or PDF</p>
-                  </button>
-                )}
+                    </>
+                  )}
+                </div>
                 <input
                   ref={fileRef}
                   type="file"
                   accept="image/*,.pdf"
+                  multiple
                   className="hidden"
                   onChange={handleReceiptChange}
                 />
@@ -639,7 +683,7 @@ export default function ExpensesPage() {
 
               <button
                 onClick={handleSubmit}
-                disabled={submitting || uploading}
+                disabled={submitting || uploadingCount > 0}
                 className="w-full bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white font-semibold py-3.5 rounded-xl transition-colors"
               >
                 {submitting ? 'Submitting...' : 'Submit Expense'}
@@ -662,26 +706,32 @@ export default function ExpensesPage() {
             </div>
 
             <div className="p-5 space-y-4">
-              {/* Receipt image */}
-              {detailExpense.receipt_url && (
+              {/* Receipt photos */}
+              {((detailExpense.receipt_urls && detailExpense.receipt_urls.length > 0) || detailExpense.receipt_url) && (
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Receipt</p>
-                  <img
-                    src={detailExpense.receipt_url}
-                    alt="Receipt"
-                    className="w-full rounded-xl bg-gray-800 object-contain max-h-72"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                  <a
-                    href={detailExpense.receipt_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2"
-                  >
-                    Open full size
-                  </a>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">
+                    Receipts {((detailExpense.receipt_urls?.length ?? 0) + (detailExpense.receipt_url && !detailExpense.receipt_urls?.length ? 1 : 0)) > 1 ? `(${detailExpense.receipt_urls?.length ?? 1})` : ''}
+                  </p>
+                  <div className="space-y-3">
+                    {(detailExpense.receipt_urls?.length ? detailExpense.receipt_urls : detailExpense.receipt_url ? [detailExpense.receipt_url] : []).map((url, idx) => (
+                      <div key={idx}>
+                        <img
+                          src={url}
+                          alt={`Receipt ${idx + 1}`}
+                          className="w-full rounded-xl bg-gray-800 object-contain max-h-72"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                        />
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-1"
+                        >
+                          Open full size{(detailExpense.receipt_urls?.length ?? 0) > 1 ? ` (photo ${idx + 1})` : ''}
+                        </a>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

@@ -67,11 +67,17 @@ export async function GET(req: NextRequest) {
   // Generate signed view URLs for receipts
   const expenses = await Promise.all(
     rows.map(async (e) => {
-      if (e.receipt_key) {
+      const keys: string[] = Array.isArray(e.receipt_keys) && (e.receipt_keys as string[]).length > 0
+        ? e.receipt_keys as string[]
+        : e.receipt_key ? [e.receipt_key as string] : []
+      if (keys.length > 0) {
         try {
-          e.receipt_url = await getReceiptViewUrl(e.receipt_key as string)
+          const urls = await Promise.all(keys.map(k => getReceiptViewUrl(k)))
+          e.receipt_urls = urls
+          e.receipt_url = urls[0] ?? null
         } catch {
           e.receipt_url = null
+          e.receipt_urls = []
         }
       }
       return e
@@ -81,13 +87,22 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ expenses })
 }
 
+let ensuredCols = false
+async function ensureReceiptKeysColumn() {
+  if (ensuredCols) return
+  ensuredCols = true
+  await query(`ALTER TABLE expenses ADD COLUMN IF NOT EXISTS receipt_keys TEXT[] DEFAULT '{}'`)
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || !canSubmitExpense(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, date, amount, category, description, receiptKey } = await req.json()
+  try { await ensureReceiptKeysColumn() } catch {}
+
+  const { userId, date, amount, category, description, receiptKeys } = await req.json()
   if (!date || !amount || !category) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
@@ -98,10 +113,11 @@ export async function POST(req: NextRequest) {
     finalUserId = userId
   }
 
+  const keys: string[] = Array.isArray(receiptKeys) ? receiptKeys.filter(Boolean) : []
   await query(
-    `INSERT INTO expenses (user_id, submitted_by, date, amount, category, description, receipt_key)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [finalUserId, session.id, date, amount, category, description || null, receiptKey || null]
+    `INSERT INTO expenses (user_id, submitted_by, date, amount, category, description, receipt_key, receipt_keys)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [finalUserId, session.id, date, amount, category, description || null, keys[0] || null, keys]
   )
 
   // Notify owner(s) of new expense

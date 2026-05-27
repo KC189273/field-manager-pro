@@ -106,44 +106,88 @@ export default function ChatPage() {
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
-  const [lightboxScale, setLightboxScale] = useState(1)
+  const [lightboxTransform, setLightboxTransform] = useState({ scale: 1, tx: 0, ty: 0 })
   const lightboxImgRef = useRef<HTMLImageElement>(null)
-  const lightboxScaleRef = useRef(1)
-  const lightboxStartDistRef = useRef(0)
-  const lightboxStartScaleRef = useRef(1)
+  // Refs for pinch gesture state (mutated without re-render for performance)
+  const lbScale = useRef(1)
+  const lbTx = useRef(0)
+  const lbTy = useRef(0)
+  const lbStartDist = useRef(0)
+  const lbStartScale = useRef(1)
+  const lbStartTx = useRef(0)
+  const lbStartTy = useRef(0)
+  const lbNatural = useRef({ left: 0, top: 0 })
+  const lbPinchCenter = useRef({ x: 0, y: 0 })
+  const lbDragStart = useRef<{ x: number; y: number; tx: number; ty: number } | null>(null)
 
   useEffect(() => {
     if (!lightboxUrl || !lightboxImgRef.current) return
     const img = lightboxImgRef.current
-    function dist(t: TouchList) {
+
+    function getDist(t: TouchList) {
       return Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY)
     }
+    function applyTransform(s: number, tx: number, ty: number) {
+      lbScale.current = s; lbTx.current = tx; lbTy.current = ty
+      setLightboxTransform({ scale: s, tx, ty })
+    }
+
     function onStart(e: TouchEvent) {
       if (e.touches.length === 2) {
-        lightboxStartDistRef.current = dist(e.touches)
-        lightboxStartScaleRef.current = lightboxScaleRef.current
+        lbDragStart.current = null
+        const rect = img.getBoundingClientRect()
+        // Natural (untransformed) position
+        lbNatural.current = { left: rect.left - lbTx.current, top: rect.top - lbTy.current }
+        lbStartDist.current = getDist(e.touches)
+        lbStartScale.current = lbScale.current
+        lbStartTx.current = lbTx.current
+        lbStartTy.current = lbTy.current
+        lbPinchCenter.current = {
+          x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+          y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+        }
+      } else if (e.touches.length === 1 && lbScale.current > 1) {
+        lbDragStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, tx: lbTx.current, ty: lbTy.current }
       }
     }
+
     function onMove(e: TouchEvent) {
       if (e.touches.length === 2) {
         e.preventDefault()
-        const newScale = Math.min(5, Math.max(1, lightboxStartScaleRef.current * (dist(e.touches) / lightboxStartDistRef.current)))
-        lightboxScaleRef.current = newScale
-        setLightboxScale(newScale)
+        const s1 = lbStartScale.current
+        const s2 = Math.min(5, Math.max(1, s1 * getDist(e.touches) / lbStartDist.current))
+        const ratio = s2 / s1
+        const cx = lbPinchCenter.current.x
+        const cy = lbPinchCenter.current.y
+        const nl = lbNatural.current
+        // Keep pinch focal point fixed: tx2 = (cx - nleft)(1 - ratio) + tx1 * ratio
+        const tx2 = (cx - nl.left) * (1 - ratio) + lbStartTx.current * ratio
+        const ty2 = (cy - nl.top) * (1 - ratio) + lbStartTy.current * ratio
+        applyTransform(s2, tx2, ty2)
+      } else if (e.touches.length === 1 && lbDragStart.current) {
+        e.preventDefault()
+        const dx = e.touches[0].clientX - lbDragStart.current.x
+        const dy = e.touches[0].clientY - lbDragStart.current.y
+        applyTransform(lbScale.current, lbDragStart.current.tx + dx, lbDragStart.current.ty + dy)
       }
     }
+
+    function onEnd() { lbDragStart.current = null }
+
     img.addEventListener('touchstart', onStart, { passive: true })
     img.addEventListener('touchmove', onMove, { passive: false })
+    img.addEventListener('touchend', onEnd, { passive: true })
     return () => {
       img.removeEventListener('touchstart', onStart)
       img.removeEventListener('touchmove', onMove)
+      img.removeEventListener('touchend', onEnd)
     }
   }, [lightboxUrl])
 
   function closeLightbox() {
     setLightboxUrl(null)
-    setLightboxScale(1)
-    lightboxScaleRef.current = 1
+    setLightboxTransform({ scale: 1, tx: 0, ty: 0 })
+    lbScale.current = 1; lbTx.current = 0; lbTy.current = 0
   }
 
   // Reactions
@@ -1100,7 +1144,11 @@ export default function ChatPage() {
             src={lightboxUrl}
             alt="Photo"
             className="max-w-full max-h-full object-contain"
-            style={{ transform: `scale(${lightboxScale})`, transformOrigin: 'center', transition: lightboxScale === 1 ? 'transform 0.2s' : 'none' }}
+            style={{
+              transform: `translate(${lightboxTransform.tx}px, ${lightboxTransform.ty}px) scale(${lightboxTransform.scale})`,
+              transformOrigin: '0 0',
+              transition: lightboxTransform.scale === 1 ? 'transform 0.2s' : 'none',
+            }}
             onClick={e => e.stopPropagation()}
           />
           <button

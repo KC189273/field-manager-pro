@@ -13,6 +13,11 @@ interface Session {
   email: string
 }
 
+interface ShiftBreak {
+  break_start: string
+  break_end: string
+}
+
 interface Shift {
   id: string
   user_id: string
@@ -20,6 +25,7 @@ interface Shift {
   clock_out_at: string | null
   duration_seconds: number
   break_seconds: number
+  breaks: ShiftBreak[] | null
   is_manual: boolean
   manual_note: string | null
   manual_by_name: string | null
@@ -109,6 +115,14 @@ function shiftDuration(shift: Shift, nowMs: number): number {
   return (nowMs - new Date(shift.clock_in_at).getTime()) / 1000
 }
 
+// Gross = clock-in to clock-out with no break deduction
+function grossSeconds(shift: Shift, nowMs: number): number {
+  if (shift.clock_out_at) {
+    return (new Date(shift.clock_out_at).getTime() - new Date(shift.clock_in_at).getTime()) / 1000
+  }
+  return (nowMs - new Date(shift.clock_in_at).getTime()) / 1000
+}
+
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const canManage = (role: Role) =>
@@ -151,6 +165,9 @@ function TimecardsPage() {
   const [codeHours, setCodeHours] = useState<string>('')
   const [codeNote, setCodeNote] = useState<string>('')
   const [codeSaving, setCodeSaving] = useState(false)
+
+  // Day detail modal
+  const [dayDetail, setDayDetail] = useState<Date | null>(null)
 
   // Role filter (ops+ only)
   const [roleFilter, setRoleFilter] = useState<'all' | 'employee' | 'manager'>('all')
@@ -712,7 +729,10 @@ function TimecardsPage() {
 
                   return (
                     <div key={i} className={`bg-gray-900 border rounded-2xl overflow-hidden ${isToday ? 'border-violet-500/40' : 'border-gray-800'}`}>
-                      <div className={`flex items-center justify-between px-4 py-2.5 ${isToday ? 'bg-violet-600/10' : ''}`}>
+                      <button
+                        className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${isToday ? 'bg-violet-600/10' : ''} ${hasEntries ? 'hover:bg-gray-800/50 active:bg-gray-800' : ''}`}
+                        onClick={() => hasEntries && setDayDetail(day)}
+                      >
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className={`text-sm font-semibold ${isToday ? 'text-violet-400' : 'text-white'}`}>{DAY_NAMES[i]}</p>
                           <p className="text-xs text-gray-500">{day.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
@@ -724,17 +744,18 @@ function TimecardsPage() {
                           )}
                         </div>
                         <div className="flex items-center gap-3">
-                          {daySeconds > 0 && <p className="text-xs font-semibold text-gray-400">{fmtDecimalHours(daySeconds)}</p>}
+                          {daySeconds > 0 && <p className="text-xs font-semibold text-violet-400">{fmtDecimalHours(daySeconds)}</p>}
+                          {hasEntries && <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>}
                           {isMgr && selectedUserId && selectedUserId !== session.id && (
                             <>
                               <button
-                                onClick={() => openAdd(day)}
+                                onClick={e => { e.stopPropagation(); openAdd(day) }}
                                 className="text-xs text-violet-400 hover:text-violet-300 font-medium transition-colors"
                               >
                                 + Add
                               </button>
                               <button
-                                onClick={() => openAddCode(day)}
+                                onClick={e => { e.stopPropagation(); openAddCode(day) }}
                                 className="text-xs text-blue-400 hover:text-blue-300 font-medium transition-colors"
                               >
                                 + Code
@@ -742,7 +763,7 @@ function TimecardsPage() {
                             </>
                           )}
                         </div>
-                      </div>
+                      </button>
 
                       {!hasEntries ? (
                         <div className="px-4 pb-3">
@@ -987,6 +1008,136 @@ function TimecardsPage() {
           </div>
         </div>
       )}
+
+      {/* Day detail modal */}
+      {dayDetail && (() => {
+        const detailShifts = shiftsForDay(dayDetail)
+        const detailPayCodes = payCodesForDay(dayDetail)
+        const dayLabel = dayDetail.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+        const totalNet = detailShifts.reduce((s, sh) => s + shiftDuration(sh, now), 0)
+        const totalBreak = detailShifts.reduce((s, sh) => s + Number(sh.break_seconds), 0)
+        const totalGross = detailShifts.reduce((s, sh) => s + grossSeconds(sh, now), 0)
+        const ptoSecs = detailPayCodes.filter(pc => pc.type === 'pto').reduce((s, pc) => s + Number(pc.hours ?? 0) * 3600, 0)
+        return (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDayDetail(null)}>
+            <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">{dayLabel}</h2>
+                  <p className="text-xs text-gray-500 mt-0.5">Time breakdown</p>
+                </div>
+                <button onClick={() => setDayDetail(null)} className="text-gray-500 hover:text-white transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {detailShifts.length === 0 && detailPayCodes.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">No entries for this day.</p>
+              ) : (
+                <div className="space-y-3">
+                  {detailShifts.map((shift, idx) => {
+                    const gross = grossSeconds(shift, now)
+                    const brk = Number(shift.break_seconds)
+                    const net = shiftDuration(shift, now)
+                    return (
+                      <div key={shift.id} className={`bg-gray-800/60 border rounded-xl p-4 ${shift.is_manual ? 'border-amber-500/30' : 'border-gray-700/60'}`}>
+                        {detailShifts.length > 1 && (
+                          <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Shift {idx + 1}</p>
+                        )}
+                        <div className="flex justify-between items-center text-sm mb-3">
+                          <span className="text-gray-400">Clock In</span>
+                          <span className="text-white font-medium">{fmtTime(shift.clock_in_at)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm mb-3">
+                          <span className="text-gray-400">Clock Out</span>
+                          <span className={shift.clock_out_at ? 'text-white font-medium' : 'text-yellow-400 font-medium'}>
+                            {shift.clock_out_at ? fmtTime(shift.clock_out_at) : 'Still clocked in'}
+                          </span>
+                        </div>
+                        <div className="border-t border-gray-700/60 my-2" />
+                        <div className="flex justify-between items-center text-sm mb-1.5">
+                          <span className="text-gray-400">Gross Time</span>
+                          <span className="text-white">{fmtDecimalHours(gross)}</span>
+                        </div>
+                        {shift.breaks && shift.breaks.length > 0 && (
+                          <div className="mb-1.5">
+                            {shift.breaks.map((b, bi) => {
+                              const bSecs = (new Date(b.break_end).getTime() - new Date(b.break_start).getTime()) / 1000
+                              return (
+                                <div key={bi} className="flex justify-between items-center text-sm mb-1">
+                                  <span className="text-gray-500 pl-2">
+                                    ↳ Break {shift.breaks!.length > 1 ? bi + 1 : ''} {fmtTime(b.break_start)} – {fmtTime(b.break_end)}
+                                  </span>
+                                  <span className="text-red-400">−{fmtDecimalHours(bSecs)}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                        {brk > 0 && (
+                          <div className="flex justify-between items-center text-sm mb-1.5">
+                            <span className="text-gray-400">{shift.breaks && shift.breaks.length > 1 ? 'Total Break' : 'Break Deducted'}</span>
+                            <span className="text-red-400">−{fmtDecimalHours(brk)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center text-sm font-semibold">
+                          <span className="text-gray-300">Net Hours</span>
+                          <span className="text-violet-400">{fmtDecimalHours(net)}</span>
+                        </div>
+                        {shift.is_manual && shift.manual_note && (
+                          <p className="text-xs text-amber-300/70 mt-2 pt-2 border-t border-gray-700/60">⚠ Corrected: {shift.manual_note}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+
+                  {detailPayCodes.map(pc => (
+                    <div key={pc.id} className={`bg-gray-800/60 border rounded-xl p-4 ${pc.type === 'pto' ? 'border-blue-500/30' : 'border-red-500/30'}`}>
+                      <div className="flex justify-between items-center text-sm">
+                        <span className="text-gray-400">{pc.type === 'pto' ? 'PTO' : 'Sick Day'}</span>
+                        {pc.type === 'pto' && pc.hours != null && (
+                          <span className="text-blue-400 font-semibold">{fmtDecimalHours(pc.hours * 3600)}</span>
+                        )}
+                      </div>
+                      {pc.note && <p className="text-xs text-gray-500 mt-1">{pc.note}</p>}
+                    </div>
+                  ))}
+
+                  {/* Day total */}
+                  <div className="bg-violet-600/10 border border-violet-500/30 rounded-xl p-4">
+                    {detailShifts.length > 0 && (
+                      <>
+                        <div className="flex justify-between items-center text-sm mb-1.5">
+                          <span className="text-gray-400">Total Gross</span>
+                          <span className="text-white">{fmtDecimalHours(totalGross)}</span>
+                        </div>
+                        {totalBreak > 0 && (
+                          <div className="flex justify-between items-center text-sm mb-1.5">
+                            <span className="text-gray-400">Total Breaks</span>
+                            <span className="text-red-400">−{fmtDecimalHours(totalBreak)}</span>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {ptoSecs > 0 && (
+                      <div className="flex justify-between items-center text-sm mb-1.5">
+                        <span className="text-gray-400">PTO</span>
+                        <span className="text-blue-400">{fmtDecimalHours(ptoSecs)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-base font-bold">
+                      <span className="text-white">Day Total</span>
+                      <span className="text-violet-400">{fmtDecimalHours(totalNet + ptoSecs)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Pay code modal */}
       {addCodeForDay && (

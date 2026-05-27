@@ -24,7 +24,8 @@ export async function GET(req: NextRequest) {
       SELECT s.*, u.full_name, u.username,
         mb.full_name as manual_by_name,
         COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds,
-        (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds
+        (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds,
+        (SELECT json_agg(json_build_object('break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN users mb ON mb.id = s.manual_by
@@ -57,7 +58,8 @@ export async function GET(req: NextRequest) {
     SELECT s.*, u.full_name, u.username,
       mb.full_name as manual_by_name,
       COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds,
-      (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds
+      (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds,
+      (SELECT json_agg(json_build_object('break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
     FROM shifts s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN users mb ON mb.id = s.manual_by

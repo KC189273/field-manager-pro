@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
   let sql = `
     SELECT s.*, u.full_name, u.username,
       mb.full_name as manual_by_name,
-      EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) as duration_seconds
+      (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds
     FROM shifts s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN users mb ON mb.id = s.manual_by

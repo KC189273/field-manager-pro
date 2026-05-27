@@ -19,6 +19,7 @@ interface Shift {
   clock_in_at: string
   clock_out_at: string | null
   duration_seconds: number
+  break_seconds: number
   is_manual: boolean
   manual_note: string | null
   manual_by_name: string | null
@@ -760,6 +761,9 @@ function TimecardsPage() {
                                       {shift.clock_out_at ? fmtTime(shift.clock_out_at) : <span className="text-yellow-400">Still clocked in</span>}
                                     </span>
                                     <span className="text-xs text-gray-500">{fmtDecimalHours(shiftDuration(shift, now))}</span>
+                                    {Number(shift.break_seconds) > 0 && (
+                                      <span className="text-xs text-gray-600">−{fmtDecimalHours(Number(shift.break_seconds))} break</span>
+                                    )}
                                     {shiftDuration(shift, now) > 10 * 3600 && (
                                       <span className="text-[10px] font-semibold bg-red-500/15 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full">⚠ 10h+</span>
                                     )}

@@ -20,6 +20,26 @@ interface NavBarProps {
 
 const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
 
+const NOTIFICATION_PATHS: Record<string, string> = {
+  chat_message: '/chat',
+  task_assigned: '/tasks',
+  task_completed: '/tasks',
+  checklist_submitted: '/checklist',
+  flag_created: '/flags',
+  expense_submitted: '/expenses',
+  schedule_published: '/my-schedule',
+  time_off_request: '/time-off',
+  facility_request: '/facilities',
+  facility_update: '/facilities',
+  accountability: '/accountability',
+  shift_swap: '/shift-swaps',
+  supply_request: '/supply-requests',
+  merch_order: '/merch-orders',
+  payroll: '/payroll',
+  clock_out: '/timecards',
+  handoff_note: '/timecards',
+}
+
 interface Org { id: string; name: string }
 
 const PAGE_TITLES: Record<string, string> = {
@@ -285,19 +305,32 @@ export default function NavBar({ role, fullName }: NavBarProps) {
                   <p className="text-gray-500 text-sm">No notifications yet</p>
                 </div>
               ) : (
-                notifications.map(n => (
-                  <div key={n.id} className={`px-5 py-4 ${n.read ? '' : 'bg-violet-950/20'}`}>
-                    <div className="flex items-start gap-3">
-                      {!n.read && <div className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0 mt-1.5" />}
-                      {n.read && <div className="w-2 h-2 flex-shrink-0 mt-1.5" />}
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold leading-tight ${n.read ? 'text-gray-300' : 'text-white'}`}>{n.title}</p>
-                        <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{n.body}</p>
-                        <p className="text-[10px] text-gray-600 mt-1">{fmtNotifTime(n.created_at)}</p>
+                notifications.map(n => {
+                  const path = n.type ? NOTIFICATION_PATHS[n.type] : null
+                  return (
+                    <button
+                      key={n.id}
+                      className={`w-full text-left px-5 py-4 transition-colors ${n.read ? '' : 'bg-violet-950/20'} ${path ? 'hover:bg-gray-800/60 active:bg-gray-800' : ''}`}
+                      onClick={() => {
+                        setNotifOpen(false)
+                        if (path) router.push(path)
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        {!n.read && <div className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0 mt-1.5" />}
+                        {n.read && <div className="w-2 h-2 flex-shrink-0 mt-1.5" />}
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-semibold leading-tight ${n.read ? 'text-gray-300' : 'text-white'}`}>{n.title}</p>
+                          <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{n.body}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <p className="text-[10px] text-gray-600">{fmtNotifTime(n.created_at)}</p>
+                            {path && <p className="text-[10px] text-violet-500">Tap to view →</p>}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
-                ))
+                    </button>
+                  )
+                })
               )}
             </div>
           </div>

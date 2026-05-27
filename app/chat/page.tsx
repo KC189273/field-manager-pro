@@ -106,6 +106,45 @@ export default function ChatPage() {
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightboxScale, setLightboxScale] = useState(1)
+  const lightboxImgRef = useRef<HTMLImageElement>(null)
+  const lightboxScaleRef = useRef(1)
+  const lightboxStartDistRef = useRef(0)
+  const lightboxStartScaleRef = useRef(1)
+
+  useEffect(() => {
+    if (!lightboxUrl || !lightboxImgRef.current) return
+    const img = lightboxImgRef.current
+    function dist(t: TouchList) {
+      return Math.hypot(t[1].clientX - t[0].clientX, t[1].clientY - t[0].clientY)
+    }
+    function onStart(e: TouchEvent) {
+      if (e.touches.length === 2) {
+        lightboxStartDistRef.current = dist(e.touches)
+        lightboxStartScaleRef.current = lightboxScaleRef.current
+      }
+    }
+    function onMove(e: TouchEvent) {
+      if (e.touches.length === 2) {
+        e.preventDefault()
+        const newScale = Math.min(5, Math.max(1, lightboxStartScaleRef.current * (dist(e.touches) / lightboxStartDistRef.current)))
+        lightboxScaleRef.current = newScale
+        setLightboxScale(newScale)
+      }
+    }
+    img.addEventListener('touchstart', onStart, { passive: true })
+    img.addEventListener('touchmove', onMove, { passive: false })
+    return () => {
+      img.removeEventListener('touchstart', onStart)
+      img.removeEventListener('touchmove', onMove)
+    }
+  }, [lightboxUrl])
+
+  function closeLightbox() {
+    setLightboxUrl(null)
+    setLightboxScale(1)
+    lightboxScaleRef.current = 1
+  }
 
   // Reactions
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
@@ -1053,17 +1092,20 @@ export default function ChatPage() {
       {lightboxUrl && (
         <div
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
-          onClick={() => setLightboxUrl(null)}
+          onClick={closeLightbox}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
+            ref={lightboxImgRef}
             src={lightboxUrl}
             alt="Photo"
             className="max-w-full max-h-full object-contain"
+            style={{ transform: `scale(${lightboxScale})`, transformOrigin: 'center', transition: lightboxScale === 1 ? 'transform 0.2s' : 'none' }}
+            onClick={e => e.stopPropagation()}
           />
           <button
             className="absolute top-6 right-4 text-white/60 hover:text-white"
-            onClick={() => setLightboxUrl(null)}
+            onClick={closeLightbox}
           >
             <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

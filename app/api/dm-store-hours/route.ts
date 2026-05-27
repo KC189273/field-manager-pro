@@ -13,7 +13,10 @@ const DEFAULT_HOURS = [
   { day_of_week: 6, open_time: '10:00', close_time: '19:00', is_closed: false },
 ]
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS dm_store_hours (
       store_location_id UUID NOT NULL REFERENCES dm_store_locations(id) ON DELETE CASCADE,

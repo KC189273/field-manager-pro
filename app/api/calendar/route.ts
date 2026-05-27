@@ -9,7 +9,10 @@ const CAT_LABELS: Record<string, string> = {
   travel: 'Travel', meeting: 'Meeting', store_visit: 'Store Visit', blocked: 'Blocked', other: 'Event',
 }
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS calendar_events (
       id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),

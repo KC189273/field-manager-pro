@@ -5,7 +5,10 @@ import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 
 const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
+let ensured = false
 async function ensureColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS ack_subject_reminded_at TIMESTAMPTZ`)
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_status TEXT`)
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_approved_at TIMESTAMPTZ`)

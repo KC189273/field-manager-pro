@@ -13,7 +13,10 @@ const AUTHOR_ROLES = ['manager', 'sales_director', 'owner', 'developer']
 const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'developer']
 
 // ─── Table setup ─────────────────────────────────────────────────────────────
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS accountability_docs (
       id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),

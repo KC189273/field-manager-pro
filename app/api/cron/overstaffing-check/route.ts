@@ -4,7 +4,10 @@ import { sendEmail } from '@/lib/notifications'
 import { overstaffingAlertHtml } from '@/lib/notifications'
 import { sendPushToUser } from '@/lib/apns'
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS overstaffing_alerts (
       id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),

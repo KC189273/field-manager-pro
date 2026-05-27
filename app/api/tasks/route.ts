@@ -27,7 +27,10 @@ interface TaskRow {
 
 const canCreate = (role: string) => isOwner(role as never) || role === 'developer' || role === 'manager' || role === 'ops_manager'
 
+let ensured = false
 async function ensureColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS require_photo BOOLEAN DEFAULT FALSE`)
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS group_task_id UUID`)
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS last_reminded_at TIMESTAMPTZ`)

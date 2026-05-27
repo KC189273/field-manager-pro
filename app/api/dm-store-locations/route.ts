@@ -5,7 +5,10 @@ import { query } from '@/lib/db'
 const canManage = (role: Role) => isOwner(role) || role === 'developer'
 const canView = (role: Role) => role !== 'employee'
 
+let ensured = false
 async function ensureTables() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS dm_store_locations (
       id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -4,7 +4,10 @@ import { query, queryOne } from '@/lib/db'
 
 const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
 
+let ensured = false
 async function ensureTables() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS chat_conversations (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

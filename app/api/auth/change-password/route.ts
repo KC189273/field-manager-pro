@@ -3,7 +3,10 @@ import bcrypt from 'bcryptjs'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 
+let ensured = false
 async function ensureColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS temp_password TEXT DEFAULT NULL`)
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAULT FALSE`)
 }

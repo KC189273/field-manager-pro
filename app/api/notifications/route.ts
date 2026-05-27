@@ -2,7 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS notifications (
       id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),

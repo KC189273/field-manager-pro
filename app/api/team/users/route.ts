@@ -7,7 +7,10 @@ import { sendPushToUsers } from '@/lib/apns'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { getReceiptViewUrl } from '@/lib/s3'
 
+let ensured = false
 async function ensureApprovalColumn() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS approval_status TEXT DEFAULT NULL`)
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by_name TEXT DEFAULT NULL`)
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_key TEXT DEFAULT NULL`)

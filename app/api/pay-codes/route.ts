@@ -5,7 +5,10 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
 const canManage = (role: Role) => isManager(role) || isOwner(role) || role === 'developer'
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS pay_codes (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

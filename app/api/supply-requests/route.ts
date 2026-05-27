@@ -33,7 +33,10 @@ function supplyRequestEmailHtml(dmName: string, employeeName: string, itemName: 
 
 export const URGENCY_HOURS: Record<number, number> = { 1: 24, 2: 72, 3: 168 }
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS supply_requests (
       id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),

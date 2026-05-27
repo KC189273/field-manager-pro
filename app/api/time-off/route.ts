@@ -5,7 +5,10 @@ import { getOrgFilter } from '@/lib/org'
 import { sendEmail, timeOffRequestedHtml, timeOffDecisionHtml } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS time_off_requests (
       id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),

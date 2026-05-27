@@ -4,7 +4,10 @@ import { query, queryOne } from '@/lib/db'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 import { sendEmail, shiftSwapRequestedHtml } from '@/lib/notifications'
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS shift_swap_requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -5,7 +5,10 @@ import { query, queryOne } from '@/lib/db'
 const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
 const ALLOWED_EMOJIS = ['👍', '❤️', '😂', '😮', '🙌', '✅']
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS chat_message_reactions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

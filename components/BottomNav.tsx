@@ -6,8 +6,9 @@ import { useEffect, useState } from 'react'
 
 type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
-const STORAGE_KEY = 'fmp_pinned_tab'
+const STORAGE_KEY = 'fmp_pinned_tabs_v2'
 const ROLE_CACHE_KEY = 'fmp_role_cache'
+const MAX_PINS = 4
 
 const NO_NAV_PREFIXES = [
   '/login', '/forgot-password', '/reset-password', '/change-password',
@@ -60,30 +61,20 @@ const ALL_FEATURES: Feature[] = [
   { href: '/config',          label: 'Config',           short: 'Config',    Icon: GearIcon,           show: r => r === 'developer' },
 ]
 
-// 3 fixed tabs per role (always shown, not pinnable)
-const FIXED_HREFS: Record<Role, [string, string, string]> = {
-  employee:       ['/dashboard', '/clock', '/my-schedule'],
-  manager:        ['/dashboard', '/clock', '/tasks'],
-  ops_manager:    ['/dashboard', '/clock', '/map'],
-  owner:          ['/dashboard', '/clock', '/payroll'],
-  sales_director: ['/dashboard', '/clock', '/map'],
-  developer:      ['/dashboard', '/clock', '/tasks'],
-}
-
-// Default pinned tab when user hasn't chosen one
-const DEFAULT_PINNED: Record<Role, string> = {
-  employee:       '/checklist',
-  manager:        '/staff-schedule',
-  ops_manager:    '/team',
-  owner:          '/team',
-  sales_director: '/team',
-  developer:      '/config',
+// Default pinned tabs per role (all 4 slots customizable)
+const DEFAULT_PINNED_TABS: Record<Role, string[]> = {
+  employee:       ['/dashboard', '/clock', '/my-schedule', '/checklist'],
+  manager:        ['/dashboard', '/clock', '/tasks', '/staff-schedule'],
+  ops_manager:    ['/dashboard', '/clock', '/map', '/team'],
+  owner:          ['/dashboard', '/clock', '/payroll', '/team'],
+  sales_director: ['/dashboard', '/clock', '/map', '/team'],
+  developer:      ['/dashboard', '/clock', '/tasks', '/config'],
 }
 
 export default function BottomNav() {
   const pathname = usePathname()
   const [role, setRole] = useState<Role | null>(null)
-  const [pinnedHref, setPinnedHref] = useState<string | null>(null)
+  const [pinnedHrefs, setPinnedHrefs] = useState<string[]>([])
   const [moreOpen, setMoreOpen] = useState(false)
 
   // Load role — use localStorage cache for instant render, then confirm with API
@@ -104,52 +95,48 @@ export default function BottomNav() {
       .catch(() => {})
   }, [])
 
-  // Load pinned tab from localStorage once role is known
+  // Load pinned tabs from localStorage once role is known
   useEffect(() => {
     if (!role) return
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored && ALL_FEATURES.find(f => f.href === stored && f.show(role))) {
-        setPinnedHref(stored)
-      } else {
-        setPinnedHref(DEFAULT_PINNED[role])
+      if (stored) {
+        const parsed: string[] = JSON.parse(stored)
+        const valid = parsed.filter(href => ALL_FEATURES.find(f => f.href === href && f.show(role)))
+        if (valid.length > 0) {
+          setPinnedHrefs(valid.slice(0, MAX_PINS))
+          return
+        }
       }
-    } catch {
-      setPinnedHref(DEFAULT_PINNED[role])
-    }
+    } catch {}
+    setPinnedHrefs(DEFAULT_PINNED_TABS[role])
   }, [role])
 
   // Don't show on public/special pages
   const isHidden = NO_NAV_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))
   if (isHidden || !role) return null
 
-  const fixedHrefs = FIXED_HREFS[role]
-  const pinnedFeature =
-    ALL_FEATURES.find(f => f.href === pinnedHref && f.show(role) && !fixedHrefs.includes(f.href)) ??
-    ALL_FEATURES.find(f => f.href === DEFAULT_PINNED[role])!
-
-  const tabFeatures = [
-    ...fixedHrefs.map(href => ALL_FEATURES.find(f => f.href === href)!),
-    pinnedFeature,
-  ]
+  const tabFeatures = pinnedHrefs
+    .map(href => ALL_FEATURES.find(f => f.href === href))
+    .filter(Boolean) as Feature[]
 
   function handlePin(href: string) {
-    if (href === pinnedHref) {
-      // Tap pinned item again = revert to default
-      const def = DEFAULT_PINNED[role!]
-      setPinnedHref(def)
-      try { localStorage.removeItem(STORAGE_KEY) } catch {}
-    } else {
-      setPinnedHref(href)
-      try { localStorage.setItem(STORAGE_KEY, href) } catch {}
-    }
-    setMoreOpen(false)
+    setPinnedHrefs(prev => {
+      let next: string[]
+      if (prev.includes(href)) {
+        next = prev.filter(h => h !== href)
+      } else if (prev.length < MAX_PINS) {
+        next = [...prev, href]
+      } else {
+        return prev // at max, do nothing
+      }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)) } catch {}
+      return next
+    })
   }
 
-  // Features shown in the More sheet (excludes fixed tabs)
-  const moreFeatures = ALL_FEATURES.filter(
-    f => f.show(role) && !fixedHrefs.includes(f.href)
-  )
+  // All features visible to this role shown in the More sheet
+  const moreFeatures = ALL_FEATURES.filter(f => f.show(role))
 
   return (
     <>
@@ -159,24 +146,18 @@ export default function BottomNav() {
         style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
       >
         <div className="flex h-16">
-          {tabFeatures.map((tab, i) => {
-            if (!tab) return null
+          {tabFeatures.map(tab => {
             const active = pathname === tab.href
-            const isPinnedSlot = i === 3
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 relative transition-colors ${
+                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${
                   active ? 'text-violet-400' : 'text-gray-500'
                 }`}
               >
                 <tab.Icon className="w-5 h-5" />
                 <span className="text-[10px] font-medium leading-none">{tab.short}</span>
-                {/* Subtle dot on pinned slot so users know it's customizable */}
-                {isPinnedSlot && (
-                  <span className="absolute top-2.5 right-[calc(50%-10px)] w-1.5 h-1.5 rounded-full bg-violet-500/60" />
-                )}
               </Link>
             )
           })}
@@ -214,28 +195,33 @@ export default function BottomNav() {
             {/* Header */}
             <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
               <p className="text-white font-bold text-sm">All Features</p>
-              <div className="flex items-center gap-1 text-gray-500">
+              <div className="flex items-center gap-1.5">
                 <PinIcon className="w-3.5 h-3.5 text-violet-400" />
-                <p className="text-[11px]">Pin to your nav bar</p>
+                <p className="text-[11px] text-gray-400">
+                  <span className="text-violet-400 font-semibold">{pinnedHrefs.length}</span>
+                  <span className="text-gray-500">/{MAX_PINS} pinned</span>
+                </p>
               </div>
             </div>
 
             {/* Feature grid */}
             <div className="overflow-y-auto p-4 pb-6">
+              <p className="text-[11px] text-gray-600 mb-3">Tap the pin icon to add or remove from your nav bar</p>
               <div className="grid grid-cols-4 gap-3">
                 {moreFeatures.map(f => {
-                  const isPinned = f.href === pinnedFeature.href
+                  const isPinned = pinnedHrefs.includes(f.href)
                   const isActive = pathname === f.href
+                  const atMax = pinnedHrefs.length >= MAX_PINS && !isPinned
                   return (
                     <div key={f.href} className="relative">
                       <Link
                         href={f.href}
                         onClick={() => setMoreOpen(false)}
                         className={`flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-colors ${
-                          isActive ? 'bg-violet-900/40' : 'bg-gray-800 hover:bg-gray-700'
+                          isPinned ? 'bg-violet-900/30 ring-1 ring-violet-500/40' : isActive ? 'bg-violet-900/40' : 'bg-gray-800 hover:bg-gray-700'
                         }`}
                       >
-                        <f.Icon className={`w-6 h-6 ${isActive ? 'text-violet-400' : 'text-gray-300'}`} />
+                        <f.Icon className={`w-6 h-6 ${isPinned || isActive ? 'text-violet-400' : 'text-gray-300'}`} />
                         <span className="text-[10px] text-gray-400 text-center leading-tight">{f.label}</span>
                       </Link>
 
@@ -246,9 +232,11 @@ export default function BottomNav() {
                         className={`absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center border-2 border-gray-900 transition-colors ${
                           isPinned
                             ? 'bg-violet-600 hover:bg-violet-500'
-                            : 'bg-gray-700 hover:bg-gray-600'
+                            : atMax
+                              ? 'bg-gray-800 opacity-40'
+                              : 'bg-gray-700 hover:bg-gray-600'
                         }`}
-                        aria-label={isPinned ? 'Remove from nav bar' : 'Pin to nav bar'}
+                        aria-label={isPinned ? 'Remove from nav bar' : atMax ? 'Remove a pinned item first' : 'Pin to nav bar'}
                       >
                         <PinIcon className="w-2.5 h-2.5 text-white" />
                       </button>
@@ -256,6 +244,9 @@ export default function BottomNav() {
                   )
                 })}
               </div>
+              {pinnedHrefs.length >= MAX_PINS && (
+                <p className="text-[11px] text-amber-500/80 text-center mt-3">Nav bar is full — unpin an item to add another</p>
+              )}
             </div>
 
             <div style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 8px)' }} />

@@ -17,7 +17,10 @@ interface ShiftRow {
   is_dm_shift: boolean
 }
 
+let ensured = false
 async function ensureColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE scheduled_shifts ADD COLUMN IF NOT EXISTS break_minutes SMALLINT NOT NULL DEFAULT 0`)
   await query(`ALTER TABLE scheduled_shifts ADD COLUMN IF NOT EXISTS is_on_call BOOLEAN NOT NULL DEFAULT FALSE`)
   await query(`ALTER TABLE scheduled_shifts ADD COLUMN IF NOT EXISTS is_dm_shift BOOLEAN NOT NULL DEFAULT FALSE`)

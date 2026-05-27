@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
-import { getReceiptViewUrl, getS3ObjectBuffer } from '@/lib/s3'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
@@ -11,7 +11,10 @@ interface ChecklistItem {
   completed: boolean
 }
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS checklist_submissions (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -232,33 +235,7 @@ export async function POST(req: NextRequest) {
     ]
   )
 
-  // Build email attachments from S3 keys
-  const attachments: { filename: string; content: string }[] = []
-  const keysToAttach = (checklistType === 'opening'
-    ? [photoKey, inventoryPhoto2Key, posPhotoKey, aframePhotoKey]
-    : [salesFloorPhotoKey, cashDrawerPhotoKey, reconciliationPhotoKey, reconciliationPhoto2Key]
-  ).filter(Boolean) as string[]
-
-  const attachLabels: Record<string, string> = {
-    [photoKey ?? '']: 'inventory',
-    [inventoryPhoto2Key ?? '']: 'inventory-2',
-    [posPhotoKey ?? '']: 'pos-drawers',
-    [aframePhotoKey ?? '']: 'aframe',
-    [salesFloorPhotoKey ?? '']: 'sales-floor',
-    [cashDrawerPhotoKey ?? '']: 'cash-drawers',
-    [reconciliationPhotoKey ?? '']: 'reconciliation-1',
-    [reconciliationPhoto2Key ?? '']: 'reconciliation-2',
-  }
-
-  await Promise.all(keysToAttach.map(async key => {
-    const buf = await getS3ObjectBuffer(key)
-    if (buf) {
-      const ext = key.split('.').pop() ?? 'jpg'
-      attachments.push({ filename: `${attachLabels[key] ?? 'photo'}.${ext}`, content: buf.toString('base64') })
-    }
-  }))
-
-  // Send email to DM
+  // Send email + push notification — fire and forget so DB insert already succeeded
   const submittedAt = new Date(submission.submitted_at).toLocaleString('en-US', {
     timeZone: 'America/Chicago',
     dateStyle: 'medium',
@@ -266,8 +243,10 @@ export async function POST(req: NextRequest) {
   })
   const typeLabel = checklistType === 'opening' ? 'Opening' : 'Closing'
 
-  try {
-    if (await isEmailEnabled(dm.id)) await sendEmail(
+  // Email: photos are inlined as <img> tags in the HTML — no S3 downloads needed
+  isEmailEnabled(dm.id).then(enabled => {
+    if (!enabled) return
+    return sendEmail(
       dm.email,
       `${typeLabel} Checklist — ${store.address}`,
       buildEmailHtml({
@@ -280,14 +259,10 @@ export async function POST(req: NextRequest) {
         salesFloorPhotoUrl: checklistType === 'closing' ? salesFloorPhotoUrl : null,
         cashDrawerPhotoUrl: checklistType === 'closing' ? cashDrawerPhotoUrl : null,
         comment: comment?.trim() || null,
-      }),
-      attachments
+      })
     )
-  } catch (e) {
-    console.error('Checklist email send failed:', e)
-  }
+  }).catch(e => console.error('Checklist email send failed:', e))
 
-  // Push notification to DM
   sendPushToUser(
     dm.id,
     `${typeLabel} Checklist Submitted`,

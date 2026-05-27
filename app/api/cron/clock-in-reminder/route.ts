@@ -2,7 +2,10 @@ import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendPushToUsers, sendPushToUser } from '@/lib/apns'
 
+let ensured = false
 async function ensureTables() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS shift_reminders_sent (
       id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),

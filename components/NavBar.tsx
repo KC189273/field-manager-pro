@@ -224,8 +224,17 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     <>
       {/* Top bar */}
       <header className="fixed top-0 left-0 right-0 z-40 bg-gray-950 border-b border-gray-800 px-4 h-14 flex items-center justify-between">
-        {/* Left spacer — balances the right side */}
-        <div className="w-[76px]" />
+        {/* Left — home button */}
+        <a
+          href="/dashboard"
+          className="w-[76px] flex items-center gap-1.5 text-gray-500 hover:text-white transition-colors"
+          aria-label="Home"
+        >
+          <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+          </svg>
+          <span className="text-xs font-medium truncate">Home</span>
+        </a>
 
         {/* Center — current page name */}
         <span className="font-bold text-white text-sm absolute left-1/2 -translate-x-1/2 truncate max-w-[55%] text-center">

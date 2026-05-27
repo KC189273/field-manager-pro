@@ -9,7 +9,10 @@ const resend = new Resend(process.env.RESEND_API_KEY!)
 const canAccess = (role: Role) => role !== 'employee'
 const canViewAll = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
 
+let ensured = false
 async function ensureQuickColumns() {
+  if (ensured) return
+  ensured = true
   await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS visit_type TEXT NOT NULL DEFAULT 'normal'`)
   await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_interaction_notes TEXT`)
   await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS quick_takeaways TEXT`)

@@ -27,7 +27,10 @@ function merchOrderEmailHtml(recipientName: string, requesterName: string, notes
   `
 }
 
+let ensured = false
 async function ensureTable() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS merch_orders (
       id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),

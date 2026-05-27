@@ -17,7 +17,10 @@ const CATEGORIES = [
   'Other',
 ]
 
+let ensured = false
 async function ensureTables() {
+  if (ensured) return
+  ensured = true
   await query(`
     CREATE TABLE IF NOT EXISTS facility_tickets (
       id               UUID PRIMARY KEY DEFAULT gen_random_uuid(),

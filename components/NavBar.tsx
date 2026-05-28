@@ -87,6 +87,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   const [unread, setUnread] = useState(0)
   const [chatUnread, setChatUnread] = useState(0)
   const [isOffline, setIsOffline] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   // Silently refresh session every 10 minutes to prevent mobile logout
   useEffect(() => {
@@ -94,6 +95,13 @@ export default function NavBar({ role, fullName }: NavBarProps) {
       fetch('/api/auth/refresh', { method: 'POST' }).catch(() => {})
     }, 10 * 60 * 1000)
     return () => clearInterval(interval)
+  }, [])
+
+  useEffect(() => {
+    fetch('/api/team/users/avatar?view=true')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.avatarUrl) setAvatarUrl(d.avatarUrl) })
+      .catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -295,10 +303,13 @@ export default function NavBar({ role, fullName }: NavBarProps) {
           </button>
           <button
             onClick={() => setProfileOpen(true)}
-            className="w-9 h-9 rounded-full bg-violet-700 flex items-center justify-center flex-shrink-0 hover:bg-violet-600 transition-colors"
+            className="w-9 h-9 rounded-full bg-violet-700 flex items-center justify-center flex-shrink-0 hover:bg-violet-600 transition-colors overflow-hidden"
             aria-label="Profile"
           >
-            <span className="text-white text-xs font-bold">{initials}</span>
+            {avatarUrl
+              ? <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
+              : <span className="text-white text-xs font-bold">{initials}</span>
+            }
           </button>
         </div>
       </header>
@@ -383,8 +394,11 @@ export default function NavBar({ role, fullName }: NavBarProps) {
 
             {/* User info */}
             <div className="px-5 py-4 border-b border-gray-800 flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-violet-700 flex items-center justify-center flex-shrink-0">
-                <span className="text-white text-base font-bold">{initials}</span>
+              <div className="w-12 h-12 rounded-full bg-violet-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                {avatarUrl
+                  ? <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
+                  : <span className="text-white text-base font-bold">{initials}</span>
+                }
               </div>
               <div className="min-w-0">
                 <p className="text-white font-semibold truncate">{fullName}</p>

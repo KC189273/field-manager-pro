@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import NavBar from '@/components/NavBar'
 import { registerForPushNotifications } from '@/lib/push-client'
 
@@ -92,11 +92,43 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState<keyof Prefs | null>(null)
   const [registerStatus, setRegisterStatus] = useState<string | null>(null)
   const [registering, setRegistering] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(setSession)
     fetch('/api/push/preferences').then(r => r.json()).then(d => setPrefs(d.prefs))
+    fetch('/api/team/users/avatar?view=true').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.avatarUrl) setAvatarUrl(d.avatarUrl)
+    })
   }, [])
+
+  async function handleAvatarFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'jpg'
+    setUploadingAvatar(true)
+    try {
+      const res = await fetch(`/api/team/users/avatar?ext=${ext}`)
+      const { uploadUrl, avatarKey } = await res.json()
+      await fetch(uploadUrl, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      await fetch('/api/team/users/avatar', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarKey }),
+      })
+      // Fetch the new view URL
+      const viewRes = await fetch('/api/team/users/avatar?view=true')
+      const viewData = await viewRes.json()
+      if (viewData?.avatarUrl) setAvatarUrl(viewData.avatarUrl)
+    } catch {
+      alert('Upload failed. Please try again.')
+    } finally {
+      setUploadingAvatar(false)
+      if (avatarInputRef.current) avatarInputRef.current.value = ''
+    }
+  }
 
   async function registerPush() {
     setRegistering(true)
@@ -134,7 +166,53 @@ export default function SettingsPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <h1 className="text-xl font-bold text-white mb-1">Settings</h1>
-        <p className="text-gray-500 text-sm mb-6">Manage your notification preferences.</p>
+        <p className="text-gray-500 text-sm mb-6">Manage your profile and preferences.</p>
+
+        {/* Profile / Avatar */}
+        {session && (
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 px-5 py-4 mb-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-3">Profile</p>
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} />
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="relative w-16 h-16 rounded-full overflow-hidden flex items-center justify-center bg-violet-700 hover:opacity-80 transition-opacity disabled:opacity-50 group"
+                >
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-white text-lg font-bold">
+                      {session.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                    </span>
+                  )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity rounded-full">
+                    {uploadingAvatar ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              </div>
+              <div className="min-w-0">
+                <p className="text-white font-semibold">{session.fullName}</p>
+                <p className="text-xs text-gray-500 capitalize mt-0.5">{session.role.replace(/_/g, ' ')}</p>
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="text-xs text-violet-400 hover:text-violet-300 mt-1 transition-colors disabled:opacity-50"
+                >
+                  {uploadingAvatar ? 'Uploading…' : avatarUrl ? 'Change photo' : 'Add photo'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {!prefs && <div className="text-gray-500 text-sm">Loading…</div>}
 

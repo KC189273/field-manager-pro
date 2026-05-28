@@ -27,6 +27,7 @@ interface Resource {
   created_by: string | null
   created_by_name: string | null
   sort_order: number
+  is_pinned: boolean
   created_at: string
 }
 
@@ -236,6 +237,27 @@ export default function ResourcesPage() {
     }).catch(() => loadResources())
   }
 
+  async function togglePin(resource: Resource) {
+    const action = resource.is_pinned ? 'unpin' : 'pin'
+    if (!resource.is_pinned) {
+      const pinned = resources.filter(r => r.is_pinned)
+      if (pinned.length >= 4) {
+        alert('Maximum 4 items can be pinned. Unpin one first.')
+        return
+      }
+    }
+    // Optimistic update
+    setResources(prev => prev.map(r => r.id === resource.id ? { ...r, is_pinned: !r.is_pinned } : r))
+    const res = await fetch('/api/resources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ [action]: resource.id }),
+    })
+    if (!res.ok) {
+      setResources(prev => prev.map(r => r.id === resource.id ? { ...r, is_pinned: resource.is_pinned } : r))
+    }
+  }
+
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const filtered = resources.filter(r =>
@@ -286,6 +308,32 @@ export default function ResourcesPage() {
             className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-600"
           />
         </div>
+
+        {/* ── Pinned section ── */}
+        {!loading && !search && resources.some(r => r.is_pinned) && (
+          <div className="mb-6">
+            <div className="flex items-center gap-2 mb-2">
+              <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 4v6l2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V4h-1V2h10v2h-1z"/>
+              </svg>
+              <h2 className="text-sm font-bold text-white">Pinned</h2>
+            </div>
+            <div className="space-y-2">
+              {resources.filter(r => r.is_pinned).map(r => (
+                <ResourceCard
+                  key={`pin-${r.id}`}
+                  resource={r}
+                  canManage={canManage}
+                  canReorder={false}
+                  onEdit={() => openEdit(r)}
+                  onOpen={() => openDocument(r)}
+                  fmtDate={fmtDate}
+                  onTogglePin={canManage ? () => togglePin(r) : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
 
         {loading ? (
           <div className="space-y-3">
@@ -340,6 +388,7 @@ export default function ResourcesPage() {
                           onEdit={() => openEdit(r)}
                           onOpen={() => openDocument(r)}
                           fmtDate={fmtDate}
+                          onTogglePin={canManage ? () => togglePin(r) : undefined}
                           onDragStart={() => setDraggedId(r.id)}
                           onDragOver={e => { e.preventDefault(); setDragOverId(r.id) }}
                           onDragLeave={() => setDragOverId(null)}
@@ -565,7 +614,7 @@ export default function ResourcesPage() {
 
 function ResourceCard({
   resource, canManage, canReorder, isDragging, isDragOver,
-  onEdit, onOpen, fmtDate,
+  onEdit, onOpen, fmtDate, onTogglePin,
   onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
 }: {
   resource: Resource
@@ -576,6 +625,7 @@ function ResourceCard({
   onEdit: () => void
   onOpen: () => void
   fmtDate: (ts: string) => string
+  onTogglePin?: () => void
   onDragStart?: () => void
   onDragOver?: (e: React.DragEvent) => void
   onDragLeave?: () => void
@@ -611,13 +661,33 @@ function ResourceCard({
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-semibold text-white">{title}</p>
-            {canManage && (
-              <button onClick={onEdit} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            <div className="flex items-center gap-1.5 min-w-0">
+              {resource.is_pinned && (
+                <svg className="w-3 h-3 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M16 4v6l2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V4h-1V2h10v2h-1z"/>
                 </svg>
-              </button>
+              )}
+              <p className="text-sm font-semibold text-white">{title}</p>
+            </div>
+            {canManage && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                {onTogglePin && (
+                  <button
+                    onClick={onTogglePin}
+                    title={resource.is_pinned ? 'Unpin' : 'Pin to top'}
+                    className={`transition-colors ${resource.is_pinned ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-amber-400'}`}
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M16 4v6l2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V4h-1V2h10v2h-1z"/>
+                    </svg>
+                  </button>
+                )}
+                <button onClick={onEdit} className="text-gray-600 hover:text-gray-300 transition-colors">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                </button>
+              </div>
             )}
           </div>
 

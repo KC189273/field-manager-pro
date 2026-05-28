@@ -14,6 +14,8 @@ let ensured = false
 async function ensureTable() {
   if (ensured) return
   ensured = true
+  await query(`ALTER TABLE resources ADD COLUMN IF NOT EXISTS is_pinned BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
+
   await query(`
     CREATE TABLE IF NOT EXISTS resources (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -73,7 +75,7 @@ export async function GET() {
            r.contact_name, r.contact_role, r.contact_phone, r.contact_email,
            r.created_by::text,
            u.full_name AS created_by_name,
-           r.sort_order, r.created_at::text
+           r.sort_order, r.is_pinned, r.created_at::text
     FROM resources r
     LEFT JOIN users u ON u.id = r.created_by
     WHERE r.is_visible = TRUE
@@ -139,6 +141,22 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json()
+
+  // Pin / unpin: { pin: id } or { unpin: id }
+  if (body.pin) {
+    const pinCount = await query<{ count: string }>(
+      `SELECT COUNT(*) FROM resources WHERE is_pinned = TRUE`
+    )
+    if (parseInt(pinCount[0]?.count ?? '0') >= 4) {
+      return NextResponse.json({ error: 'Maximum 4 items can be pinned. Unpin one first.' }, { status: 400 })
+    }
+    await query(`UPDATE resources SET is_pinned = TRUE, updated_at = NOW() WHERE id = $1`, [body.pin])
+    return NextResponse.json({ ok: true })
+  }
+  if (body.unpin) {
+    await query(`UPDATE resources SET is_pinned = FALSE, updated_at = NOW() WHERE id = $1`, [body.unpin])
+    return NextResponse.json({ ok: true })
+  }
 
   // Bulk reorder: { reorder: [{id, sort_order}, ...] }
   if (Array.isArray(body.reorder)) {

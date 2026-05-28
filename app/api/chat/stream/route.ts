@@ -59,11 +59,12 @@ export async function GET(req: NextRequest) {
             id: string
             sender_id: string
             sender_name: string
+            sender_avatar_key: string | null
             body: string
             type: string
             created_at: string
           }>(
-            `SELECT m.id, m.sender_id, u.full_name AS sender_name, m.body, m.type, m.created_at
+            `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
              FROM chat_messages m
              JOIN users u ON u.id = m.sender_id
              WHERE m.conversation_id = $1 AND m.created_at > $2
@@ -72,13 +73,21 @@ export async function GET(req: NextRequest) {
           )
 
           if (messages.length > 0) {
-            // Sign S3 URLs for image messages
+            // Batch avatar URLs per unique sender
+            const uniqueSenders = [...new Map(messages.map(m => [m.sender_id, m.sender_avatar_key])).entries()]
+            const senderAvatarUrls: Record<string, string | null> = {}
+            await Promise.all(uniqueSenders.map(async ([userId, key]) => {
+              senderAvatarUrls[userId] = key ? await getReceiptViewUrl(key).catch(() => null) : null
+            }))
+
+            // Sign S3 URLs for image messages + attach avatar URLs
             const processed = await Promise.all(
               messages.map(async (msg) => {
+                const base = { ...msg, sender_avatar_key: undefined, sender_avatar_url: senderAvatarUrls[msg.sender_id] ?? null }
                 if (msg.type === 'image') {
-                  return { ...msg, body: await getReceiptViewUrl(msg.body).catch(() => msg.body) }
+                  return { ...base, body: await getReceiptViewUrl(msg.body).catch(() => msg.body) }
                 }
-                return msg
+                return base
               })
             )
 

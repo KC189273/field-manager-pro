@@ -25,17 +25,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     id: string
     sender_id: string
     sender_name: string
+    sender_avatar_key: string | null
     body: string
     type: string
     created_at: string
   }>(
     after
-      ? `SELECT m.id, m.sender_id, u.full_name AS sender_name, m.body, m.type, m.created_at
+      ? `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
          FROM chat_messages m
          JOIN users u ON u.id = m.sender_id
          WHERE m.conversation_id = $1 AND m.created_at > $2
          ORDER BY m.created_at ASC`
-      : `SELECT m.id, m.sender_id, u.full_name AS sender_name, m.body, m.type, m.created_at
+      : `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
          FROM chat_messages m
          JOIN users u ON u.id = m.sender_id
          WHERE m.conversation_id = $1
@@ -75,7 +76,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return acc
   }, {} as Record<string, { emoji: string; user_id: string; user_name: string }[]>)
 
-  const withReactions = withUrls.map(msg => ({ ...msg, reactions: reactionsByMsg[msg.id] ?? [] }))
+  // Batch-generate signed avatar URLs per unique sender
+  const uniqueSenders = [...new Map(ordered.map(m => [m.sender_id, m.sender_avatar_key])).entries()]
+  const senderAvatarUrls: Record<string, string | null> = {}
+  await Promise.all(uniqueSenders.map(async ([userId, key]) => {
+    senderAvatarUrls[userId] = key ? await getReceiptViewUrl(key).catch(() => null) : null
+  }))
+
+  const withReactions = withUrls.map(msg => ({
+    ...msg,
+    sender_avatar_key: undefined,
+    sender_avatar_url: senderAvatarUrls[msg.sender_id] ?? null,
+    reactions: reactionsByMsg[msg.id] ?? [],
+  }))
 
   // Update last_read_at
   await query(`
@@ -205,11 +218,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? await getReceiptViewUrl(body.trim()).catch(() => body.trim())
     : body.trim()
 
+  const senderRow = await queryOne<{ avatar_key: string | null }>(`SELECT avatar_key FROM users WHERE id = $1`, [session.id]).catch(() => null)
+  const senderAvatarUrl = senderRow?.avatar_key ? await getReceiptViewUrl(senderRow.avatar_key).catch(() => null) : null
+
   return NextResponse.json({
     message: {
       id: message.id,
       sender_id: session.id,
       sender_name: session.fullName,
+      sender_avatar_url: senderAvatarUrl,
       body: responseBody,
       type: type || 'text',
       created_at: message.created_at,

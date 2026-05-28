@@ -27,6 +27,7 @@ interface Message {
   id: string
   sender_id: string
   sender_name: string
+  sender_avatar_url?: string | null
   body: string
   type: string
   created_at: string
@@ -929,10 +930,13 @@ export default function ChatPage() {
                     <p className="text-[10px] text-gray-500 ml-12 mb-0.5 mt-2">{msg.sender_name}</p>
                   )}
                   <div className={`flex items-end gap-2 ${isMe ? 'flex-row-reverse' : 'flex-row'}`}>
-                    {/* Avatar — only for others, only on last message in group */}
+                    {/* Avatar — only for others */}
                     {!isMe && (
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 self-end ${avatarColor(msg.sender_name)}`}>
-                        <span className="text-white text-[10px] font-bold">{initials(msg.sender_name)}</span>
+                      <div className={`w-7 h-7 rounded-full flex-shrink-0 self-end overflow-hidden flex items-center justify-center ${msg.sender_avatar_url ? '' : avatarColor(msg.sender_name)}`}>
+                        {msg.sender_avatar_url
+                          ? <img src={msg.sender_avatar_url} alt={msg.sender_name} className="w-full h-full object-cover" />
+                          : <span className="text-white text-[10px] font-bold">{initials(msg.sender_name)}</span>
+                        }
                       </div>
                     )}
                     {/* Bubble */}

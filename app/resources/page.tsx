@@ -51,6 +51,8 @@ export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
+  const [draggedId, setDraggedId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   // Modal
   const [modal, setModal]               = useState<'add' | 'edit' | null>(null)
@@ -208,6 +210,32 @@ export default function ResourcesPage() {
     }
   }
 
+  // ── Drag-and-drop reorder ──
+  function handleDrop(droppedOnId: string, type: ResourceType) {
+    if (!draggedId || draggedId === droppedOnId) { setDraggedId(null); setDragOverId(null); return }
+    const sectionItems = resources.filter(r => r.type === type)
+    const draggedIdx   = sectionItems.findIndex(r => r.id === draggedId)
+    const targetIdx    = sectionItems.findIndex(r => r.id === droppedOnId)
+    if (draggedIdx === -1 || targetIdx === -1) { setDraggedId(null); setDragOverId(null); return }
+
+    const reordered = [...sectionItems]
+    const [moved] = reordered.splice(draggedIdx, 1)
+    reordered.splice(targetIdx, 0, moved)
+
+    // Apply new sort_orders optimistically
+    const updated = reordered.map((r, i) => ({ ...r, sort_order: i }))
+    setResources(prev => prev.map(r => updated.find(u => u.id === r.id) ?? r))
+    setDraggedId(null)
+    setDragOverId(null)
+
+    // Persist
+    fetch('/api/resources', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reorder: updated.map(r => ({ id: r.id, sort_order: r.sort_order })) }),
+    }).catch(() => loadResources())
+  }
+
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const filtered = resources.filter(r =>
@@ -306,9 +334,17 @@ export default function ResourcesPage() {
                           key={r.id}
                           resource={r}
                           canManage={canManage}
+                          canReorder={canManage && !search}
+                          isDragging={draggedId === r.id}
+                          isDragOver={dragOverId === r.id}
                           onEdit={() => openEdit(r)}
                           onOpen={() => openDocument(r)}
                           fmtDate={fmtDate}
+                          onDragStart={() => setDraggedId(r.id)}
+                          onDragOver={e => { e.preventDefault(); setDragOverId(r.id) }}
+                          onDragLeave={() => setDragOverId(null)}
+                          onDrop={() => handleDrop(r.id, section.type)}
+                          onDragEnd={() => { setDraggedId(null); setDragOverId(null) }}
                         />
                       ))}
                     </div>
@@ -528,19 +564,48 @@ export default function ResourcesPage() {
 // ── Resource card ──────────────────────────────────────────────────────────────
 
 function ResourceCard({
-  resource, canManage, onEdit, onOpen, fmtDate,
+  resource, canManage, canReorder, isDragging, isDragOver,
+  onEdit, onOpen, fmtDate,
+  onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
 }: {
   resource: Resource
   canManage: boolean
+  canReorder?: boolean
+  isDragging?: boolean
+  isDragOver?: boolean
   onEdit: () => void
   onOpen: () => void
   fmtDate: (ts: string) => string
+  onDragStart?: () => void
+  onDragOver?: (e: React.DragEvent) => void
+  onDragLeave?: () => void
+  onDrop?: () => void
+  onDragEnd?: () => void
 }) {
   const { type, title, body, url, filename, contact_name, contact_role, contact_phone, contact_email, created_by_name, created_at } = resource
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+    <div
+      draggable={canReorder}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      className={`bg-gray-900 border rounded-2xl p-4 transition-all ${
+        isDragOver ? 'border-violet-500 bg-gray-800/80' :
+        isDragging  ? 'border-gray-700 opacity-40' :
+        'border-gray-800'
+      }`}
+    >
       <div className="flex items-start gap-3">
+        {canReorder && (
+          <div className="text-gray-600 shrink-0 mt-1 cursor-grab active:cursor-grabbing touch-none select-none">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+            </svg>
+          </div>
+        )}
         <div className="text-xl shrink-0 mt-0.5">
           {type === 'announcement' ? '📢' : type === 'document' ? '📄' : type === 'link' ? '🔗' : '👤'}
         </div>

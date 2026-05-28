@@ -138,15 +138,27 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const body = await req.json()
+
+  // Bulk reorder: { reorder: [{id, sort_order}, ...] }
+  if (Array.isArray(body.reorder)) {
+    for (const { id, sort_order } of body.reorder) {
+      await query(`UPDATE resources SET sort_order = $1, updated_at = NOW() WHERE id = $2`, [sort_order, id])
+    }
+    return NextResponse.json({ ok: true })
+  }
+
   const {
-    id, type, title, body, url, s3Key, filename,
+    id, type, title, url, s3Key, filename,
     contactName, contactRole, contactPhone, contactEmail,
     sortOrder, isVisible,
-  } = await req.json()
+  } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   const existing = await queryOne(`SELECT id FROM resources WHERE id = $1`, [id])
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const bodyText = body.body ?? null
 
   await query(`
     UPDATE resources SET
@@ -166,7 +178,7 @@ export async function PATCH(req: NextRequest) {
     WHERE id = $13
   `, [
     type ?? null, title?.trim() ?? null,
-    body?.trim() ?? null, url?.trim() ?? null,
+    bodyText?.trim() ?? null, url?.trim() ?? null,
     s3Key ?? null, filename ?? null,
     contactName?.trim() ?? null, contactRole?.trim() ?? null,
     contactPhone?.trim() ?? null, contactEmail?.trim() ?? null,

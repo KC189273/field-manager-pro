@@ -14,6 +14,7 @@ interface Conversation {
   last_sender_name: string | null
   unread_count: string
   participant_names: string | null
+  participant_avatar_url?: string | null
   is_muted: boolean
 }
 
@@ -670,11 +671,13 @@ export default function ChatPage() {
                     className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-900 transition-colors text-left"
                   >
                     {/* Avatar */}
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${isGroup ? 'bg-violet-800' : avatarColor(name)}`}>
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden ${isGroup ? 'bg-violet-800' : (!conv.participant_avatar_url ? avatarColor(name) : '')}`}>
                       {isGroup ? (
                         <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
                         </svg>
+                      ) : conv.participant_avatar_url ? (
+                        <img src={conv.participant_avatar_url} alt={name} className="w-full h-full object-cover" />
                       ) : (
                         <span className="text-white text-sm font-bold">{initials(name)}</span>
                       )}

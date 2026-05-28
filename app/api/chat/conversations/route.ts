@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
 
@@ -59,6 +60,7 @@ export async function GET() {
     last_sender_name: string | null
     unread_count: string
     participant_names: string | null
+    participant_avatar_key: string | null
     is_muted: boolean
   }>(`
     SELECT
@@ -82,7 +84,14 @@ export async function GET() {
         FROM chat_participants cp3
         JOIN users u2 ON u2.id = cp3.user_id
         WHERE cp3.conversation_id = c.id AND cp3.user_id != $1
-      ) AS participant_names
+      ) AS participant_names,
+      (
+        SELECT u3.avatar_key
+        FROM chat_participants cp4
+        JOIN users u3 ON u3.id = cp4.user_id
+        WHERE cp4.conversation_id = c.id AND cp4.user_id != $1
+        LIMIT 1
+      ) AS participant_avatar_key
     FROM chat_conversations c
     JOIN chat_participants cp_me ON cp_me.conversation_id = c.id AND cp_me.user_id = $1
     LEFT JOIN LATERAL (
@@ -94,7 +103,20 @@ export async function GET() {
     ORDER BY COALESCE(lm.created_at, c.created_at) DESC
   `, [session.id]).catch(() => [])
 
-  return NextResponse.json({ conversations })
+  // Generate signed avatar URLs for unique keys
+  const uniqueKeys = [...new Set(conversations.map(c => c.participant_avatar_key).filter(Boolean))] as string[]
+  const keyToUrl: Record<string, string> = {}
+  await Promise.all(uniqueKeys.map(async key => {
+    keyToUrl[key] = await getReceiptViewUrl(key).catch(() => '')
+  }))
+
+  const withAvatars = conversations.map(c => ({
+    ...c,
+    participant_avatar_key: undefined,
+    participant_avatar_url: c.participant_avatar_key ? (keyToUrl[c.participant_avatar_key] ?? null) : null,
+  }))
+
+  return NextResponse.json({ conversations: withAvatars })
 }
 
 export async function POST(req: NextRequest) {

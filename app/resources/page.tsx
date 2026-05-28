@@ -52,8 +52,6 @@ export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   // Modal
   const [modal, setModal]               = useState<'add' | 'edit' | null>(null)
@@ -211,25 +209,19 @@ export default function ResourcesPage() {
     }
   }
 
-  // ── Drag-and-drop reorder ──
-  function handleDrop(droppedOnId: string, type: ResourceType) {
-    if (!draggedId || draggedId === droppedOnId) { setDraggedId(null); setDragOverId(null); return }
+  // ── Up/down reorder ──
+  function moveItem(id: string, type: ResourceType, direction: 'up' | 'down') {
     const sectionItems = resources.filter(r => r.type === type)
-    const draggedIdx   = sectionItems.findIndex(r => r.id === draggedId)
-    const targetIdx    = sectionItems.findIndex(r => r.id === droppedOnId)
-    if (draggedIdx === -1 || targetIdx === -1) { setDraggedId(null); setDragOverId(null); return }
+    const idx = sectionItems.findIndex(r => r.id === id)
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (swapIdx < 0 || swapIdx >= sectionItems.length) return
 
     const reordered = [...sectionItems]
-    const [moved] = reordered.splice(draggedIdx, 1)
-    reordered.splice(targetIdx, 0, moved)
+    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
 
-    // Apply new sort_orders optimistically
     const updated = reordered.map((r, i) => ({ ...r, sort_order: i }))
     setResources(prev => prev.map(r => updated.find(u => u.id === r.id) ?? r))
-    setDraggedId(null)
-    setDragOverId(null)
 
-    // Persist
     fetch('/api/resources', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -377,23 +369,20 @@ export default function ResourcesPage() {
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {items.map(r => (
+                      {items.map((r, idx) => (
                         <ResourceCard
                           key={r.id}
                           resource={r}
                           canManage={canManage}
                           canReorder={canManage && !search}
-                          isDragging={draggedId === r.id}
-                          isDragOver={dragOverId === r.id}
+                          isFirst={idx === 0}
+                          isLast={idx === items.length - 1}
                           onEdit={() => openEdit(r)}
                           onOpen={() => openDocument(r)}
                           fmtDate={fmtDate}
                           onTogglePin={canManage ? () => togglePin(r) : undefined}
-                          onDragStart={() => setDraggedId(r.id)}
-                          onDragOver={e => { e.preventDefault(); setDragOverId(r.id) }}
-                          onDragLeave={() => setDragOverId(null)}
-                          onDrop={() => handleDrop(r.id, section.type)}
-                          onDragEnd={() => { setDraggedId(null); setDragOverId(null) }}
+                          onMoveUp={() => moveItem(r.id, section.type, 'up')}
+                          onMoveDown={() => moveItem(r.id, section.type, 'down')}
                         />
                       ))}
                     </div>
@@ -613,47 +602,46 @@ export default function ResourcesPage() {
 // ── Resource card ──────────────────────────────────────────────────────────────
 
 function ResourceCard({
-  resource, canManage, canReorder, isDragging, isDragOver,
-  onEdit, onOpen, fmtDate, onTogglePin,
-  onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd,
+  resource, canManage, canReorder, isFirst, isLast,
+  onEdit, onOpen, fmtDate, onTogglePin, onMoveUp, onMoveDown,
 }: {
   resource: Resource
   canManage: boolean
   canReorder?: boolean
-  isDragging?: boolean
-  isDragOver?: boolean
+  isFirst?: boolean
+  isLast?: boolean
   onEdit: () => void
   onOpen: () => void
   fmtDate: (ts: string) => string
   onTogglePin?: () => void
-  onDragStart?: () => void
-  onDragOver?: (e: React.DragEvent) => void
-  onDragLeave?: () => void
-  onDrop?: () => void
-  onDragEnd?: () => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
 }) {
   const { type, title, body, url, filename, contact_name, contact_role, contact_phone, contact_email, created_by_name, created_at } = resource
 
   return (
-    <div
-      draggable={canReorder}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
-      className={`bg-gray-900 border rounded-2xl p-4 transition-all ${
-        isDragOver ? 'border-violet-500 bg-gray-800/80' :
-        isDragging  ? 'border-gray-700 opacity-40' :
-        'border-gray-800'
-      }`}
-    >
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 transition-all">
       <div className="flex items-start gap-3">
         {canReorder && (
-          <div className="text-gray-600 shrink-0 mt-1 cursor-grab active:cursor-grabbing touch-none select-none">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
-            </svg>
+          <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
+            <button
+              onClick={onMoveUp}
+              disabled={isFirst}
+              className="text-gray-600 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+              </svg>
+            </button>
+            <button
+              onClick={onMoveDown}
+              disabled={isLast}
+              className="text-gray-600 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
           </div>
         )}
         <div className="text-xl shrink-0 mt-0.5">

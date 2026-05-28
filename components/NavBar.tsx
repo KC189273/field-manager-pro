@@ -91,32 +91,40 @@ export default function NavBar({ role, fullName }: NavBarProps) {
     return () => clearInterval(interval)
   }, [])
 
-  // Single combined fetch replaces 3 separate API calls per page load
-  const fetchNavStatus = useCallback(() => {
-    fetch('/api/nav/status')
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (!d) return
-        setNotifications(d.notifications ?? [])
-        setUnread(d.unread ?? 0)
-        setChatUnread(d.chatUnread ?? 0)
-        // Store active shift for GPS tracking decision
-        if (d.activeShift !== undefined) {
-          navActiveShiftRef.current = d.activeShift
-        }
-      })
-      .catch(() => {})
-  }, [])
-
   const navActiveShiftRef = useRef<{ id: string } | null>(null)
+  const navEsRef = useRef<EventSource | null>(null)
 
   useEffect(() => {
-    fetchNavStatus()
-    const interval = setInterval(() => {
-      if (!document.hidden) fetchNavStatus()
-    }, 90 * 1000)
-    return () => clearInterval(interval)
-  }, [fetchNavStatus])
+    function applyNavData(d: { notifications: unknown[]; unread: number; chatUnread: number; activeShift: { id: string } | null }) {
+      setNotifications(d.notifications as Notification[] ?? [])
+      setUnread(d.unread ?? 0)
+      setChatUnread(d.chatUnread ?? 0)
+      if (d.activeShift !== undefined) {
+        navActiveShiftRef.current = d.activeShift
+      }
+    }
+
+    function connect() {
+      if (navEsRef.current) navEsRef.current.close()
+      const es = new EventSource('/api/nav/stream')
+      es.onmessage = (event) => {
+        try {
+          const d = JSON.parse(event.data)
+          applyNavData(d)
+        } catch {}
+      }
+      es.onerror = () => {
+        // EventSource handles reconnection automatically
+      }
+      navEsRef.current = es
+    }
+
+    connect()
+
+    return () => {
+      if (navEsRef.current) { navEsRef.current.close(); navEsRef.current = null }
+    }
+  }, [])
 
   function openNotifs() {
     setNotifOpen(true)

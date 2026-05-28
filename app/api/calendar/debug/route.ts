@@ -104,7 +104,28 @@ export async function GET(req: NextRequest) {
     results.calendarEventsColumnsError = String(e)
   }
 
-  // 7. Sample of recent calendar_events with owner info
+  // 7. All attendee rows with user/event info (to see who was invited where)
+  try {
+    const allRows = await query(`
+      SELECT
+        a.event_id::text, a.user_id::text, a.status,
+        u.full_name AS attendee_name,
+        e.title AS event_title, e.start_date::text,
+        e.calendar_owner_id::text,
+        o.full_name AS owner_name
+      FROM calendar_event_attendees a
+      JOIN users u ON u.id = a.user_id
+      JOIN calendar_events e ON e.id = a.event_id
+      LEFT JOIN users o ON o.id = e.calendar_owner_id
+      ORDER BY e.start_date, u.full_name
+      LIMIT 50
+    `)
+    results.allAttendeeRows = allRows
+  } catch (e) {
+    results.allAttendeeRowsError = String(e)
+  }
+
+  // 8. Sample of recent calendar_events with owner info
   try {
     const evs = await query(`
       SELECT e.id::text, e.title, e.calendar_owner_id::text, e.created_by::text,

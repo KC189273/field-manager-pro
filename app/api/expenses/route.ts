@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   const orgFilter = await getOrgFilter(session)
   let rows: Record<string, unknown>[]
 
-  if (session.role === 'developer' || isOwner(session.role)) {
+  if (session.role === 'developer' || session.role === 'ops_manager' || isOwner(session.role)) {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params)
     const statusClause = status ? (params.push(status), `AND e.status = $${params.length}`) : ''

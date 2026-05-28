@@ -266,38 +266,38 @@ export async function GET(req: NextRequest) {
     ORDER BY start_date, start_time NULLS LAST
   `, [targetOwnerId, lastDay, firstDay])
 
-  // Fetch events where this user is an invited attendee (non-declined → show on calendar)
-  // and declined events separately (for audit trail only)
+  // Fetch events where the calendar owner is an invited attendee on someone else's calendar.
+  // This runs for both own-view and team-view so elevated users see the full picture.
   let invitedEvents: CalEventRow[] = []
   let declinedEvents: CalEventRow[] = []
+  const attendeeBase = `
+    SELECT
+      e.id, e.title, e.category,
+      e.start_date::text, e.start_time::text,
+      e.end_date::text,   e.end_time::text,
+      e.notes, e.all_day, e.location, e.recurrence, e.recurrence_id::text,
+      e.task_id::text, e.calendar_owner_id::text,
+      e.created_by::text, e.created_by_name, e.created_at::text
+    FROM calendar_events e
+    JOIN calendar_event_attendees a ON a.event_id = e.id
+    WHERE a.user_id = $1
+      AND e.calendar_owner_id != $1
+      AND (
+        (e.recurrence = 'none' AND e.start_date <= $2 AND e.end_date >= $3)
+        OR (e.recurrence != 'none' AND e.start_date <= $2)
+      )`
+
+  // Non-declined: invited, accepted, maybe — all show on the calendar
+  invitedEvents = await query<CalEventRow>(
+    attendeeBase + ` AND a.status != 'declined'`,
+    [targetOwnerId, lastDay, firstDay]
+  )
+
+  // Declined: audit trail only — shown in collapsible section (own-view only)
   if (!ownerId) {
-    const attendeeBase = `
-      SELECT
-        e.id, e.title, e.category,
-        e.start_date::text, e.start_time::text,
-        e.end_date::text,   e.end_time::text,
-        e.notes, e.all_day, e.location, e.recurrence, e.recurrence_id::text,
-        e.task_id::text, e.calendar_owner_id::text,
-        e.created_by::text, e.created_by_name, e.created_at::text
-      FROM calendar_events e
-      JOIN calendar_event_attendees a ON a.event_id = e.id
-      WHERE a.user_id = $1
-        AND e.calendar_owner_id != $1
-        AND (
-          (e.recurrence = 'none' AND e.start_date <= $2 AND e.end_date >= $3)
-          OR (e.recurrence != 'none' AND e.start_date <= $2)
-        )`
-
-    // Non-declined: invited, accepted, maybe — all show on the calendar
-    invitedEvents = await query<CalEventRow>(
-      attendeeBase + ` AND a.status != 'declined'`,
-      [session.id, lastDay, firstDay]
-    )
-
-    // Declined: audit trail only — don't appear on calendar grid
     declinedEvents = await query<CalEventRow>(
       attendeeBase + ` AND a.status = 'declined'`,
-      [session.id, lastDay, firstDay]
+      [targetOwnerId, lastDay, firstDay]
     )
   }
 

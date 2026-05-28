@@ -76,7 +76,7 @@ export default function ResourcesPage() {
   const loadResources = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/resources')
+      const res = await fetch('/api/resources', { cache: 'no-store' })
       if (res.ok) {
         const d = await res.json()
         setResources(d.resources ?? [])

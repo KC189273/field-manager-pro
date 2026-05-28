@@ -28,13 +28,26 @@ export async function GET() {
       [session.id]
     )
   } else if (session.role === 'employee') {
-    // Employee sees stores assigned to their DM
+    // Employees see stores assigned to their DM, plus any stores they are
+    // scheduled at today (covers floaters working at another DM's locations)
+    const todayCST = `(CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date`
     stores = await query<{ id: string; address: string; employee_capacity: number }>(
-      `SELECT dsl.id, dsl.address, dsl.employee_capacity
+      `SELECT DISTINCT dsl.id, dsl.address, dsl.employee_capacity
        FROM dm_store_locations dsl
-       JOIN dm_manager_stores dms ON dms.store_location_id = dsl.id
-       WHERE dms.manager_id = (SELECT manager_id FROM users WHERE id = $1)
-         AND dsl.active = true
+       WHERE dsl.active = true
+         AND (
+           dsl.id IN (
+             SELECT dms.store_location_id
+             FROM dm_manager_stores dms
+             WHERE dms.manager_id = (SELECT manager_id FROM users WHERE id = $1)
+           )
+           OR dsl.id IN (
+             SELECT ss.store_location_id
+             FROM scheduled_shifts ss
+             WHERE ss.employee_id = $1
+               AND ss.shift_date = ${todayCST}
+           )
+         )
        ORDER BY dsl.address ASC`,
       [session.id]
     )

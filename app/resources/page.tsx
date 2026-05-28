@@ -216,11 +216,20 @@ export default function ResourcesPage() {
     const swapIdx = direction === 'up' ? idx - 1 : idx + 1
     if (swapIdx < 0 || swapIdx >= sectionItems.length) return
 
+    // Swap the two items in the section
     const reordered = [...sectionItems]
     ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
-
     const updated = reordered.map((r, i) => ({ ...r, sort_order: i }))
-    setResources(prev => prev.map(r => updated.find(u => u.id === r.id) ?? r))
+
+    // Find the positions of the two swapped items in the full resources array and swap them there too
+    const fullIdxA = resources.findIndex(r => r.id === sectionItems[idx].id)
+    const fullIdxB = resources.findIndex(r => r.id === sectionItems[swapIdx].id)
+    const newArr = [...resources]
+    ;[newArr[fullIdxA], newArr[fullIdxB]] = [newArr[fullIdxB], newArr[fullIdxA]]
+
+    // Apply updated sort_orders
+    const updatedMap = new Map(updated.map(r => [r.id, r]))
+    setResources(newArr.map(r => updatedMap.get(r.id) ?? r))
 
     fetch('/api/resources', {
       method: 'PATCH',

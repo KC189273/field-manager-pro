@@ -107,6 +107,7 @@ export default function CalendarPage() {
   const [showDeclined, setShowDeclined] = useState(false)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>('')
+  const [stores, setStores] = useState<{ id: string; address: string }[]>([])
 
   // Modal
   const [modal, setModal]               = useState<'add' | 'edit' | null>(null)
@@ -184,6 +185,27 @@ export default function CalendarPage() {
     setYear(today.getFullYear()); setMonth(today.getMonth()+1); setSelectedDay(todayStr())
   }
 
+  // ── Stores for location picker ──
+  function fetchStores(managerId: string) {
+    fetch(`/api/calendar/stores?managerId=${managerId}`)
+      .then(r => r.json())
+      .then(d => setStores(d.stores ?? []))
+      .catch(() => setStores([]))
+  }
+
+  // Determines which DM's stores to load for the modal
+  function loadStoresForModal(ownerRole?: string, ownerId?: string) {
+    const id = ownerId ?? session?.id
+    // Only DMs (managers) have assigned stores
+    const role = ownerRole ??
+      (ownerId ? teamMembers.find(m => m.id === ownerId)?.role : session?.role)
+    if (role === 'manager' && id) {
+      fetchStores(id)
+    } else {
+      setStores([])
+    }
+  }
+
   // ── Modal helpers ──
   function openAdd(dateStr: string) {
     setEditingEvent(null)
@@ -195,6 +217,8 @@ export default function CalendarPage() {
       allDay: false, location: '', notes: '',
       recurrence: 'none', reminderMinutes: [], attendeeIds: [], attachments: [],
     })
+    const ownerId = (activeTab === 'team' && selectedOwnerId) ? selectedOwnerId : undefined
+    loadStoresForModal(undefined, ownerId)
     setModal('add')
   }
 
@@ -216,6 +240,7 @@ export default function CalendarPage() {
       attendeeIds: ev.attendees?.map(a => a.user_id) ?? [],
       attachments: ev.attachments?.map(a => ({ id: a.id, key: a.s3_key, filename: a.filename, content_type: a.content_type })) ?? [],
     })
+    loadStoresForModal(undefined, ev.calendar_owner_id ?? undefined)
     setModal('edit')
   }
 
@@ -891,11 +916,23 @@ export default function CalendarPage() {
               {/* Location */}
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Location <span className="text-gray-600 font-normal">— optional</span></label>
+                {stores.length > 0 && (
+                  <select
+                    value=""
+                    onChange={e => { if (e.target.value) setForm(f => ({ ...f, location: e.target.value })) }}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500 mb-2"
+                  >
+                    <option value="">Pick a store location…</option>
+                    {stores.map(s => (
+                      <option key={s.id} value={s.address}>{s.address}</option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="text"
                   value={form.location}
                   onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
-                  placeholder="e.g. 123 Main St, Chicago"
+                  placeholder={stores.length > 0 ? 'Or type a custom address…' : 'e.g. 123 Main St, Chicago'}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
                 />
               </div>

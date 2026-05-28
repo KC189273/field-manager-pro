@@ -474,31 +474,6 @@ export default function NavBar({ role, fullName }: NavBarProps) {
           </div>
         </div>
       )}
-      {role === 'employee' && (
-        <nav className="fixed bottom-0 left-0 right-0 z-40 bg-gray-950 border-t border-gray-800 flex items-stretch h-16">
-          {([
-            { href: '/dashboard',   label: 'Home',      icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
-            { href: '/clock',       label: 'Clock',     icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-            { href: '/my-schedule', label: 'Schedule',  icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-            { href: '/tasks',       label: 'Tasks',     icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-            { href: '/checklist',   label: 'Checklist', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6m-6 4h4' },
-          ] as { href: string; label: string; icon: string }[]).map(({ href, label, icon }) => {
-            const active = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
-            return (
-              <a
-                key={href}
-                href={href}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors ${active ? 'text-violet-400' : 'text-gray-500 hover:text-gray-300'}`}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={active ? 2.5 : 1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-                </svg>
-                <span className="text-[10px] font-medium">{label}</span>
-              </a>
-            )
-          })}
-        </nav>
-      )}
     </>
   )
 }

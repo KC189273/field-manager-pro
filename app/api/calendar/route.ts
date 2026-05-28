@@ -65,6 +65,13 @@ async function ensureTables() {
     )
   `).catch(() => {})
 
+  // Ensure the unique constraint exists even if table was created without it
+  await query(`
+    ALTER TABLE calendar_event_attendees
+      ADD CONSTRAINT IF NOT EXISTS calendar_event_attendees_event_id_user_id_key
+      UNIQUE (event_id, user_id)
+  `).catch(() => {})
+
   // Reminders
   await query(`
     CREATE TABLE IF NOT EXISTS calendar_reminders (
@@ -403,16 +410,20 @@ export async function POST(req: NextRequest) {
   if (!eventId) return NextResponse.json({ error: 'Insert failed' }, { status: 500 })
 
   // Insert attendees and send invites
-  const inviteeIds: string[] = Array.isArray(attendeeIds) ? attendeeIds.filter((id: string) => id !== session.id) : []
+  const inviteeIds: string[] = Array.isArray(attendeeIds) ? attendeeIds.filter((id: string) => id !== calendarOwner && id !== session.id) : []
   if (inviteeIds.length > 0) {
-    for (const uid of inviteeIds) {
-      await query(`
-        INSERT INTO calendar_event_attendees (event_id, user_id, status)
-        VALUES ($1, $2, 'invited')
-        ON CONFLICT (event_id, user_id) DO NOTHING
-      `, [eventId, uid])
+    try {
+      for (const uid of inviteeIds) {
+        await query(`
+          INSERT INTO calendar_event_attendees (event_id, user_id, status)
+          VALUES ($1, $2, 'invited')
+          ON CONFLICT DO NOTHING
+        `, [eventId, uid])
+      }
+    } catch (e) {
+      console.error('Failed to insert calendar attendees:', e)
+      // Don't fail the whole request — event was created; attendees can be added via edit
     }
-    const catLabel = CAT_LABELS[category || 'other'] ?? 'Event'
     sendPushToUsers(inviteeIds, `Calendar Invite: ${title.trim()}`,
       `${session.fullName} invited you to "${title.trim()}" on ${startDate}.`,
       'calendar_invite'
@@ -543,7 +554,7 @@ export async function PATCH(req: NextRequest) {
       await query(`
         INSERT INTO calendar_event_attendees (event_id, user_id, status)
         VALUES ($1, $2, 'invited')
-        ON CONFLICT (event_id, user_id) DO NOTHING
+        ON CONFLICT DO NOTHING
       `, [id, uid])
     }
     if (toAdd.length > 0) {

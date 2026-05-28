@@ -149,6 +149,9 @@ export default function TasksPage() {
   const [filterEmployeeId, setFilterEmployeeId] = useState('')
   const [filterDmId, setFilterDmId] = useState('')
 
+  // Delete recurring modal
+  const [deletingTask, setDeletingTask] = useState<Task | null>(null)
+
   // Unchecking
   const [unchecking, setUnchecking] = useState<string | null>(null)
 
@@ -393,11 +396,30 @@ export default function TasksPage() {
 
   // ── Delete task ──────────────────────────────────────────
   async function deleteTask(taskId: string) {
+    const task = [...tasks, ...historyTasks].find(t => t.id === taskId)
+    if (task?.recurrence && task.recurrence !== 'none' && task.recurrence_id) {
+      setDeletingTask(task)
+      return
+    }
     if (!confirm('Delete this task?')) return
     await fetch('/api/tasks', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ taskId }),
+    })
+    await loadTasks()
+  }
+
+  async function confirmDeleteTask(mode: 'single' | 'series') {
+    if (!deletingTask) return
+    const body = mode === 'series' && deletingTask.recurrence_id
+      ? { seriesId: deletingTask.recurrence_id }
+      : { taskId: deletingTask.id }
+    setDeletingTask(null)
+    await fetch('/api/tasks', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     })
     await loadTasks()
   }
@@ -1058,6 +1080,40 @@ export default function TasksPage() {
                   {completing ? 'Saving…' : 'Mark Complete'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Recurring Modal ── */}
+      {deletingTask && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setDeletingTask(null)}>
+          <div className="bg-gray-900 rounded-2xl w-full max-w-sm border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-base font-bold text-white mb-1">Delete Recurring Task</h2>
+            <p className="text-sm text-gray-400 mb-1 truncate">{deletingTask.title}</p>
+            <p className="text-xs text-emerald-400 mb-5">
+              ↻ {deletingTask.recurrence === 'biweekly' ? 'Every 2 weeks' : deletingTask.recurrence?.charAt(0).toUpperCase() + deletingTask.recurrence!.slice(1)}
+            </p>
+            <p className="text-sm text-gray-300 mb-5">Do you want to delete just this task, or the entire recurring series?</p>
+            <div className="space-y-2">
+              <button
+                onClick={() => confirmDeleteTask('single')}
+                className="w-full bg-gray-800 hover:bg-gray-700 text-white text-sm font-semibold py-3 rounded-xl transition-colors"
+              >
+                Delete this task only
+              </button>
+              <button
+                onClick={() => confirmDeleteTask('series')}
+                className="w-full bg-red-600 hover:bg-red-500 text-white text-sm font-semibold py-3 rounded-xl transition-colors"
+              >
+                Delete entire series
+              </button>
+              <button
+                onClick={() => setDeletingTask(null)}
+                className="w-full text-gray-500 hover:text-gray-300 text-sm py-2 transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

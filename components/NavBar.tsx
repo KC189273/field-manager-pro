@@ -112,7 +112,9 @@ export default function NavBar({ role, fullName }: NavBarProps) {
 
   useEffect(() => {
     fetchNavStatus()
-    const interval = setInterval(fetchNavStatus, 45 * 1000)
+    const interval = setInterval(() => {
+      if (!document.hidden) fetchNavStatus()
+    }, 90 * 1000)
     return () => clearInterval(interval)
   }, [fetchNavStatus])
 

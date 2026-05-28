@@ -665,7 +665,9 @@ export default function MapPage() {
   useEffect(() => {
     if (liveMode && mapReady) {
       loadLive()
-      liveIntervalRef.current = setInterval(loadLive, 30_000)
+      liveIntervalRef.current = setInterval(() => {
+        if (!document.hidden) loadLive()
+      }, 30_000)
     }
     return () => {
       if (liveIntervalRef.current) {

@@ -4,6 +4,7 @@ import { getSession, canViewTeam, canSubmitExpense } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import NavBar from '@/components/NavBar'
 import WelcomeBanner from '@/components/WelcomeBanner'
+import PhotoPromptBanner from '@/components/PhotoPromptBanner'
 
 // Cache org-wide aggregate counts for 30s — these change infrequently and are
 // safe to serve slightly stale. User-specific data (shift, hours, tasks) is NOT cached.
@@ -156,6 +157,7 @@ export default async function DashboardPage() {
 
       <div className="px-4 pt-2 pb-20 space-y-2 max-w-lg mx-auto">
         <WelcomeBanner role={session.role} />
+        <PhotoPromptBanner />
 
         {/* Greeting */}
         <div>

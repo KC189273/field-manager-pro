@@ -394,15 +394,33 @@ export default function NavBar({ role, fullName }: NavBarProps) {
 
             {/* User info */}
             <div className="px-5 py-4 border-b border-gray-800 flex items-center gap-3">
-              <div className="w-12 h-12 rounded-full bg-violet-700 flex items-center justify-center flex-shrink-0 overflow-hidden">
-                {avatarUrl
-                  ? <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
-                  : <span className="text-white text-base font-bold">{initials}</span>
-                }
-              </div>
+              <a href="/settings" onClick={() => setProfileOpen(false)} className="relative flex-shrink-0 group">
+                <div className="w-12 h-12 rounded-full bg-violet-700 flex items-center justify-center overflow-hidden">
+                  {avatarUrl
+                    ? <img src={avatarUrl} alt={fullName} className="w-full h-full object-cover" />
+                    : <span className="text-white text-base font-bold">{initials}</span>
+                  }
+                </div>
+                <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                  <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                {!avatarUrl && (
+                  <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 rounded-full bg-amber-500 border-2 border-gray-900 flex items-center justify-center">
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </div>
+                )}
+              </a>
               <div className="min-w-0">
                 <p className="text-white font-semibold truncate">{fullName}</p>
                 <p className="text-xs text-gray-500 capitalize mt-0.5">{role.replace(/_/g, ' ')}</p>
+                <a href="/settings" onClick={() => setProfileOpen(false)} className="text-xs text-violet-400 hover:text-violet-300 transition-colors mt-0.5 inline-block">
+                  {avatarUrl ? 'Change photo →' : 'Add photo →'}
+                </a>
               </div>
               <button onClick={() => setProfileOpen(false)} className="ml-auto text-gray-500 hover:text-gray-300 flex-shrink-0">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

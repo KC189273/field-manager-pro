@@ -51,7 +51,16 @@ export async function GET() {
 
   const orgFilter = await getOrgFilter(session)
   const params: unknown[] = []
-  const orgClause = appendOrgFilter(orgFilter, params, 'r')
+
+  // Build org clause: include items belonging to the user's org OR global items (org_id IS NULL)
+  let orgWhereClause = ''
+  if (orgFilter.filterByOrg && orgFilter.orgId) {
+    params.push(orgFilter.orgId)
+    orgWhereClause = ` AND (r.org_id = $${params.length} OR r.org_id IS NULL)`
+  } else if (orgFilter.filterByOrg && !orgFilter.orgId) {
+    orgWhereClause = ` AND r.org_id IS NULL`
+  }
+  // filterByOrg = false (developer viewing all) → no clause, see everything
 
   const resources = await query<{
     id: string
@@ -78,8 +87,7 @@ export async function GET() {
            r.sort_order, r.is_pinned, r.created_at::text
     FROM resources r
     LEFT JOIN users u ON u.id = r.created_by
-    WHERE r.is_visible = TRUE
-      ${orgClause ? 'AND' + orgClause.replace(' AND', '') : ''}
+    WHERE r.is_visible = TRUE${orgWhereClause}
     ORDER BY r.sort_order ASC, r.created_at DESC
   `, params)
 

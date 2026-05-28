@@ -214,7 +214,7 @@ export default function ChatPage() {
   const [myId, setMyId] = useState('')
 
   const messagesContainerRef = useRef<HTMLDivElement>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const esRef = useRef<EventSource | null>(null)
   const lastMsgTimeRef = useRef<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -237,7 +237,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     loadConversations()
-    const interval = setInterval(loadConversations, 10000)
+    const interval = setInterval(loadConversations, 30000)
     return () => clearInterval(interval)
   }, [loadConversations])
 
@@ -279,13 +279,33 @@ export default function ChatPage() {
     setMutedBy([])
     lastMsgTimeRef.current = null
     setLoadingMsgs(true)
-    loadMessages(conv.id).finally(() => setLoadingMsgs(false))
-    if (pollRef.current) clearInterval(pollRef.current)
-    pollRef.current = setInterval(() => {
-      if (lastMsgTimeRef.current) {
-        loadMessages(conv.id, lastMsgTimeRef.current)
+
+    // Close any existing SSE connection before opening a new one
+    if (esRef.current) { esRef.current.close(); esRef.current = null }
+
+    loadMessages(conv.id).finally(() => {
+      setLoadingMsgs(false)
+      // Start SSE after initial load so lastMsgTimeRef is set to the correct `after` timestamp
+      const after = lastMsgTimeRef.current ?? new Date(Date.now() - 5000).toISOString()
+      const es = new EventSource(
+        `/api/chat/stream?conversationId=${conv.id}&after=${encodeURIComponent(after)}`
+      )
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'messages' && data.messages?.length > 0) {
+            setMessages(prev => {
+              const existingIds = new Set(prev.map((m: Message) => m.id))
+              const newMsgs = data.messages.filter((m: Message) => !existingIds.has(m.id))
+              return newMsgs.length > 0 ? [...prev, ...newMsgs] : prev
+            })
+            lastMsgTimeRef.current = data.messages[data.messages.length - 1].created_at
+          }
+        } catch {}
       }
-    }, 3000)
+      esRef.current = es
+    })
+
     // Update local unread to 0
     setConversations(prev =>
       prev.map(c => c.id === conv.id ? { ...c, unread_count: '0' } : c)
@@ -293,9 +313,9 @@ export default function ChatPage() {
   }
 
   function closeConversation() {
-    if (pollRef.current) {
-      clearInterval(pollRef.current)
-      pollRef.current = null
+    if (esRef.current) {
+      esRef.current.close()
+      esRef.current = null
     }
     setView('list')
     setActiveConv(null)
@@ -342,7 +362,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      if (esRef.current) { esRef.current.close(); esRef.current = null }
     }
   }, [])
 

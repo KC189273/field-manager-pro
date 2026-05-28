@@ -55,6 +55,7 @@ export default function ExpensesPage() {
   const [showForm, setShowForm] = useState(false)
   const [filter, setFilter] = useState<string>('pending')
   const [showHistory, setShowHistory] = useState(false)
+  const [empSearch, setEmpSearch] = useState('')
   const [historyFrom, setHistoryFrom] = useState('')
   const [historyTo, setHistoryTo] = useState('')
 
@@ -293,7 +294,9 @@ export default function ExpensesPage() {
     loadExpenses()
   }
 
-  const filtered = expenses.filter((e) => e.status === filter)
+  const filtered = expenses
+    .filter((e) => e.status === filter)
+    .filter((e) => !empSearch.trim() || e.user_full_name.toLowerCase().includes(empSearch.toLowerCase()))
 
   const [expandedCard, setExpandedCard] = useState<string | null>(null)
 
@@ -340,6 +343,19 @@ export default function ExpensesPage() {
               )}
             </div>
           </div>
+
+          {/* Employee search (management roles) */}
+          {canViewDetail && !showHistory && (
+            <div className="mb-3">
+              <input
+                type="text"
+                value={empSearch}
+                onChange={e => setEmpSearch(e.target.value)}
+                placeholder="Search by employee name…"
+                className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500"
+              />
+            </div>
+          )}
 
           {/* History date range bar */}
           {showHistory && (

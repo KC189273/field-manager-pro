@@ -1,8 +1,47 @@
 import { redirect } from 'next/navigation'
+import { unstable_cache } from 'next/cache'
 import { getSession, canViewTeam, canSubmitExpense } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import NavBar from '@/components/NavBar'
 import WelcomeBanner from '@/components/WelcomeBanner'
+
+// Cache org-wide aggregate counts for 30s — these change infrequently and are
+// safe to serve slightly stale. User-specific data (shift, hours, tasks) is NOT cached.
+const getCachedAggregates = unstable_cache(
+  async (orgId: string | null, managerId: string, role: string) => {
+    const [flagRow, clockedInRow, teamRow, pendingExpRow] = await Promise.all([
+      queryOne<{ count: string }>(
+        role === 'manager'
+          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.manager_id = $1`
+          : orgId
+          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.org_id = $1`
+          : `SELECT COUNT(*) as count FROM flags WHERE resolved = FALSE`,
+        role === 'manager' ? [managerId] : orgId ? [orgId] : []
+      ).catch(() => null),
+      queryOne<{ count: string }>(
+        orgId
+          ? `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director') AND u.org_id = $1`
+          : `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director')`,
+        orgId ? [orgId] : []
+      ).catch(() => null),
+      queryOne<{ count: string }>(
+        orgId
+          ? `SELECT COUNT(*) as count FROM users WHERE is_active = TRUE AND role NOT IN ('developer') AND org_id = $1`
+          : `SELECT COUNT(*) as count FROM users WHERE is_active = TRUE AND role NOT IN ('developer')`,
+        orgId ? [orgId] : []
+      ).catch(() => null),
+      queryOne<{ count: string; total: string }>(
+        orgId
+          ? `SELECT COUNT(*) as count, COALESCE(SUM(e.amount), 0)::text as total FROM expenses e JOIN users u ON u.id = e.user_id WHERE e.status = 'pending' AND u.org_id = $1`
+          : `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0)::text as total FROM expenses WHERE status = 'pending'`,
+        orgId ? [orgId] : []
+      ).catch(() => null),
+    ])
+    return { flagRow, clockedInRow, teamRow, pendingExpRow }
+  },
+  ['dashboard-aggregates'],
+  { revalidate: 30 }
+)
 
 export default async function DashboardPage() {
   const session = await getSession()
@@ -21,13 +60,16 @@ export default async function DashboardPage() {
   weekStart.setHours(0, 0, 0, 0)
 
   // Run queries in parallel — skip non-employee data for employees
+  // Fetch cached aggregates in parallel with user-specific queries
+  const aggregatesPromise = canTeam ? getCachedAggregates(orgId, session.id, session.role) : Promise.resolve(null)
+
   const [
     activeShift,
     weekShifts,
-    flagRow,
-    clockedInRow,
-    teamRow,
-    pendingExpRow,
+    ,  // flagRow — from cache below
+    ,  // clockedInRow — from cache below
+    ,  // teamRow — from cache below
+    ,  // pendingExpRow — from cache below
     myPendingRow,
     upcomingShifts,
     myTasks,
@@ -45,44 +87,12 @@ export default async function DashboardPage() {
            FROM shifts WHERE user_id = $1 AND clock_in_at >= $2 ORDER BY clock_in_at DESC`,
           [session.id, weekStart.toISOString()]
         ).catch(() => [] as { duration_seconds: number }[]),
-    // Open flags (management) — DMs scoped to their employees only
-    canTeam
-      ? queryOne<{ count: string }>(
-          session.role === 'manager'
-            ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.manager_id = $1`
-            : orgId
-            ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.org_id = $1`
-            : `SELECT COUNT(*) as count FROM flags WHERE resolved = FALSE`,
-          session.role === 'manager' ? [session.id] : orgId ? [orgId] : []
-        ).catch(() => null)
-      : Promise.resolve(null),
-    // Employees clocked in right now (management)
-    canTeam
-      ? queryOne<{ count: string }>(
-          orgId
-            ? `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director') AND u.org_id = $1`
-            : `SELECT COUNT(*) as count FROM shifts s JOIN users u ON u.id = s.user_id WHERE s.clock_out_at IS NULL AND u.role NOT IN ('developer','owner','sales_director')`,
-          orgId ? [orgId] : []
-        ).catch(() => null)
-      : Promise.resolve(null),
-    // Team size (management)
-    canTeam
-      ? queryOne<{ count: string }>(
-          orgId
-            ? `SELECT COUNT(*) as count FROM users WHERE is_active = TRUE AND role NOT IN ('developer') AND org_id = $1`
-            : `SELECT COUNT(*) as count FROM users WHERE is_active = TRUE AND role NOT IN ('developer')`,
-          orgId ? [orgId] : []
-        ).catch(() => null)
-      : Promise.resolve(null),
-    // Pending expenses for org (management — needs approval)
-    canTeam
-      ? queryOne<{ count: string; total: string }>(
-          orgId
-            ? `SELECT COUNT(*) as count, COALESCE(SUM(e.amount), 0)::text as total FROM expenses e JOIN users u ON u.id = e.user_id WHERE e.status = 'pending' AND u.org_id = $1`
-            : `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0)::text as total FROM expenses WHERE status = 'pending'`,
-          orgId ? [orgId] : []
-        ).catch(() => null)
-      : Promise.resolve(null),
+    // Open flags, clocked-in count, team size, pending expenses —
+    // served from a 30s cache to avoid hitting DB on every dashboard load
+    Promise.resolve(null), // placeholder — replaced below
+    Promise.resolve(null),
+    Promise.resolve(null),
+    Promise.resolve(null),
     // Own pending expenses
     canExpenses
       ? queryOne<{ count: string }>(
@@ -117,6 +127,13 @@ export default async function DashboardPage() {
       [session.id]
     ).catch(() => [] as { id: string; title: string; due_date: string | null }[]),
   ])
+
+  // Pull aggregate counts from the cached result
+  const agg = await aggregatesPromise
+  const flagRow = agg?.flagRow ?? null
+  const clockedInRow = agg?.clockedInRow ?? null
+  const teamRow = agg?.teamRow ?? null
+  const pendingExpRow = agg?.pendingExpRow ?? null
 
   // Derived values
   const clocked = !!activeShift

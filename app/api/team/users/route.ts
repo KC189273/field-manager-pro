@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
       `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
-       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
+       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
     return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
@@ -60,7 +60,7 @@ export async function GET(req: NextRequest) {
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
       `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
-       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name`,
+       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
     return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })

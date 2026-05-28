@@ -90,6 +90,18 @@ export default function ResourcesPage() {
     if (session) loadResources()
   }, [session, loadResources])
 
+  // Refresh when user returns to the tab + every 60s so changes by admins are visible to everyone
+  useEffect(() => {
+    if (!session) return
+    const onVisible = () => { if (document.visibilityState === 'visible') loadResources() }
+    document.addEventListener('visibilitychange', onVisible)
+    const interval = setInterval(loadResources, 60_000)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      clearInterval(interval)
+    }
+  }, [session, loadResources])
+
   const canManage = session ? CAN_MANAGE.includes(session.role) : false
 
   // ── File upload ──

@@ -655,7 +655,7 @@ export default function CalendarPage() {
                                   {ev.attachments.map(att => (
                                     <button
                                       key={att.id}
-                                      onClick={async e => { e.stopPropagation(); await openAttachment(att) }}
+                                      onClick={async e => { e.stopPropagation(); await openAttachment({ id: att.id, key: att.s3_key, filename: att.filename }) }}
                                       className="flex items-center gap-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg px-2.5 py-1.5 text-xs text-gray-300 transition-colors"
                                     >
                                       <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

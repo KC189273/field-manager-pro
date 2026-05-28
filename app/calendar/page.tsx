@@ -100,9 +100,11 @@ export default function CalendarPage() {
   const [activeTab, setActiveTab]   = useState<'my' | 'team'>('my')
   const [year, setYear]             = useState(today.getFullYear())
   const [month, setMonth]           = useState(today.getMonth() + 1)
-  const [events, setEvents]         = useState<CalEvent[]>([])
-  const [loading, setLoading]       = useState(true)
-  const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [events, setEvents]             = useState<CalEvent[]>([])
+  const [declinedEvents, setDeclinedEvents] = useState<CalEvent[]>([])
+  const [loading, setLoading]           = useState(true)
+  const [selectedDay, setSelectedDay]   = useState<string | null>(null)
+  const [showDeclined, setShowDeclined] = useState(false)
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [selectedOwnerId, setSelectedOwnerId] = useState<string>('')
 
@@ -158,6 +160,7 @@ export default function CalendarPage() {
       if (res.ok) {
         const d = await res.json()
         setEvents(d.events ?? [])
+        setDeclinedEvents(d.declinedEvents ?? [])
       }
     } finally {
       setLoading(false)
@@ -379,6 +382,12 @@ export default function CalendarPage() {
     ev.created_by === session.id ||
     canViewTeam
 
+  // Returns this user's RSVP status if they're an invited attendee (not the calendar owner)
+  const myRsvpStatus = (ev: CalEvent): string | null => {
+    if (ev.calendar_owner_id === session.id) return null
+    return ev.attendees?.find(a => a.user_id === session.id)?.status ?? null
+  }
+
   // ── Calendar grid ──
   const firstDayOfWeek  = new Date(year, month-1, 1).getDay()
   const daysInMonth     = new Date(year, month, 0).getDate()
@@ -548,12 +557,16 @@ export default function CalendarPage() {
                       </div>
                       <div className="space-y-px">
                         {dayEvts.slice(0, 3).map(ev => {
-                          const cat = getCat(ev.category)
+                          const cat    = getCat(ev.category)
+                          const rsvp   = myRsvpStatus(ev)
+                          const isPending = rsvp === 'invited' || rsvp === 'maybe'
                           return (
                             <div
                               key={ev.id + ev.start_date}
                               onClick={e => { e.stopPropagation(); openEdit(ev) }}
-                              className={`text-[9px] sm:text-[11px] font-semibold px-1 py-px rounded truncate leading-tight ${cat.bg} text-white cursor-pointer`}
+                              className={`text-[9px] sm:text-[11px] font-semibold px-1 py-px rounded truncate leading-tight text-white cursor-pointer ${
+                                isPending ? `${cat.bg} opacity-60 border border-dashed border-white/40` : cat.bg
+                              }`}
                             >
                               {!ev.all_day && ev.start_time && (
                                 <span className="opacity-80 mr-0.5">{fmtTime(ev.start_time).split(' ')[0]}</span>
@@ -613,7 +626,18 @@ export default function CalendarPage() {
                           >
                             <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${cat.dot}`} />
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold text-white">{ev.title}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-sm font-semibold text-white">{ev.title}</p>
+                                {myRsvpStatus(ev) === 'invited' && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30">Pending</span>
+                                )}
+                                {myRsvpStatus(ev) === 'maybe' && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/30">Maybe</span>
+                                )}
+                                {myRsvpStatus(ev) === 'accepted' && (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 border border-green-500/30">Accepted</span>
+                                )}
+                              </div>
                               <div className="flex flex-wrap items-center gap-2 mt-1">
                                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${cat.bg} text-white`}>{cat.label}</span>
                                 {ev.all_day ? (
@@ -701,7 +725,49 @@ export default function CalendarPage() {
                 )}
               </div>
             )}
-          </>
+          {/* ── Declined events audit trail ── */}
+          {declinedEvents.length > 0 && activeTab === 'my' && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowDeclined(v => !v)}
+                className="flex items-center gap-2 text-xs text-gray-500 hover:text-gray-300 transition-colors mb-2"
+              >
+                <svg className={`w-3.5 h-3.5 transition-transform ${showDeclined ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                <span className="font-medium uppercase tracking-wide">Declined Invites ({declinedEvents.length})</span>
+              </button>
+
+              {showDeclined && (
+                <div className="bg-gray-900/50 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-800">
+                    <p className="text-xs text-gray-500">Events you declined this month — kept for your records</p>
+                  </div>
+                  <div className="divide-y divide-gray-800/60">
+                    {declinedEvents.map(ev => {
+                      const cat = getCat(ev.category)
+                      return (
+                        <div key={ev.id} className="flex items-start gap-3 px-4 py-3 opacity-50">
+                          <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${cat.dot}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-gray-400 line-through">{ev.title}</p>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/25">Declined</span>
+                            </div>
+                            <p className="text-xs text-gray-600 mt-0.5">
+                              {fmtShortDate(ev.start_date)}{ev.start_date !== ev.end_date ? ` – ${fmtShortDate(ev.end_date)}` : ''}
+                              {ev.created_by_name ? ` · Organized by ${ev.created_by_name}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
         )}
       </div>
 

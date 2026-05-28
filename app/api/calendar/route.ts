@@ -259,10 +259,12 @@ export async function GET(req: NextRequest) {
     ORDER BY start_date, start_time NULLS LAST
   `, [targetOwnerId, lastDay, firstDay])
 
-  // Also fetch events where this user is an attendee (invited to someone else's event)
+  // Fetch events where this user is an invited attendee (non-declined → show on calendar)
+  // and declined events separately (for audit trail only)
   let invitedEvents: CalEventRow[] = []
+  let declinedEvents: CalEventRow[] = []
   if (!ownerId) {
-    invitedEvents = await query<CalEventRow>(`
+    const attendeeBase = `
       SELECT
         e.id, e.title, e.category,
         e.start_date::text, e.start_time::text,
@@ -277,8 +279,19 @@ export async function GET(req: NextRequest) {
         AND (
           (e.recurrence = 'none' AND e.start_date <= $2 AND e.end_date >= $3)
           OR (e.recurrence != 'none' AND e.start_date <= $2)
-        )
-    `, [session.id, lastDay, firstDay])
+        )`
+
+    // Non-declined: invited, accepted, maybe — all show on the calendar
+    invitedEvents = await query<CalEventRow>(
+      attendeeBase + ` AND a.status != 'declined'`,
+      [session.id, lastDay, firstDay]
+    )
+
+    // Declined: audit trail only — don't appear on calendar grid
+    declinedEvents = await query<CalEventRow>(
+      attendeeBase + ` AND a.status = 'declined'`,
+      [session.id, lastDay, firstDay]
+    )
   }
 
   const allSeeds = [...rawEvents, ...invitedEvents]
@@ -289,18 +302,18 @@ export async function GET(req: NextRequest) {
     expanded.push(...expandRecurring(ev, firstDay, lastDay))
   }
 
-  // Batch-fetch attendees for all event IDs
-  const eventIds = [...new Set(allSeeds.map(e => e.id))]
+  // Batch-fetch attendees for all event IDs (main + declined)
+  const allSeedIds = [...new Set([...allSeeds, ...declinedEvents].map(e => e.id))]
   let attendeeMap: Record<string, AttendeeRow[]> = {}
   let attachmentMap: Record<string, AttachmentRow[]> = {}
 
-  if (eventIds.length > 0) {
+  if (allSeedIds.length > 0) {
     const attendees = await query<{ event_id: string; user_id: string; full_name: string; status: string }>(`
       SELECT a.event_id::text, a.user_id::text, u.full_name, a.status
       FROM calendar_event_attendees a
       JOIN users u ON u.id = a.user_id
       WHERE a.event_id = ANY($1::uuid[])
-    `, [eventIds])
+    `, [allSeedIds])
     for (const row of attendees) {
       if (!attendeeMap[row.event_id]) attendeeMap[row.event_id] = []
       attendeeMap[row.event_id].push({ user_id: row.user_id, full_name: row.full_name, status: row.status })
@@ -310,21 +323,28 @@ export async function GET(req: NextRequest) {
       SELECT id::text, event_id::text, s3_key, filename, content_type
       FROM calendar_event_attachments
       WHERE event_id = ANY($1::uuid[])
-    `, [eventIds])
+    `, [allSeedIds])
     for (const row of attachments) {
       if (!attachmentMap[row.event_id]) attachmentMap[row.event_id] = []
       attachmentMap[row.event_id].push({ id: row.id, s3_key: row.s3_key, filename: row.filename, content_type: row.content_type })
     }
   }
 
-  // Merge
+  // Merge main events
   const events = expanded.map(ev => ({
     ...ev,
     attendees:   attendeeMap[ev.id]   ?? [],
     attachments: attachmentMap[ev.id] ?? [],
   }))
 
-  return NextResponse.json({ events })
+  // Merge declined events (flat, no recurrence expansion needed for audit trail)
+  const declined = declinedEvents.map(ev => ({
+    ...ev,
+    attendees:   attendeeMap[ev.id]   ?? [],
+    attachments: attachmentMap[ev.id] ?? [],
+  }))
+
+  return NextResponse.json({ events, declinedEvents: declined })
 }
 
 // ── POST /api/calendar ────────────────────────────────────────────────────────

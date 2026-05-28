@@ -38,6 +38,9 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   payroll: '/payroll',
   clock_out: '/timecards',
   handoff_note: '/timecards',
+  calendar_event: '/calendar',
+  calendar_invite: '/calendar',
+  calendar_rsvp: '/calendar',
 }
 
 interface Org { id: string; name: string }
@@ -66,6 +69,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/dm-visit':         'DM Store Visit',
   '/dm-engagement':    'DM Engagement',
   '/calendar':         'Calendar',
+  '/resources':        'Resources',
   '/service-analysis': 'Service Analysis',
   '/settings':         'Settings',
   '/config':           'Config',

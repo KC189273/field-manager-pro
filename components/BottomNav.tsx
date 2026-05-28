@@ -55,7 +55,8 @@ const ALL_FEATURES: Feature[] = [
   { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: r => r !== 'employee' },
   { href: '/dm-visit',        label: 'DM Store Visit',   short: 'DM Visit',  Icon: StoreIcon,          show: canViewTeam },
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: isOpsPlus },
-  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => ['sales_director', 'owner', 'developer'].includes(r) },
+  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => r !== 'employee' },
+  { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: () => true },
   { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: () => true },
   { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: () => true },
   { href: '/config',          label: 'Config',           short: 'Config',    Icon: GearIcon,           show: r => r === 'developer' },
@@ -436,6 +437,14 @@ function EngagementIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    </svg>
+  )
+}
+
+function ResourcesIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z" />
     </svg>
   )
 }

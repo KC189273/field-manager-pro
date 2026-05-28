@@ -42,6 +42,28 @@ async function ensureColumns() {
   await query(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS store_address TEXT`)
 }
 
+// ── Calendar sync helpers ─────────────────────────────────────────────────────
+
+async function syncTaskToCalendar(taskId: string, assigneeId: string, title: string, dueDate: string, createdBy: string, createdByName: string): Promise<void> {
+  try {
+    const assignee = await queryOne<{ role: string }>(`SELECT role FROM users WHERE id = $1`, [assigneeId])
+    if (assignee?.role !== 'manager') return  // only DMs get calendar events
+    await query(`
+      INSERT INTO calendar_events
+        (title, category, start_date, end_date, all_day, notes,
+         calendar_owner_id, task_id, created_by, created_by_name, recurrence)
+      VALUES ($1,'other',$2,$2,TRUE,'Task due date — view in Tasks',$3,$4,$5,$6,'none')
+      ON CONFLICT DO NOTHING
+    `, [title, dueDate, assigneeId, taskId, createdBy, createdByName])
+  } catch {}
+}
+
+async function removeTaskCalendarEvent(taskId: string): Promise<void> {
+  try {
+    await query(`DELETE FROM calendar_events WHERE task_id = $1`, [taskId])
+  } catch {}
+}
+
 // GET /api/tasks?weekStart=YYYY-MM-DD  OR  ?history=true[&assigneeId=...]
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -243,6 +265,11 @@ export async function POST(req: NextRequest) {
     await query(`UPDATE tasks SET notification_sent_at = NOW() WHERE id = $1`, [result?.id])
   }
 
+  // Sync to calendar if assignee is a DM and task has a due date
+  if (result?.id && dueDate && assigneeId) {
+    syncTaskToCalendar(result.id, assigneeId, title.trim(), dueDate, session.id, session.fullName).catch(() => {})
+  }
+
   return NextResponse.json({ ok: true, id: result?.id })
 }
 
@@ -308,5 +335,6 @@ export async function DELETE(req: NextRequest) {
   if (!taskId) return NextResponse.json({ error: 'taskId required' }, { status: 400 })
 
   await query(`DELETE FROM tasks WHERE id = $1`, [taskId])
+  removeTaskCalendarEvent(taskId).catch(() => {})
   return NextResponse.json({ ok: true })
 }

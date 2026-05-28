@@ -98,6 +98,9 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   merch_order: '/merch-orders',
   payroll: '/payroll',
   clock: '/clock',
+  calendar_event: '/calendar',
+  calendar_invite: '/calendar',
+  calendar_rsvp: '/calendar',
 }
 
 // Valid notification preference column names — guards against dynamic SQL injection

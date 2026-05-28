@@ -25,6 +25,7 @@ interface Employee {
   id: string
   full_name: string
   role: string
+  avatar_url?: string | null
 }
 
 interface Shift {
@@ -1449,7 +1450,15 @@ function EmployeeView({
           <div key={emp.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             {/* Employee header */}
             <div className="flex items-center justify-between px-4 py-3 bg-gray-800/40 border-b border-gray-800">
-              <p className="text-sm font-bold text-white">{emp.full_name}</p>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded-full flex-shrink-0 overflow-hidden flex items-center justify-center bg-violet-700 text-[10px] font-bold text-white">
+                  {emp.avatar_url
+                    ? <img src={emp.avatar_url} alt={emp.full_name} className="w-full h-full object-cover" />
+                    : emp.full_name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+                  }
+                </div>
+                <p className="text-sm font-bold text-white">{emp.full_name}</p>
+              </div>
               <div className="flex items-center gap-3">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${totalLabel === '—' ? 'text-gray-600' : 'text-green-400 bg-green-950/60 border border-green-800/50'}`}>
                   {totalLabel === '—' ? 'No shifts' : `${totalLabel}`}

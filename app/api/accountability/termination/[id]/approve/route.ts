@@ -121,13 +121,22 @@ export async function POST(
       buildTerminationEmailHtml({ ...emailParams, isCopy: true, copyFor: person.full_name })
     ).catch(() => {})
 
-    // Push to each
-    sendPushToUser(
-      person.id,
-      'Termination Processed',
-      `${termReq.employee_name} has been terminated. The formal notice has been sent.`,
-      'accountability'
-    ).catch(() => {})
+    // Ops managers get an actionable alert to remove the employee from external systems
+    if (person.role === 'ops_manager') {
+      sendPushToUser(
+        person.id,
+        'Action Required: Employee Terminated',
+        `${termReq.employee_name} has been terminated. Please remove them from all external systems immediately.`,
+        'accountability'
+      ).catch(() => {})
+    } else {
+      sendPushToUser(
+        person.id,
+        'Termination Processed',
+        `${termReq.employee_name} has been terminated. The formal notice has been sent.`,
+        'accountability'
+      ).catch(() => {})
+    }
   }
 
   return NextResponse.json({ ok: true, action: 'approved' })

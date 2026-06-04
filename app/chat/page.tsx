@@ -222,6 +222,7 @@ export default function ChatPage() {
   // Reactions
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
   const [popupAnchor, setPopupAnchor] = useState<{ top: number; bottom: number } | null>(null)
+  const [reactionViewer, setReactionViewer] = useState<{ msgId: string; emoji: string; names: string[]; reactedByMe: boolean } | null>(null)
   const longPressAnchorRef = useRef<{ top: number; bottom: number } | null>(null)
 
   // @mentions
@@ -1257,7 +1258,13 @@ export default function ChatPage() {
                             {grouped.map(({ emoji, count, reactedByMe }) => (
                               <button
                                 key={emoji}
-                                onClick={() => handleReact(msg.id, emoji)}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const names = (msg.reactions ?? [])
+                                    .filter(r => r.emoji === emoji)
+                                    .map(r => r.user_id === myId ? 'You' : r.user_name)
+                                  setReactionViewer({ msgId: msg.id, emoji, names, reactedByMe })
+                                }}
                                 className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
                                   reactedByMe
                                     ? 'bg-violet-900/40 border-violet-500 text-violet-300'
@@ -1506,6 +1513,44 @@ export default function ChatPage() {
         </>
         )
       })()}
+
+      {/* Reaction viewer — tap a reaction pill to see who reacted */}
+      {reactionViewer && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-end" onClick={() => setReactionViewer(null)}>
+          <div className="w-full bg-gray-900 rounded-t-2xl border-t border-gray-800 p-5 pb-10" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-gray-700 rounded-full mx-auto mb-4" />
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-2xl">{reactionViewer.emoji}</span>
+              <span className="text-white font-semibold text-base">
+                {reactionViewer.names.length} {reactionViewer.names.length === 1 ? 'reaction' : 'reactions'}
+              </span>
+            </div>
+            <div className="space-y-2 mb-5 max-h-48 overflow-y-auto">
+              {reactionViewer.names.map((name, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-violet-800 flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
+                    {name === 'You' ? '✦' : name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                  </div>
+                  <span className="text-gray-200 text-sm">{name}</span>
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                handleReact(reactionViewer.msgId, reactionViewer.emoji)
+                setReactionViewer(null)
+              }}
+              className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+                reactionViewer.reactedByMe
+                  ? 'bg-violet-900/50 border border-violet-700 text-violet-300 hover:bg-violet-900'
+                  : 'bg-gray-800 border border-gray-700 text-white hover:bg-gray-700'
+              }`}
+            >
+              {reactionViewer.reactedByMe ? `Remove your ${reactionViewer.emoji}` : `React with ${reactionViewer.emoji}`}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Pinned messages panel */}
       {showPins && (

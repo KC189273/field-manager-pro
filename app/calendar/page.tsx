@@ -3,6 +3,33 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import NavBar from '@/components/NavBar'
 
+const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g
+function Linkified({ text, className }: { text: string; className?: string }) {
+  const parts: React.ReactNode[] = []
+  let last = 0
+  let match: RegExpExecArray | null
+  URL_REGEX.lastIndex = 0
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > last) parts.push(text.slice(last, match.index))
+    const url = match[0]
+    parts.push(
+      <a
+        key={match.index}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={e => e.stopPropagation()}
+        className="text-violet-400 underline underline-offset-2 break-all"
+      >
+        {url}
+      </a>
+    )
+    last = match.index + url.length
+  }
+  if (last < text.length) parts.push(text.slice(last))
+  return <p className={className}>{parts}</p>
+}
+
 type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
@@ -681,8 +708,8 @@ export default function CalendarPage() {
                                   </span>
                                 )}
                               </div>
-                              {ev.location && <p className="text-xs text-gray-500 mt-1">📍 {ev.location}</p>}
-                              {ev.notes && <p className="text-xs text-gray-500 mt-1 leading-relaxed">{ev.notes}</p>}
+                              {ev.location && <Linkified text={`📍 ${ev.location}`} className="text-xs text-gray-500 mt-1" />}
+                              {ev.notes && <Linkified text={ev.notes} className="text-xs text-gray-500 mt-1 leading-relaxed" />}
                               {ev.created_by_name && ev.created_by !== session.id && (
                                 <p className="text-[10px] text-gray-600 mt-1">Added by {ev.created_by_name}</p>
                               )}

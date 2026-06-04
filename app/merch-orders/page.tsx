@@ -572,12 +572,10 @@ export default function MerchOrdersPage() {
                     ))}
                   </div>
                 )}
-                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden"
-                  onChange={e => { addPhotos(e.target.files); e.target.value = '' }} />
-                <button type="button" onClick={() => fileInputRef.current?.click()}
-                  className="w-full border border-dashed border-gray-700 rounded-xl py-3 text-sm text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-colors">
+                <div className="relative w-full border border-dashed border-gray-700 rounded-xl py-3 text-sm text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-colors text-center">
+                  <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { addPhotos(e.target.files); e.target.value = '' }} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
                   + Add Photos
-                </button>
+                </div>
               </div>
 
               {submitError && (

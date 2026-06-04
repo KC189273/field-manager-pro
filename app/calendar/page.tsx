@@ -1043,7 +1043,7 @@ export default function CalendarPage() {
               {/* Attachments */}
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Attachments <span className="text-gray-600 font-normal">— optional</span></label>
-                <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttachmentFile} />
+                {/* input rendered as overlay on the button below — reliable on Android WebView */}
                 {form.attachments.length > 0 && (
                   <div className="space-y-1.5 mb-2">
                     {form.attachments.map((att, idx) => (
@@ -1061,12 +1061,8 @@ export default function CalendarPage() {
                     ))}
                   </div>
                 )}
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingAttachment}
-                  className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-2.5 text-sm text-gray-400 hover:text-gray-200 transition-colors disabled:opacity-50 w-full justify-center"
-                >
+                <div className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-2.5 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${uploadingAttachment ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input ref={fileInputRef} type="file" onChange={handleAttachmentFile} disabled={uploadingAttachment} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
                   {uploadingAttachment ? (
                     <span>Uploading…</span>
                   ) : (
@@ -1077,7 +1073,7 @@ export default function CalendarPage() {
                       Attach a file
                     </>
                   )}
-                </button>
+                </div>
               </div>
 
               {/* Conflict warning */}

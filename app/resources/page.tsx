@@ -512,7 +512,6 @@ export default function ResourcesPage() {
               {form.type === 'document' && (
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">File</label>
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleDocFile} />
                   {form.filename ? (
                     <div className="flex items-center gap-2 bg-gray-800 rounded-xl px-3 py-2.5 mb-2">
                       <svg className="w-4 h-4 text-violet-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -526,12 +525,17 @@ export default function ResourcesPage() {
                       </button>
                     </div>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingDoc}
-                      className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors disabled:opacity-50 w-full justify-center"
+                    /* Overlay pattern — reliable on Android WebView where programmatic .click() on hidden inputs fails */
+                    <div
+                      className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}
                     >
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        onChange={handleDocFile}
+                        disabled={uploadingDoc}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
+                      />
                       {uploadingDoc ? 'Uploading…' : (
                         <>
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -540,7 +544,7 @@ export default function ResourcesPage() {
                           Upload document
                         </>
                       )}
-                    </button>
+                    </div>
                   )}
                   <div>
                     <label className="block text-xs text-gray-400 mb-1.5 mt-3">Description <span className="text-gray-600 font-normal">— optional</span></label>

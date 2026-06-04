@@ -1384,39 +1384,29 @@ export default function ChatPage() {
 
       {/* Input area */}
       <div className="px-3 py-3 border-t border-gray-800 bg-gray-950 flex items-end gap-2">
-        <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-        <button
-          onClick={() => photoInputRef.current?.click()}
-          disabled={uploadingPhoto || sending}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-40 transition-colors flex-shrink-0 mb-px"
-          aria-label="Send photo"
-        >
-          {uploadingPhoto ? (
-            <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
-          ) : (
+        {/* Photo button — file input overlaid directly for reliable Android WebView support */}
+        <div className={`relative w-9 h-9 flex-shrink-0 mb-px ${uploadingPhoto || sending ? 'opacity-40 pointer-events-none' : ''}`}>
+          <input ref={photoInputRef} type="file" accept="image/*" onChange={handlePhotoSelect} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+          <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors">
+            {uploadingPhoto ? (
+              <div className="w-4 h-4 border-2 border-violet-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+          </div>
+        </div>
+        {/* File attach button */}
+        <div className={`relative w-9 h-9 flex-shrink-0 mb-px ${uploadingPhoto || sending ? 'opacity-40 pointer-events-none' : ''}`}>
+          <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv" onChange={handleFileSelect} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+          <div className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors">
             <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
             </svg>
-          )}
-        </button>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploadingPhoto || sending}
-          className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-40 transition-colors flex-shrink-0 mb-px"
-          aria-label="Attach file"
-        >
-          <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-          </svg>
-        </button>
+          </div>
+        </div>
         {gifEnabled && (
           <button
             onClick={openGifPicker}

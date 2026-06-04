@@ -153,6 +153,10 @@ export default function TasksPage() {
   // Delete recurring modal
   const [deletingTask, setDeletingTask] = useState<Task | null>(null)
 
+  // Multi-select
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
   // Unchecking
   const [unchecking, setUnchecking] = useState<string | null>(null)
 
@@ -411,6 +415,27 @@ export default function TasksPage() {
     await loadTasks()
   }
 
+  async function deleteSelected() {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} task${selectedIds.size > 1 ? 's' : ''}?`)) return
+    await fetch('/api/tasks', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ taskIds: [...selectedIds] }),
+    })
+    setSelectedIds(new Set())
+    setSelectMode(false)
+    await loadTasks()
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
   async function confirmDeleteTask(mode: 'single' | 'series') {
     if (!deletingTask) return
     const body = mode === 'series' && deletingTask.recurrence_id
@@ -559,14 +584,24 @@ export default function TasksPage() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-bold text-white">Tasks</h1>
-          {canCreate && activeTab === 'current' && (
-            <button
-              onClick={openCreate}
-              className="text-sm bg-violet-600 hover:bg-violet-500 text-white font-semibold px-4 py-2 rounded-xl transition-colors"
-            >
-              + Assign Task
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {canCreate && !selectMode && activeTab === 'current' && (
+              <button
+                onClick={openCreate}
+                className="text-sm bg-violet-600 hover:bg-violet-500 text-white font-semibold px-4 py-2 rounded-xl transition-colors"
+              >
+                + Assign Task
+              </button>
+            )}
+            {canCreate && (
+              <button
+                onClick={() => { setSelectMode(s => !s); setSelectedIds(new Set()) }}
+                className={`text-sm font-semibold px-3 py-2 rounded-xl transition-colors ${selectMode ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                {selectMode ? 'Cancel' : 'Select'}
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tab bar */}
@@ -677,6 +712,9 @@ export default function TasksPage() {
                           onLightbox={setLightboxUrl}
                           onRemind={sendReminder}
                           onReassign={task.store_id && canCreate ? () => { setReassigningTask(task); setReassignToId('') } : undefined}
+                          selectMode={selectMode}
+                          selected={selectedIds.has(task.id)}
+                          onSelect={toggleSelect}
                         />
                       ))}
                     </div>
@@ -701,6 +739,9 @@ export default function TasksPage() {
                           onLightbox={setLightboxUrl}
                           onRemind={sendReminder}
                           onReassign={undefined}
+                          selectMode={selectMode}
+                          selected={selectedIds.has(task.id)}
+                          onSelect={toggleSelect}
                         />
                       ))}
                     </div>
@@ -751,6 +792,9 @@ export default function TasksPage() {
                     onLightbox={setLightboxUrl}
                     onRemind={sendReminder}
                     onReassign={undefined}
+                    selectMode={selectMode}
+                    selected={selectedIds.has(task.id)}
+                    onSelect={toggleSelect}
                   />
                 ))}
               </div>
@@ -1086,6 +1130,25 @@ export default function TasksPage() {
         </div>
       )}
 
+      {/* ── Bulk delete action bar ── */}
+      {selectMode && (
+        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
+          <div className={`pointer-events-auto flex items-center gap-4 px-5 py-3 rounded-2xl shadow-xl border transition-all ${selectedIds.size > 0 ? 'bg-red-600 border-red-500' : 'bg-gray-800 border-gray-700'}`}>
+            <span className="text-white text-sm font-semibold">
+              {selectedIds.size > 0 ? `${selectedIds.size} selected` : 'Tap tasks to select'}
+            </span>
+            {selectedIds.size > 0 && (
+              <button
+                onClick={deleteSelected}
+                className="bg-white text-red-600 font-bold text-sm px-4 py-1.5 rounded-xl transition-colors hover:bg-red-50"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── Delete Recurring Modal ── */}
       {deletingTask && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4" onClick={() => setDeletingTask(null)}>
@@ -1198,6 +1261,9 @@ function TaskCard({
   onLightbox,
   onRemind,
   onReassign,
+  selectMode = false,
+  selected = false,
+  onSelect,
 }: {
   task: Task
   session: Session
@@ -1211,6 +1277,9 @@ function TaskCard({
   onLightbox: (url: string) => void
   onRemind: (id: string) => void
   onReassign?: () => void
+  selectMode?: boolean
+  selected?: boolean
+  onSelect?: (id: string) => void
 }) {
   const isDone = !!task.completed_at
   const now = new Date()
@@ -1230,10 +1299,25 @@ function TaskCard({
   const assigneeLabel = isStoreTask ? (task.store_address ?? 'Store') : task.assignee_name
 
   return (
-    <div className={`bg-gray-900 border rounded-2xl overflow-hidden ${isDone ? 'border-green-900/50' : isOverdue ? 'border-red-700' : isDueToday ? 'border-amber-800/60' : 'border-gray-800'}`}>
+    <div
+      className={`bg-gray-900 border rounded-2xl overflow-hidden transition-colors ${
+        selectMode
+          ? selected ? 'border-violet-500 bg-violet-950/30 cursor-pointer' : 'border-gray-700 cursor-pointer hover:border-gray-600'
+          : isDone ? 'border-green-900/50' : isOverdue ? 'border-red-700' : isDueToday ? 'border-amber-800/60' : 'border-gray-800'
+      }`}
+      onClick={selectMode ? () => onSelect?.(task.id) : undefined}
+    >
       <div className="flex items-start gap-3 p-4">
-        {/* Checkmark button */}
-        {canComplete ? (
+        {/* Select checkbox (select mode) or checkmark button */}
+        {selectMode ? (
+          <div className={`mt-0.5 shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-colors ${selected ? 'bg-violet-600 border-violet-600' : 'border-gray-600'}`}>
+            {selected && (
+              <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </div>
+        ) : canComplete ? (
           <button
             onClick={isDone ? () => onUncheck(task.id) : onComplete}
             disabled={unchecking === task.id}
@@ -1349,7 +1433,7 @@ function TaskCard({
         {/* Action buttons */}
         {canCreate && (
           <div className="flex flex-col gap-1.5 items-center shrink-0 mt-0.5">
-            {!isDone && isStoreTask && onReassign && (
+            {!selectMode && !isDone && isStoreTask && onReassign && (
               <button
                 onClick={onReassign}
                 className="text-gray-600 hover:text-blue-400 transition-colors"
@@ -1360,7 +1444,7 @@ function TaskCard({
                 </svg>
               </button>
             )}
-            {!isDone && (
+            {!selectMode && !isDone && (
               <button
                 onClick={() => onRemind(task.id)}
                 disabled={reminding === task.id}
@@ -1373,11 +1457,13 @@ function TaskCard({
                 }
               </button>
             )}
-            <button
-              onClick={() => onDelete(task.id)}
-              className="text-gray-700 hover:text-red-400 transition-colors text-lg leading-none"
-              title="Delete task"
-            >×</button>
+            {!selectMode && (
+              <button
+                onClick={() => onDelete(task.id)}
+                className="text-gray-700 hover:text-red-400 transition-colors text-lg leading-none"
+                title="Delete task"
+              >×</button>
+            )}
           </div>
         )}
       </div>

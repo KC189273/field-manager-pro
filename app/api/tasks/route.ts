@@ -334,7 +334,7 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { taskId, seriesId } = await req.json()
+  const { taskId, seriesId, taskIds } = await req.json()
 
   if (seriesId) {
     // Delete all tasks in the recurring series
@@ -348,7 +348,17 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ ok: true, deleted: deleted.length })
   }
 
-  if (!taskId) return NextResponse.json({ error: 'taskId or seriesId required' }, { status: 400 })
+  // Bulk delete multiple tasks by ID array
+  if (Array.isArray(taskIds) && taskIds.length > 0) {
+    const placeholders = taskIds.map((_: unknown, i: number) => `$${i + 1}`).join(', ')
+    await query(`DELETE FROM tasks WHERE id IN (${placeholders})`, taskIds)
+    for (const id of taskIds) {
+      removeTaskCalendarEvent(id).catch(() => {})
+    }
+    return NextResponse.json({ ok: true, deleted: taskIds.length })
+  }
+
+  if (!taskId) return NextResponse.json({ error: 'taskId, taskIds, or seriesId required' }, { status: 400 })
 
   await query(`DELETE FROM tasks WHERE id = $1`, [taskId])
   removeTaskCalendarEvent(taskId).catch(() => {})

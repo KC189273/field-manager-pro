@@ -33,6 +33,10 @@ interface Message {
   type: string
   created_at: string
   reactions?: Reaction[]
+  reply_to_id?: string | null
+  reply_to_body?: string | null
+  reply_to_type?: string | null
+  reply_to_sender_name?: string | null
 }
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '😮', '🙌', '✅']
@@ -62,6 +66,16 @@ function fmtTime(ts: string): string {
 
 function fmtMsgTime(ts: string): string {
   return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
+function fmtDateHeader(ts: string): string {
+  const d = new Date(ts)
+  const now = new Date()
+  const today = now.toDateString()
+  const yesterday = new Date(now.getTime() - 86400000).toDateString()
+  if (d.toDateString() === today) return 'Today'
+  if (d.toDateString() === yesterday) return 'Yesterday'
+  return d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 function initials(name: string): string {
@@ -102,9 +116,22 @@ export default function ChatPage() {
   const [chatUsers, setChatUsers] = useState<ChatUser[]>([])
   const [creatingChat, setCreatingChat] = useState(false)
 
-  // Photo attachment
+  // Photo / file attachment
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [pendingAttachment, setPendingAttachment] = useState<{
+    file: File; localUrl: string; type: 'image' | 'file'; name: string
+  } | null>(null)
+
+  // Pins
+  const [pinnedMessages, setPinnedMessages] = useState<Array<{
+    id: string; sender_id: string; sender_name: string; sender_avatar_url: string | null
+    body: string; type: string; created_at: string; pinned_by_name: string; pinned_at: string
+  }>>([])
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set())
+  const [showPins, setShowPins] = useState(false)
+  const [loadingPins, setLoadingPins] = useState(false)
 
   // Lightbox
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -194,6 +221,8 @@ export default function ChatPage() {
 
   // Reactions
   const [activeReactionMsgId, setActiveReactionMsgId] = useState<string | null>(null)
+  const [popupAnchor, setPopupAnchor] = useState<{ top: number; bottom: number } | null>(null)
+  const longPressAnchorRef = useRef<{ top: number; bottom: number } | null>(null)
 
   // @mentions
   const [convParticipants, setConvParticipants] = useState<{ id: string; full_name: string; username: string }[]>([])
@@ -204,6 +233,11 @@ export default function ChatPage() {
   const [isMuted, setIsMuted] = useState(false)
   const [mutedBy, setMutedBy] = useState<string[]>([])
   const [togglingMute, setTogglingMute] = useState(false)
+
+  // Reply-to
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null)
+  const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressActivatedRef = useRef(false)
 
   // GIF picker
   const [gifOpen, setGifOpen] = useState(false)
@@ -279,8 +313,19 @@ export default function ChatPage() {
     setInput('')
     setIsMuted(conv.is_muted ?? false)
     setMutedBy([])
+    setPinnedMessages([])
+    setPinnedIds(new Set())
+    loadPins(conv.id)
     lastMsgTimeRef.current = null
     setLoadingMsgs(true)
+
+    // Clear delivered push notifications when entering a chat
+    try {
+      navigator.clearAppBadge?.()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const push = (window as any)?.Capacitor?.Plugins?.PushNotifications
+      push?.removeAllDeliveredNotifications?.()
+    } catch {}
 
     // Close any existing SSE connection before opening a new one
     if (esRef.current) { esRef.current.close(); esRef.current = null }
@@ -325,6 +370,11 @@ export default function ChatPage() {
     setShowInfo(false)
     setMentionQuery(null)
     setConvParticipants([])
+    setReplyingTo(null)
+    setPendingAttachment(null)
+    setPinnedMessages([])
+    setPinnedIds(new Set())
+    setShowPins(false)
     lastMsgTimeRef.current = null
     loadConversations()
   }
@@ -369,9 +419,30 @@ export default function ChatPage() {
   }, [])
 
 
+  function startLongPress(msg: Message, el: HTMLElement) {
+    longPressActivatedRef.current = false
+    const rect = el.getBoundingClientRect()
+    longPressAnchorRef.current = { top: rect.top, bottom: rect.bottom }
+    pressTimerRef.current = setTimeout(() => {
+      longPressActivatedRef.current = true
+      setPopupAnchor(longPressAnchorRef.current)
+      setActiveReactionMsgId(msg.id)
+      if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30)
+    }, 500)
+  }
+
+  function cancelLongPress() {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current)
+      pressTimerRef.current = null
+    }
+  }
+
   async function sendMessage(body: string, type = 'text', optimisticBody?: string) {
     if (!activeConv || !body.trim()) return
     setSending(true)
+    const currentReply = replyingTo
+    setReplyingTo(null)
     const optimistic: Message = {
       id: `opt-${Date.now()}`,
       sender_id: myId,
@@ -379,6 +450,10 @@ export default function ChatPage() {
       body: optimisticBody ?? body.trim(),
       type,
       created_at: new Date().toISOString(),
+      reply_to_id: currentReply?.id ?? null,
+      reply_to_body: currentReply?.body ?? null,
+      reply_to_type: currentReply?.type ?? null,
+      reply_to_sender_name: currentReply?.sender_name ?? null,
     }
     setMessages(prev => [...prev, optimistic])
     setInput('')
@@ -389,7 +464,7 @@ export default function ChatPage() {
     await fetch(`/api/chat/conversations/${activeConv.id}/messages`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body: body.trim(), type }),
+      body: JSON.stringify({ body: body.trim(), type, replyToId: currentReply?.id ?? null }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
@@ -430,27 +505,108 @@ export default function ChatPage() {
     }))
   }
 
-  async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !activeConv) return
     e.target.value = ''
     const localUrl = URL.createObjectURL(file)
-    setUploadingPhoto(true)
-    try {
-      const urlRes = await fetch('/api/chat/upload-url', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contentType: file.type }),
-      })
-      if (!urlRes.ok) { alert('Failed to prepare upload.'); return }
-      const { url, key } = await urlRes.json()
-      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-      await sendMessage(key, 'image', localUrl)
-    } catch {
-      alert('Failed to send photo.')
-    } finally {
-      setUploadingPhoto(false)
+    setPendingAttachment({ file, localUrl, type: 'image', name: file.name })
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !activeConv) return
+    e.target.value = ''
+    const isImage = file.type.startsWith('image/')
+    const localUrl = isImage ? URL.createObjectURL(file) : ''
+    setPendingAttachment({ file, localUrl, type: isImage ? 'image' : 'file', name: file.name })
+  }
+
+  async function handleSend() {
+    if (sending || uploadingPhoto) return
+    const textToSend = input.trim()
+    if (!pendingAttachment && !textToSend) return
+
+    if (pendingAttachment) {
+      const attach = pendingAttachment
+      setPendingAttachment(null)
+      setUploadingPhoto(true)
+      try {
+        const urlRes = await fetch('/api/chat/upload-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contentType: attach.file.type || 'application/octet-stream', fileName: attach.name }),
+        })
+        if (!urlRes.ok) {
+          const errData = await urlRes.json().catch(() => ({}))
+          alert(errData.error ?? 'File type not supported.')
+          return
+        }
+        const { url, key, isImage } = await urlRes.json()
+        // For images: send Content-Type so S3 stores metadata correctly.
+        // For documents: omit Content-Type to avoid CORS preflight issues with document MIME types.
+        const putHeaders: HeadersInit = isImage ? { 'Content-Type': attach.file.type } : {}
+        const putRes = await fetch(url, { method: 'PUT', body: attach.file, headers: putHeaders })
+        if (!putRes.ok) {
+          alert('Upload to storage failed. Please try again.')
+          return
+        }
+        const msgBody = attach.type === 'file' ? `${key}|||${attach.name}` : key
+        await sendMessage(msgBody, attach.type, attach.type === 'image' ? attach.localUrl : attach.name)
+      } catch (err) {
+        console.error('Attachment send error:', err)
+        alert('Failed to send attachment. Please check your connection and try again.')
+      } finally {
+        setUploadingPhoto(false)
+      }
     }
+
+    if (textToSend) {
+      await sendMessage(textToSend)
+    }
+  }
+
+  async function loadPins(convId: string) {
+    setLoadingPins(true)
+    try {
+      const res = await fetch(`/api/chat/pin?convId=${convId}`)
+      if (res.ok) {
+        const d = await res.json()
+        setPinnedMessages(d.pins ?? [])
+        setPinnedIds(new Set((d.pins ?? []).map((p: { id: string }) => p.id)))
+      }
+    } finally {
+      setLoadingPins(false)
+    }
+  }
+
+  async function togglePin(msgId: string) {
+    if (!activeConv) return
+    const res = await fetch('/api/chat/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageId: msgId, convId: activeConv.id }),
+    })
+    if (!res.ok) return
+    const { pinned } = await res.json()
+    if (pinned) {
+      setPinnedIds(prev => new Set([...prev, msgId]))
+      // Reload full pins to get content
+      loadPins(activeConv.id)
+    } else {
+      setPinnedIds(prev => { const s = new Set(prev); s.delete(msgId); return s })
+      setPinnedMessages(prev => prev.filter(p => p.id !== msgId))
+    }
+  }
+
+  function handlePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const imageItem = Array.from(e.clipboardData.items).find(item => item.type.startsWith('image/'))
+    if (!imageItem || !activeConv) return
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (!file) return
+    const localUrl = URL.createObjectURL(file)
+    setPendingAttachment({ file, localUrl, type: 'image', name: 'Pasted image' })
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -465,7 +621,7 @@ export default function ChatPage() {
         return
       }
       e.preventDefault()
-      sendMessage(input)
+      handleSend()
     }
   }
 
@@ -892,11 +1048,25 @@ export default function ChatPage() {
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
           </svg>
         )}
+        <button
+          onClick={() => { setShowPins(true); if (activeConv) loadPins(activeConv.id) }}
+          className="relative flex-shrink-0 p-1"
+          aria-label="Pinned messages"
+        >
+          <svg className="w-5 h-5 text-gray-500 hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+          </svg>
+          {pinnedIds.size > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-amber-500 rounded-full text-[9px] font-bold text-black flex items-center justify-center leading-none">
+              {pinnedIds.size}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Messages */}
       {/* flex-col-reverse makes scrollTop=0 the natural bottom — no JS scroll needed */}
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto flex flex-col-reverse">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col-reverse">
         {messages.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 text-center">
             {loadingMsgs ? (
@@ -920,10 +1090,34 @@ export default function ChatPage() {
               const showTime = !prevMsg ||
                 new Date(msg.created_at).getTime() - new Date(prevMsg.created_at).getTime() > 5 * 60 * 1000
 
+              const msgDate = new Date(msg.created_at).toDateString()
+              const prevMsgDate = prevMsg ? new Date(prevMsg.created_at).toDateString() : null
+              const showDateHeader = msgDate !== prevMsgDate
+
               return (
-                <div key={msg.id}>
-                  {showTime && (
+                <div
+                  key={msg.id}
+                  onTouchStart={(e) => startLongPress(msg, e.currentTarget)}
+                  onTouchEnd={cancelLongPress}
+                  onTouchMove={cancelLongPress}
+                  onContextMenu={(e) => { e.preventDefault(); const r = e.currentTarget.getBoundingClientRect(); setPopupAnchor({ top: r.top, bottom: r.bottom }); setActiveReactionMsgId(msg.id) }}
+                >
+                  {showDateHeader && (
+                    <div className="flex items-center gap-3 my-4">
+                      <div className="flex-1 h-px bg-gray-800" />
+                      <span className="text-[11px] text-gray-500 font-medium">{fmtDateHeader(msg.created_at)}</span>
+                      <div className="flex-1 h-px bg-gray-800" />
+                    </div>
+                  )}
+                  {showTime && !showDateHeader && (
                     <div className="flex justify-center my-3">
+                      <span className="text-[10px] text-gray-600 bg-gray-900 px-3 py-1 rounded-full">
+                        {fmtMsgTime(msg.created_at)}
+                      </span>
+                    </div>
+                  )}
+                  {showTime && showDateHeader && (
+                    <div className="flex justify-center mb-3">
                       <span className="text-[10px] text-gray-600 bg-gray-900 px-3 py-1 rounded-full">
                         {fmtMsgTime(msg.created_at)}
                       </span>
@@ -944,10 +1138,23 @@ export default function ChatPage() {
                     )}
                     {/* Bubble */}
                     <div className={`max-w-[72%] ${isMe ? 'items-end' : 'items-start'} flex flex-col`}>
+                      {/* Reply quote */}
+                      {msg.reply_to_sender_name && (
+                        <div className={`mb-0.5 border-l-2 pl-2 py-0.5 max-w-full ${isMe ? 'border-violet-400 self-end' : 'border-gray-500 self-start'}`}>
+                          <p className="text-[10px] font-semibold text-gray-400 truncate">{msg.reply_to_sender_name}</p>
+                          <p className="text-[11px] text-gray-500 truncate" style={{ maxWidth: 200 }}>
+                            {msg.reply_to_type === 'image' ? '📷 Photo' : msg.reply_to_type === 'gif' ? '📎 GIF' : msg.reply_to_type === 'file' ? '📎 File' : msg.reply_to_body}
+                          </p>
+                        </div>
+                      )}
                       {msg.type === 'gif' ? (
                         <button
                           className={`rounded-2xl overflow-hidden ${isMe ? 'rounded-br-sm' : 'rounded-bl-sm'}`}
-                          onClick={() => setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)}
+                          onClick={(e) => {
+                            if (longPressActivatedRef.current) { longPressActivatedRef.current = false; return }
+                            const r = e.currentTarget.getBoundingClientRect(); setPopupAnchor({ top: r.top, bottom: r.bottom })
+                            setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)
+                          }}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
@@ -972,15 +1179,57 @@ export default function ChatPage() {
                             />
                           </button>
                           <button
-                            onClick={() => setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)}
+                            onClick={(e) => {
+                              if (longPressActivatedRef.current) { longPressActivatedRef.current = false; return }
+                              const r = e.currentTarget.getBoundingClientRect(); setPopupAnchor({ top: r.top, bottom: r.bottom })
+                              setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)
+                            }}
                             className={`text-[10px] text-gray-600 mt-0.5 ${isMe ? 'text-right' : 'text-left'}`}
                           >
                             React
                           </button>
                         </div>
-                      ) : (
+                      ) : msg.type === 'file' ? (() => {
+                        const sepIdx = msg.body.indexOf('|||')
+                        const fileUrl = sepIdx >= 0 ? msg.body.slice(0, sepIdx) : msg.body
+                        const fileName = sepIdx >= 0 ? msg.body.slice(sepIdx + 3) : 'File'
+                        const ext = fileName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'FILE'
+                        return (
+                          <div className="flex flex-col">
+                            <a
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => { if (longPressActivatedRef.current) { e.preventDefault(); longPressActivatedRef.current = false } }}
+                              className={`flex items-center gap-3 px-3 py-2.5 rounded-2xl max-w-[240px] no-underline ${isMe ? 'bg-violet-600 rounded-br-sm' : 'bg-gray-800 rounded-bl-sm'}`}
+                            >
+                              <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-[10px] font-black ${isMe ? 'bg-violet-800 text-violet-200' : 'bg-gray-700 text-gray-300'}`}>
+                                {ext}
+                              </div>
+                              <div className="min-w-0">
+                                <p className={`text-sm font-medium truncate ${isMe ? 'text-white' : 'text-gray-100'}`}>{fileName}</p>
+                                <p className={`text-[10px] ${isMe ? 'text-violet-300' : 'text-gray-500'}`}>Tap to open</p>
+                              </div>
+                            </a>
+                            <button
+                              onClick={(e) => {
+                                if (longPressActivatedRef.current) { longPressActivatedRef.current = false; return }
+                                const r = e.currentTarget.getBoundingClientRect(); setPopupAnchor({ top: r.top, bottom: r.bottom })
+                                setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)
+                              }}
+                              className={`text-[10px] text-gray-600 mt-0.5 ${isMe ? 'text-right' : 'text-left'}`}
+                            >
+                              React
+                            </button>
+                          </div>
+                        )
+                      })() : (
                         <button
-                          onClick={() => setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)}
+                          onClick={(e) => {
+                            if (longPressActivatedRef.current) { longPressActivatedRef.current = false; return }
+                            const r = e.currentTarget.getBoundingClientRect(); setPopupAnchor({ top: r.top, bottom: r.bottom })
+                            setActiveReactionMsgId(prev => prev === msg.id ? null : msg.id)
+                          }}
                           className={`px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed break-words text-left ${
                             isMe
                               ? 'bg-violet-600 text-white rounded-br-sm'
@@ -1078,14 +1327,63 @@ export default function ChatPage() {
         </div>
       )}
 
+      {/* Reply bar */}
+      {replyingTo && (
+        <div className="px-4 py-2 border-t border-gray-800 bg-gray-900 flex items-start gap-2">
+          <svg className="w-4 h-4 text-violet-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+          </svg>
+          <div className="flex-1 min-w-0 border-l-2 border-violet-500 pl-2">
+            <p className="text-[10px] font-semibold text-violet-400 truncate">{replyingTo.sender_name}</p>
+            <p className="text-xs text-gray-400 truncate">
+              {replyingTo.type === 'image' ? '📷 Photo' : replyingTo.type === 'gif' ? '📎 GIF' : replyingTo.type === 'file' ? '📎 File' : replyingTo.body}
+            </p>
+          </div>
+          <button
+            onClick={() => setReplyingTo(null)}
+            className="text-gray-500 hover:text-gray-300 flex-shrink-0 mt-0.5"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {/* Pending attachment preview */}
+      {pendingAttachment && (
+        <div className="px-4 py-2 border-t border-gray-800 bg-gray-900 flex items-center gap-3">
+          {pendingAttachment.type === 'image' ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={pendingAttachment.localUrl} alt="Preview" className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+          ) : (
+            <div className="w-14 h-14 rounded-xl bg-gray-800 flex items-center justify-center flex-shrink-0">
+              <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-gray-200 truncate">{pendingAttachment.name}</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">{pendingAttachment.type === 'image' ? 'Image' : 'Document'} · ready to send</p>
+          </div>
+          <button onClick={() => setPendingAttachment(null)} className="text-gray-500 hover:text-gray-300 flex-shrink-0 p-1">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Input area */}
       <div className="px-3 py-3 border-t border-gray-800 bg-gray-950 flex items-end gap-2">
+        <input ref={photoInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoSelect} />
         <input
-          ref={photoInputRef}
+          ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.csv"
           className="hidden"
-          onChange={handlePhotoSelect}
+          onChange={handleFileSelect}
         />
         <button
           onClick={() => photoInputRef.current?.click()}
@@ -1102,6 +1400,16 @@ export default function ChatPage() {
             </svg>
           )}
         </button>
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploadingPhoto || sending}
+          className="w-9 h-9 flex items-center justify-center rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-40 transition-colors flex-shrink-0 mb-px"
+          aria-label="Attach file"
+        >
+          <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </button>
         {gifEnabled && (
           <button
             onClick={openGifPicker}
@@ -1116,14 +1424,15 @@ export default function ChatPage() {
           value={input}
           onChange={autoResize}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           placeholder="Message…"
           rows={1}
           className="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-violet-500 resize-none leading-5"
           style={{ minHeight: 40, maxHeight: 120 }}
         />
         <button
-          onClick={() => sendMessage(input)}
-          disabled={!input.trim() || sending || uploadingPhoto}
+          onClick={handleSend}
+          disabled={(!input.trim() && !pendingAttachment) || sending || uploadingPhoto}
           className="w-9 h-9 flex items-center justify-center rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0 mb-px"
           aria-label="Send"
         >
@@ -1133,28 +1442,162 @@ export default function ChatPage() {
         </button>
       </div>
 
-      {/* Reaction dismiss overlay */}
-      {activeReactionMsgId && (
-        <div className="fixed inset-0 z-30" onClick={() => setActiveReactionMsgId(null)} />
-      )}
+      {/* Message action popup (reactions + reply) */}
+      {activeReactionMsgId && (() => {
+        const POPUP_H = 116
+        const anchorBottom = popupAnchor?.bottom ?? (typeof window !== 'undefined' ? window.innerHeight - 80 : 600)
+        const anchorTop = popupAnchor?.top ?? anchorBottom - 40
+        const spaceBelow = (typeof window !== 'undefined' ? window.innerHeight : 800) - anchorBottom - 72
+        const top = spaceBelow >= POPUP_H + 8 ? anchorBottom + 8 : anchorTop - POPUP_H - 8
+        return (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setActiveReactionMsgId(null)} />
+          <div className="fixed left-0 right-0 z-40 flex justify-center px-4 pointer-events-none" style={{ top }}>
+            <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl pointer-events-auto overflow-hidden min-w-[260px]">
+              {/* Emoji row */}
+              <div className="px-4 py-3 flex gap-3 justify-center">
+                {REACTION_EMOJIS.map(emoji => {
+                  const activeMsg = messages.find(m => m.id === activeReactionMsgId)
+                  const reactedByMe = (activeMsg?.reactions ?? []).some(r => r.emoji === emoji && r.user_id === myId)
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => handleReact(activeReactionMsgId, emoji)}
+                      className={`text-2xl transition-transform active:scale-110 ${reactedByMe ? 'scale-110' : 'opacity-80 hover:opacity-100 hover:scale-110'}`}
+                    >
+                      {emoji}
+                    </button>
+                  )
+                })}
+              </div>
+              {/* Divider */}
+              <div className="border-t border-gray-700 mx-0" />
+              {/* Reply action */}
+              <button
+                onClick={() => {
+                  const msg = messages.find(m => m.id === activeReactionMsgId)
+                  if (msg) setReplyingTo(msg)
+                  setActiveReactionMsgId(null)
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700 transition-colors text-left"
+              >
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                </svg>
+                <span className="text-sm text-gray-200 font-medium">Reply</span>
+              </button>
+              <div className="border-t border-gray-700 mx-0" />
+              <button
+                onClick={() => {
+                  if (activeReactionMsgId) togglePin(activeReactionMsgId)
+                  setActiveReactionMsgId(null)
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700 transition-colors text-left"
+              >
+                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <span className="text-sm text-gray-200 font-medium">
+                  {activeReactionMsgId && pinnedIds.has(activeReactionMsgId) ? 'Unpin' : 'Pin'}
+                </span>
+              </button>
+            </div>
+          </div>
+        </>
+        )
+      })()}
 
-      {/* Reaction picker bar */}
-      {activeReactionMsgId && (
-        <div className="fixed bottom-20 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl px-4 py-2.5 flex gap-3 shadow-2xl pointer-events-auto">
-            {REACTION_EMOJIS.map(emoji => {
-              const activeMsg = messages.find(m => m.id === activeReactionMsgId)
-              const reactedByMe = (activeMsg?.reactions ?? []).some(r => r.emoji === emoji && r.user_id === myId)
-              return (
-                <button
-                  key={emoji}
-                  onClick={() => handleReact(activeReactionMsgId, emoji)}
-                  className={`text-2xl transition-transform active:scale-110 ${reactedByMe ? 'scale-110' : 'opacity-80 hover:opacity-100 hover:scale-110'}`}
-                >
-                  {emoji}
-                </button>
-              )
-            })}
+      {/* Pinned messages panel */}
+      {showPins && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end" style={{ background: 'rgba(0,0,0,0.7)' }} onClick={() => setShowPins(false)}>
+          <div className="bg-gray-900 rounded-t-2xl flex flex-col" style={{ maxHeight: '75vh' }} onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
+              <div className="w-10 h-1 rounded-full bg-gray-700" />
+            </div>
+            <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                </svg>
+                <p className="text-white font-bold text-sm">Pinned Items</p>
+                {pinnedMessages.length > 0 && (
+                  <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full font-semibold">
+                    {pinnedMessages.length}
+                  </span>
+                )}
+              </div>
+              <button onClick={() => setShowPins(false)} className="text-gray-500 hover:text-gray-300">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1">
+              {loadingPins ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : pinnedMessages.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 px-5 text-center">
+                  <svg className="w-10 h-10 text-gray-700 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                  </svg>
+                  <p className="text-gray-500 text-sm">No pinned items</p>
+                  <p className="text-gray-600 text-xs mt-1">Long-press any message and tap Pin</p>
+                </div>
+              ) : (
+                <div className="px-4 py-3 space-y-2">
+                  {pinnedMessages.map(pin => {
+                    const sepIdx = pin.body.indexOf('|||')
+                    const fileUrl = sepIdx >= 0 ? pin.body.slice(0, sepIdx) : pin.body
+                    const fileName = sepIdx >= 0 ? pin.body.slice(sepIdx + 3) : ''
+                    const ext = fileName.split('.').pop()?.toUpperCase().slice(0, 4) ?? 'FILE'
+                    return (
+                      <div key={pin.id} className="bg-gray-800 rounded-2xl p-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p className="text-[10px] font-semibold text-gray-400">{pin.sender_name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-[10px] text-gray-600">{new Date(pin.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
+                            <button
+                              onClick={() => togglePin(pin.id)}
+                              className="text-[10px] text-amber-500 hover:text-amber-400 font-semibold"
+                            >
+                              Unpin
+                            </button>
+                          </div>
+                        </div>
+                        {pin.type === 'image' ? (
+                          <button onClick={() => { setLightboxUrl(pin.body); setShowPins(false) }} className="rounded-xl overflow-hidden">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={pin.body} alt="Pinned photo" className="max-w-full max-h-48 object-contain rounded-xl" loading="lazy" />
+                          </button>
+                        ) : pin.type === 'file' ? (
+                          <a href={fileUrl} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-3 bg-gray-700 rounded-xl px-3 py-2.5 no-underline">
+                            <div className="w-9 h-9 rounded-lg bg-gray-600 flex items-center justify-center flex-shrink-0 text-[10px] font-black text-gray-300">
+                              {ext}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-gray-100 truncate">{fileName}</p>
+                              <p className="text-[10px] text-gray-500">Tap to open</p>
+                            </div>
+                          </a>
+                        ) : pin.type === 'gif' ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={pin.body} alt="GIF" className="max-w-[160px] rounded-xl" loading="lazy" />
+                        ) : (
+                          <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap break-words">{pin.body}</p>
+                        )}
+                        {pin.pinned_by_name && (
+                          <p className="text-[10px] text-gray-600 mt-2">Pinned by {pin.pinned_by_name}</p>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="h-5 flex-shrink-0" />
           </div>
         </div>
       )}

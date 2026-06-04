@@ -53,11 +53,7 @@ export async function POST(
   // Approve: mark terminated, send email
   const terminationDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  // Get org name
-  const org = await queryOne<{ name: string }>(
-    `SELECT name FROM orgs WHERE id = $1`, [termReq.org_id]
-  )
-  const orgName = org?.name ?? 'The Organization'
+  const orgName = 'The Organization'
 
   // Get DM name (requested_by)
   const dmUser = await queryOne<{ full_name: string }>(
@@ -86,9 +82,10 @@ export async function POST(
     [session.id, session.fullName, termReq.id]
   )
 
-  // Mark user as terminated (preserve all data)
+  // Mark user as terminated and deactivate so they stop appearing in scheduling,
+  // task assignment, and other active-employee contexts.
   await query(
-    `UPDATE users SET is_terminated = TRUE, terminated_at = NOW() WHERE id = $1`,
+    `UPDATE users SET is_terminated = TRUE, terminated_at = NOW(), is_active = FALSE WHERE id = $1`,
     [termReq.employee_id]
   )
 

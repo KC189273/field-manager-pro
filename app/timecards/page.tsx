@@ -14,6 +14,7 @@ interface Session {
 }
 
 interface ShiftBreak {
+  id: string
   break_start: string
   break_end: string
 }
@@ -30,8 +31,10 @@ interface Shift {
   manual_note: string | null
   manual_by_name: string | null
   shift_note: string | null
+  store_name: string | null
   full_name: string
   username: string
+  avatar_url?: string | null
 }
 
 interface PayCode {
@@ -54,11 +57,13 @@ interface TeamUser {
 interface EmployeeSummary {
   userId: string
   fullName: string
+  avatarUrl?: string | null
   totalSeconds: number
   shiftCount: number
   correctionCount: number
   hasLongShift: boolean // any single shift > 10h
   stillClockedIn: boolean
+  clockedInStoreName: string | null
 }
 
 const CST = 'America/Chicago'
@@ -198,6 +203,13 @@ function TimecardsPage() {
   const [addNote, setAddNote] = useState('')
   const [addSaving, setAddSaving] = useState(false)
 
+  // Break management modal
+  const [breakShift, setBreakShift] = useState<Shift | null>(null)
+  const [newBreakStart, setNewBreakStart] = useState('')
+  const [newBreakEnd, setNewBreakEnd] = useState('')
+  const [breakSaving, setBreakSaving] = useState(false)
+  const [breakError, setBreakError] = useState('')
+
   const monday = getWeekMonday(weekOffset)
   const sunday = addDays(monday, 6)
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
@@ -303,11 +315,13 @@ function TimecardsPage() {
         map.set(s.user_id, {
           userId: s.user_id,
           fullName: s.full_name,
+          avatarUrl: s.avatar_url,
           totalSeconds: 0,
           shiftCount: 0,
           correctionCount: 0,
           hasLongShift: false,
           stillClockedIn: false,
+          clockedInStoreName: null,
         })
       }
       const emp = map.get(s.user_id)!
@@ -316,7 +330,7 @@ function TimecardsPage() {
       emp.shiftCount++
       if (s.is_manual) emp.correctionCount++
       if (dur > 10 * 3600) emp.hasLongShift = true
-      if (!s.clock_out_at) emp.stillClockedIn = true
+      if (!s.clock_out_at) { emp.stillClockedIn = true; emp.clockedInStoreName = s.store_name ?? null }
     }
     // Add PTO hours to totalSeconds (sick is excluded)
     for (const pc of teamPayCodes) {
@@ -330,6 +344,7 @@ function TimecardsPage() {
           correctionCount: 0,
           hasLongShift: false,
           stillClockedIn: false,
+          clockedInStoreName: null,
         })
       }
       const emp = map.get(pc.user_id)!
@@ -433,6 +448,62 @@ function TimecardsPage() {
       await loadShifts()
     } finally {
       setAddSaving(false)
+    }
+  }
+
+  function openBreaks(shift: Shift) {
+    setBreakShift(shift)
+    setBreakError('')
+    // Pre-fill with a sensible default: 30 min break starting 4h after clock-in
+    const baseMs = new Date(shift.clock_in_at).getTime() + 4 * 3600 * 1000
+    const defaultStart = new Date(baseMs).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16).replace(' ', 'T')
+    const defaultEnd = new Date(baseMs + 30 * 60 * 1000).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16).replace(' ', 'T')
+    setNewBreakStart(defaultStart)
+    setNewBreakEnd(defaultEnd)
+  }
+
+  async function addBreak() {
+    if (!breakShift || !newBreakStart || !newBreakEnd) return
+    setBreakSaving(true)
+    setBreakError('')
+    try {
+      const res = await fetch('/api/clock/break', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'manual_add',
+          shiftId: breakShift.id,
+          breakStart: new Date(newBreakStart).toISOString(),
+          breakEnd: new Date(newBreakEnd).toISOString(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setBreakError(data.error ?? 'Failed to add break'); return }
+      const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T00:00:00`)
+      if (updated.ok) {
+        const d = await updated.json()
+        const fresh = (d.shifts ?? []).find((s: Shift) => s.id === breakShift.id)
+        if (fresh) setBreakShift(fresh)
+        setShifts(d.shifts ?? [])
+      }
+    } finally {
+      setBreakSaving(false)
+    }
+  }
+
+  async function removeBreak(breakId: string) {
+    if (!breakShift) return
+    await fetch('/api/clock/break', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ breakId }),
+    })
+    const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T00:00:00`)
+    if (updated.ok) {
+      const d = await updated.json()
+      const fresh = (d.shifts ?? []).find((s: Shift) => s.id === breakShift.id)
+      if (fresh) setBreakShift(fresh)
+      setShifts(d.shifts ?? [])
     }
   }
 
@@ -627,6 +698,11 @@ function TimecardsPage() {
                     className="w-full text-left bg-gray-900 border border-gray-800 hover:border-violet-500/40 rounded-2xl px-4 py-3.5 transition-colors"
                   >
                     <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        {emp.avatarUrl
+                          ? <img src={emp.avatarUrl} alt={emp.fullName} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-8 h-8 rounded-full bg-violet-800 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">{emp.fullName.split(' ').map((n: string) => n[0]).join('').slice(0,2).toUpperCase()}</div>
+                        }
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-white text-sm truncate">{emp.fullName}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -641,10 +717,11 @@ function TimecardsPage() {
                           )}
                           {emp.stillClockedIn && (
                             <span className="text-[10px] font-semibold bg-green-500/15 text-green-400 border border-green-500/20 px-1.5 py-0.5 rounded-full">
-                              Clocked in
+                              Clocked in{emp.clockedInStoreName ? ` @ ${emp.clockedInStoreName}` : ''}
                             </span>
                           )}
                         </div>
+                      </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {emp.hasLongShift && (
@@ -781,6 +858,9 @@ function TimecardsPage() {
                                     <span className="text-sm font-medium text-white">
                                       {shift.clock_out_at ? fmtTime(shift.clock_out_at) : <span className="text-yellow-400">Still clocked in</span>}
                                     </span>
+                                    {!shift.clock_out_at && shift.store_name && (
+                                      <span className="text-xs text-gray-400">@ {shift.store_name}</span>
+                                    )}
                                     <span className="text-xs text-gray-500">{fmtDecimalHours(shiftDuration(shift, now))}</span>
                                     {Number(shift.break_seconds) > 0 && (
                                       <span className="text-xs text-gray-600">−{fmtDecimalHours(Number(shift.break_seconds))} break</span>
@@ -811,6 +891,12 @@ function TimecardsPage() {
                                   </button>
                                   {isMgr && selectedUserId && selectedUserId !== session.id && (
                                     <>
+                                      <button
+                                        onClick={() => openBreaks(shift)}
+                                        className="text-xs text-gray-500 hover:text-orange-400 transition-colors font-medium"
+                                      >
+                                        Breaks
+                                      </button>
                                       <button
                                         onClick={() => openEdit(shift)}
                                         className="text-xs text-gray-500 hover:text-violet-400 transition-colors font-medium"
@@ -1053,7 +1139,7 @@ function TimecardsPage() {
                         <div className="flex justify-between items-center text-sm mb-3">
                           <span className="text-gray-400">Clock Out</span>
                           <span className={shift.clock_out_at ? 'text-white font-medium' : 'text-yellow-400 font-medium'}>
-                            {shift.clock_out_at ? fmtTime(shift.clock_out_at) : 'Still clocked in'}
+                            {shift.clock_out_at ? fmtTime(shift.clock_out_at) : `Still clocked in${shift.store_name ? ` @ ${shift.store_name}` : ''}`}
                           </span>
                         </div>
                         <div className="border-t border-gray-700/60 my-2" />
@@ -1213,6 +1299,87 @@ function TimecardsPage() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Breaks modal */}
+      {breakShift && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setBreakShift(null)}>
+          <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-1">Manage Breaks</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {fmtTime(breakShift.clock_in_at)} – {breakShift.clock_out_at ? fmtTime(breakShift.clock_out_at) : 'In progress'}
+            </p>
+
+            {/* Existing breaks */}
+            {breakShift.breaks && breakShift.breaks.length > 0 ? (
+              <div className="mb-4 space-y-2">
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Recorded Breaks</p>
+                {breakShift.breaks.map((b, i) => {
+                  const bSecs = (new Date(b.break_end).getTime() - new Date(b.break_start).getTime()) / 1000
+                  return (
+                    <div key={b.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2.5">
+                      <div>
+                        <p className="text-sm text-white font-medium">
+                          Break {breakShift.breaks!.length > 1 ? i + 1 : ''}: {fmtTime(b.break_start)} – {fmtTime(b.break_end)}
+                        </p>
+                        <p className="text-xs text-orange-400">{fmtDecimalHours(bSecs)} deducted</p>
+                      </div>
+                      <button
+                        onClick={() => removeBreak(b.id)}
+                        className="text-xs text-gray-600 hover:text-red-400 transition-colors font-medium ml-3"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-600 italic mb-4">No breaks recorded for this shift.</p>
+            )}
+
+            {/* Add new break */}
+            <div className="border-t border-gray-800 pt-4 space-y-3">
+              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Add Break</p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">Start</label>
+                  <input
+                    type="datetime-local"
+                    value={newBreakStart}
+                    onChange={e => setNewBreakStart(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs text-gray-500 mb-1">End</label>
+                  <input
+                    type="datetime-local"
+                    value={newBreakEnd}
+                    onChange={e => setNewBreakEnd(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </div>
+              {breakError && <p className="text-xs text-red-400">{breakError}</p>}
+              <div className="flex gap-2">
+                <button
+                  onClick={addBreak}
+                  disabled={breakSaving || !newBreakStart || !newBreakEnd}
+                  className="flex-1 bg-orange-600 hover:bg-orange-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  {breakSaving ? 'Adding…' : 'Add Break'}
+                </button>
+                <button
+                  onClick={() => setBreakShift(null)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           </div>
         </div>

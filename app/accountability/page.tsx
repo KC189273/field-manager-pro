@@ -19,6 +19,7 @@ interface Doc {
   title: string
   subject_id: string
   subject_name: string
+  subject_avatar_url?: string | null
   subject_role: string
   author_id: string
   author_name: string
@@ -67,6 +68,22 @@ interface TerminationRequest {
   approved_at: string | null
 }
 
+interface TerminatedEmployee {
+  id: string; employee_id: string; employee_name: string; employee_email: string
+  requested_by_name: string; requested_by_role: string; reasons: string
+  approved_by_name: string | null; approved_at: string | null; created_at: string
+  doc_count: string
+}
+
+interface ProfileDoc {
+  id: string; ref_number: string; level: string; title: string; incident_date: string
+  notes: string; expectations: string; author_name: string; author_role: string
+  status: string; ack_status: string; ack_at: string | null
+  approved_at: string | null; approver_name: string | null; created_at: string
+  audit_trail: Array<{ action: string; actor_name: string | null; notes: string | null; created_at: string }> | null
+  prior_convos: Array<{ convo_date: string; notes: string }> | null
+}
+
 interface Subject { id: string; full_name: string; role: string }
 interface Author  { id: string; full_name: string; role: string }
 
@@ -106,7 +123,7 @@ const ACK_LABELS: Record<string, string> = {
 }
 
 function canViewDash(role: Role) {
-  return ['manager','sales_director','ops_manager','owner','developer'].includes(role)
+  return ['employee','manager','sales_director','ops_manager','owner','developer'].includes(role)
 }
 function canApprove(role: Role) {
   return ['sales_director','owner','developer'].includes(role)
@@ -147,6 +164,81 @@ function actionLabel(action: string): string {
 }
 
 // ─── DocCard ──────────────────────────────────────────────────────────────────
+function EmployeeNoticeCard({ doc, onAcknowledged }: {
+  doc: { id: string; ref_number: string; level: string; title: string; incident_date: string; ack_status: string; ack_at: string | null; author_name: string; ack_token: string | null }
+  onAcknowledged: () => void
+}) {
+  const [acking, setAcking] = useState(false)
+  const [done, setDone] = useState(doc.ack_status === 'acknowledged')
+
+  async function handleAck() {
+    if (!doc.ack_token) return
+    setAcking(true)
+    const res = await fetch(`/api/ack/${doc.ack_token}`, { method: 'POST' }).catch(() => null)
+    if (res?.ok) {
+      setDone(true)
+      onAcknowledged()
+    }
+    setAcking(false)
+  }
+
+  const levelColors: Record<string, string> = {
+    verbal: 'bg-amber-700/20 text-amber-400 border-amber-700/30',
+    written: 'bg-orange-700/20 text-orange-400 border-orange-700/30',
+    final: 'bg-red-800/20 text-red-400 border-red-800/30',
+  }
+  const levelLabels: Record<string, string> = {
+    verbal: 'Verbal', written: 'Written — 2nd', final: 'Final — 3rd',
+  }
+
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${levelColors[doc.level] ?? ''}`}>
+            {levelLabels[doc.level] ?? doc.level}
+          </span>
+          <span className="text-xs text-gray-500 font-mono">{doc.ref_number}</span>
+        </div>
+        {done ? (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full shrink-0">
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            Acknowledged
+          </span>
+        ) : (
+          <span className="text-[10px] font-semibold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full shrink-0">
+            Action Required
+          </span>
+        )}
+      </div>
+      <p className="text-sm font-semibold text-white mb-1">{doc.title}</p>
+      <p className="text-xs text-gray-500 mb-3">
+        Issued by {doc.author_name} · {new Date(doc.incident_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+      </p>
+      {done ? (
+        doc.ack_at && (
+          <p className="text-xs text-green-500/70">
+            Acknowledged {new Date(doc.ack_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+          </p>
+        )
+      ) : (
+        <div>
+          <p className="text-xs text-gray-500 mb-3 leading-relaxed">
+            You must acknowledge receipt of this notice. This confirms you have received it — it is not an admission of guilt.
+          </p>
+          <button
+            onClick={handleAck}
+            disabled={acking || !doc.ack_token}
+            className="w-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
+          >
+            {acking ? 'Recording…' : 'Acknowledge Receipt'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function DocCard({ doc, onClick }: { doc: Doc; onClick: () => void }) {
   return (
     <button
@@ -167,7 +259,13 @@ function DocCard({ doc, onClick }: { doc: Doc; onClick: () => void }) {
       <p className="text-sm font-semibold text-white mb-1 leading-snug">{doc.title}</p>
       <div className="flex items-center justify-between gap-2">
         <div>
-          <p className="text-xs text-gray-400">Subject: <span className="text-gray-300">{doc.subject_name}</span></p>
+          <div className="flex items-center gap-1.5">
+            {doc.subject_avatar_url
+              ? <img src={doc.subject_avatar_url} alt={doc.subject_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+              : <div className="w-5 h-5 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{doc.subject_name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+            }
+            <p className="text-xs text-gray-400">Subject: <span className="text-gray-300">{doc.subject_name}</span></p>
+          </div>
           {doc.author_id !== doc.subject_id && (
             <p className="text-xs text-gray-500">By: {doc.author_name}</p>
           )}
@@ -728,8 +826,8 @@ function DetailModal({
                 </div>
               )}
 
-              {/* Termination — final warning, acknowledged, DM/SD/Owner can initiate */}
-              {doc.level === 'final' && doc.ack_status === 'acknowledged' &&
+              {/* Termination — written or final warning approved, DM/SD/Owner can initiate */}
+              {['written', 'final'].includes(doc.level) && doc.status === 'approved' &&
                ['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role) && (
                 <div className="pt-2 border-t border-gray-800">
                   {!terminationOpen ? (
@@ -836,6 +934,41 @@ function SubmitForm({ session, subjects, onSuccess }: {
   const [testMode, setTestMode] = useState(session.role === 'developer')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [hasDraft, setHasDraft] = useState(false)
+
+  const DRAFT_KEY = `acc-submit-draft-${session.id}`
+
+  // Restore draft on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(DRAFT_KEY)
+      if (saved) {
+        const d = JSON.parse(saved)
+        if (d.subjectId)       setSubjectId(d.subjectId)
+        if (d.subjectSearch)   setSubjectSearch(d.subjectSearch)
+        if (d.level)           setLevel(d.level)
+        if (d.title)           setTitle(d.title)
+        if (d.incidentDate)    setIncidentDate(d.incidentDate)
+        if (d.notes)           setNotes(d.notes)
+        if (d.expectations)    setExpectations(d.expectations)
+        if (d.priorConvos)     setPriorConvos(d.priorConvos)
+        if (d.linkedVerbalIds) setLinkedVerbalIds(d.linkedVerbalIds)
+        setHasDraft(true)
+      }
+    } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-save draft on every change
+  useEffect(() => {
+    if (!subjectId && !title && !notes && !expectations) return
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify({
+        subjectId, subjectSearch, level, title, incidentDate,
+        notes, expectations, priorConvos, linkedVerbalIds,
+      }))
+    } catch { /* ignore */ }
+  }, [subjectId, subjectSearch, level, title, incidentDate, notes, expectations, priorConvos, linkedVerbalIds, DRAFT_KEY])
 
   // Load available verbals for the selected subject (for linking)
   useEffect(() => {
@@ -868,23 +1001,29 @@ function SubmitForm({ session, subjects, onSuccess }: {
     }
     setSubmitting(true)
     setError('')
-    const res = await fetch('/api/accountability', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subjectId, level, title: title.trim(), incidentDate,
-        notes: notes.trim(), expectations: expectations.trim(),
-        priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
-        linkedVerbalIds,
-        reminderAcknowledged,
-        testMode: session.role === 'developer' ? testMode : false,
-      }),
-    })
-    const data = await res.json()
-    if (res.ok) {
-      onSuccess(data.refNumber)
-    } else {
-      setError(data.error ?? 'Submission failed. Please try again.')
+    try {
+      const res = await fetch('/api/accountability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subjectId, level, title: title.trim(), incidentDate,
+          notes: notes.trim(), expectations: expectations.trim(),
+          priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
+          linkedVerbalIds,
+          reminderAcknowledged,
+          testMode: session.role === 'developer' ? testMode : false,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+        onSuccess(data.refNumber)
+      } else {
+        setError(data.error ?? 'Submission failed. Please try again.')
+        setSubmitting(false)
+      }
+    } catch {
+      setError('Submission failed. Please check your connection and try again.')
       setSubmitting(false)
     }
   }
@@ -894,6 +1033,27 @@ function SubmitForm({ session, subjects, onSuccess }: {
 
   return (
     <div className="space-y-5 py-5">
+
+      {/* Draft restored banner */}
+      {hasDraft && (
+        <div className="flex items-center justify-between gap-3 bg-amber-900/30 border border-amber-700/40 rounded-xl px-4 py-3">
+          <div className="flex items-center gap-2 text-amber-300 text-sm">
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            Draft restored — your progress was saved automatically.
+          </div>
+          <button type="button" onClick={() => {
+            try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
+            setSubjectId(''); setSubjectSearch(''); setLevel('verbal')
+            setTitle(''); setIncidentDate(''); setNotes(''); setExpectations('')
+            setPriorConvos([]); setLinkedVerbalIds([]); setReminderAcknowledged(false)
+            setHasDraft(false)
+          }} className="text-xs text-amber-400 hover:text-amber-200 underline shrink-0">
+            Discard draft
+          </button>
+        </div>
+      )}
 
       {/* Subject */}
       <div>
@@ -1106,7 +1266,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-type MainTab = 'submit' | 'my-records' | 'pending' | 'all-records' | 'dm-records' | 'termination'
+type MainTab = 'submit' | 'my-records' | 'my-notices' | 'pending' | 'all-records' | 'dm-records' | 'termination'
 
 export default function AccountabilityPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -1126,6 +1286,16 @@ export default function AccountabilityPage() {
   const [termActing, setTermActing] = useState<string | null>(null)
   const [termError, setTermError] = useState('')
 
+  // Terminated employees directory
+  const [termSubTab, setTermSubTab] = useState<'requests' | 'terminated'>('requests')
+  const [terminatedEmps, setTerminatedEmps] = useState<TerminatedEmployee[]>([])
+  const [termEmpLoading, setTermEmpLoading] = useState(false)
+  const [termSearch, setTermSearch] = useState('')
+  const [termProfile, setTermProfile] = useState<{ termRequest: TerminatedEmployee; docs: ProfileDoc[] } | null>(null)
+  const [termProfileLoading, setTermProfileLoading] = useState(false)
+  const [termExporting, setTermExporting] = useState(false)
+  const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
+
   // Filters
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -1139,7 +1309,8 @@ export default function AccountabilityPage() {
     fetch('/api/auth/me').then(r => r.json()).then(d => {
       setSession(d)
       // Default tab based on role
-      if (d.role === 'manager') setTab('submit')
+      if (d.role === 'employee') setTab('my-notices')
+      else if (d.role === 'manager') setTab('submit')
       else if (['sales_director','owner','developer'].includes(d.role)) setTab('pending')
       else setTab('all-records')
     })
@@ -1174,6 +1345,49 @@ export default function AccountabilityPage() {
       .finally(() => setTermLoading(false))
   }, [])
 
+  const loadTerminatedEmps = useCallback(() => {
+    setTermEmpLoading(true)
+    fetch('/api/accountability/termination?view=terminated')
+      .then(r => r.json())
+      .then(d => setTerminatedEmps(d.employees ?? []))
+      .catch(() => {})
+      .finally(() => setTermEmpLoading(false))
+  }, [])
+
+  async function openTermProfile(emp: TerminatedEmployee) {
+    setTermProfileLoading(true)
+    setTermProfile({ termRequest: emp, docs: [] })
+    setExpandedDocs(new Set())
+    try {
+      const res = await fetch(`/api/accountability/termination/${emp.employee_id}/profile`)
+      if (res.ok) {
+        const d = await res.json()
+        setTermProfile({ termRequest: emp, docs: d.docs ?? [] })
+      }
+    } finally {
+      setTermProfileLoading(false)
+    }
+  }
+
+  async function exportTerminationDoc(employeeId: string) {
+    setTermExporting(true)
+    try {
+      const res = await fetch(`/api/accountability/termination/${employeeId}/export`)
+      if (!res.ok) { setTermExporting(false); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const cd = res.headers.get('Content-Disposition') ?? ''
+      const match = cd.match(/filename="(.+)"/)
+      a.download = match?.[1] ?? 'termination_file.docx'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setTermExporting(false)
+    }
+  }
+
   async function handleTermAction(reqId: string, action: 'approve' | 'reject') {
     const req = termRequests.find(r => r.id === reqId)
     const msg = action === 'approve'
@@ -1182,18 +1396,24 @@ export default function AccountabilityPage() {
     if (!confirm(msg)) return
     setTermActing(reqId)
     setTermError('')
-    const res = await fetch(`/api/accountability/termination/${reqId}/approve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action }),
-    })
-    if (res.ok) {
-      loadTermRequests()
-    } else {
-      const d = await res.json()
-      setTermError(d.error ?? 'Action failed')
+    try {
+      const res = await fetch(`/api/accountability/termination/${reqId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      })
+      const d = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setTermError(d.error ?? 'Action failed')
+      } else {
+        loadTermRequests()
+        if (action === 'approve') loadTerminatedEmps()
+      }
+    } catch {
+      setTermError('Network error — please try again')
+    } finally {
+      setTermActing(null)
     }
-    setTermActing(null)
   }
 
   useEffect(() => {
@@ -1201,8 +1421,11 @@ export default function AccountabilityPage() {
   }, [session, tab, loadDocs])
 
   useEffect(() => {
-    if (session && tab === 'termination') loadTermRequests()
-  }, [session, tab, loadTermRequests])
+    if (session && tab === 'termination') {
+      loadTermRequests()
+      loadTerminatedEmps()
+    }
+  }, [session, tab, loadTermRequests, loadTerminatedEmps])
 
   if (!session) return <div className="min-h-screen bg-gray-950" />
   if (!canViewDash(session.role)) return (
@@ -1216,6 +1439,7 @@ export default function AccountabilityPage() {
 
   // Tabs visible per role
   const tabs: Array<{ key: MainTab; label: string; badge?: number }> = []
+  if (session.role === 'employee') tabs.push({ key: 'my-notices', label: 'My Notices' })
   if (canSubmit(session.role)) tabs.push({ key: 'submit', label: 'New Document' })
   if (session.role === 'manager') tabs.push({ key: 'my-records', label: 'My Records' })
   if (canApprove(session.role)) tabs.push({ key: 'pending', label: 'Pending Approval', badge: pendingApproval.length })
@@ -1273,6 +1497,40 @@ export default function AccountabilityPage() {
       </div>
 
       <div className="max-w-2xl mx-auto px-4">
+
+        {/* ── Employee: My Notices ── */}
+        {tab === 'my-notices' && session.role === 'employee' && (
+          <div className="pt-5">
+            <h1 className="text-xl font-bold text-white mb-1">My Notices</h1>
+            <p className="text-xs text-gray-500 mb-4">Official accountability documents issued to you.</p>
+            {loading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading…</p>
+            ) : docs.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <p className="text-gray-500 text-sm">No accountability notices on file.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(docs as unknown as Array<{
+                  id: string; ref_number: string; level: string; title: string
+                  incident_date: string; ack_status: string; ack_at: string | null
+                  author_name: string; ack_token: string | null; created_at: string
+                }>).map(d => (
+                  <EmployeeNoticeCard
+                    key={d.id}
+                    doc={d}
+                    onAcknowledged={() => loadDocs()}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* ── New Document ── */}
         {tab === 'submit' && canSubmit(session.role) && (
@@ -1395,99 +1653,171 @@ export default function AccountabilityPage() {
           </div>
         )}
 
-        {/* ── Termination Requests ── */}
+        {/* ── Termination Tab ── */}
         {tab === 'termination' && ['sales_director','owner','developer'].includes(session.role) && (
           <div className="pt-5">
-            <h1 className="text-xl font-bold text-white mb-1">Termination Requests</h1>
-            <p className="text-xs text-gray-500 mb-4">Pending requests require your approval before the notice is sent and the account is locked.</p>
-            {termError && <p className="text-sm text-red-400 mb-3">{termError}</p>}
-            {termLoading ? (
-              <p className="text-center text-gray-500 py-10 text-sm">Loading…</p>
-            ) : termRequests.length === 0 ? (
-              <div className="text-center py-12">
-                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
-                  <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </div>
-                <p className="text-gray-500 text-sm">No termination requests on file.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {termRequests.map(req => {
-                  const isPending = req.status === 'pending_approval'
-                  const isApproved = req.status === 'approved'
-                  const isActing = termActing === req.id
-                  return (
-                    <div
-                      key={req.id}
-                      className={`bg-gray-900 border rounded-2xl p-4 ${
-                        isPending ? 'border-red-800/60' : 'border-gray-800'
-                      }`}
-                    >
-                      {/* Header row */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div>
-                          <p className="text-sm font-bold text-white">{req.employee_name}</p>
-                          <p className="text-xs text-gray-500">{req.employee_email}</p>
-                        </div>
-                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${
-                          isPending ? 'bg-red-900/30 border-red-700/50 text-red-400'
-                          : isApproved ? 'bg-green-900/20 border-green-700/40 text-green-400'
-                          : 'bg-gray-700/30 border-gray-600/40 text-gray-400'
-                        }`}>
-                          {isPending ? 'Pending Approval' : isApproved ? 'Approved' : 'Rejected'}
-                        </span>
-                      </div>
+            <h1 className="text-xl font-bold text-white mb-4">Terminations</h1>
 
-                      {/* Meta */}
-                      <div className="grid grid-cols-2 gap-2 mb-3">
-                        <div className="bg-gray-800 rounded-xl p-2.5">
-                          <p className="text-xs text-gray-500 mb-0.5">Requested By</p>
-                          <p className="text-xs font-medium text-white">{req.requested_by_name}</p>
-                          <p className="text-[10px] text-gray-600 capitalize">{req.requested_by_role.replace('_', ' ')}</p>
-                        </div>
-                        <div className="bg-gray-800 rounded-xl p-2.5">
-                          <p className="text-xs text-gray-500 mb-0.5">Submitted</p>
-                          <p className="text-xs font-medium text-white">{fmtDateTime(req.created_at)}</p>
-                        </div>
-                        {req.approved_by_name && (
-                          <div className="bg-gray-800 rounded-xl p-2.5 col-span-2">
-                            <p className="text-xs text-gray-500 mb-0.5">{isApproved ? 'Approved' : 'Rejected'} By</p>
-                            <p className="text-xs font-medium text-white">{req.approved_by_name} {req.approved_at ? `— ${fmtDateTime(req.approved_at)}` : ''}</p>
+            {/* Sub-tab switcher */}
+            <div className="flex gap-1 mb-5 bg-gray-900 border border-gray-800 rounded-xl p-1">
+              <button
+                onClick={() => setTermSubTab('requests')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${termSubTab === 'requests' ? 'bg-red-800 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Requests
+                {termRequests.filter(r => r.status === 'pending_approval').length > 0 && (
+                  <span className="ml-1.5 bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {termRequests.filter(r => r.status === 'pending_approval').length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={() => setTermSubTab('terminated')}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${termSubTab === 'terminated' ? 'bg-red-800 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Terminated Employees
+                {terminatedEmps.length > 0 && (
+                  <span className="ml-1.5 bg-gray-700 text-gray-300 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                    {terminatedEmps.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* ── Requests sub-tab ── */}
+            {termSubTab === 'requests' && (
+              <>
+                <p className="text-xs text-gray-500 mb-4">Pending requests require your approval before the notice is sent and the account is locked.</p>
+                {termError && <p className="text-sm text-red-400 mb-3">{termError}</p>}
+                {termLoading ? (
+                  <p className="text-center text-gray-500 py-10 text-sm">Loading…</p>
+                ) : termRequests.length === 0 ? (
+                  <div className="text-center py-12">
+                    <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-3">
+                      <svg className="w-6 h-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <p className="text-gray-500 text-sm">No termination requests on file.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {termRequests.map(req => {
+                      const isPending = req.status === 'pending_approval'
+                      const isApproved = req.status === 'approved'
+                      const isActing = termActing === req.id
+                      return (
+                        <div key={req.id} className={`bg-gray-900 border rounded-2xl p-4 ${isPending ? 'border-red-800/60' : 'border-gray-800'}`}>
+                          <div className="flex items-start justify-between gap-3 mb-3">
+                            <div>
+                              <p className="text-sm font-bold text-white">{req.employee_name}</p>
+                              <p className="text-xs text-gray-500">{req.employee_email}</p>
+                            </div>
+                            <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${isPending ? 'bg-red-900/30 border-red-700/50 text-red-400' : isApproved ? 'bg-green-900/20 border-green-700/40 text-green-400' : 'bg-gray-700/30 border-gray-600/40 text-gray-400'}`}>
+                              {isPending ? 'Pending Approval' : isApproved ? 'Approved' : 'Rejected'}
+                            </span>
                           </div>
-                        )}
-                      </div>
-
-                      {/* Reasons */}
-                      <div className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2.5 mb-3">
-                        <p className="text-xs text-gray-500 mb-1">Reason(s) for Termination</p>
-                        <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{req.reasons}</p>
-                      </div>
-
-                      {/* Actions — only for SD/owner/developer and only if pending */}
-                      {isPending && ['sales_director','owner','developer'].includes(session.role) && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleTermAction(req.id, 'approve')}
-                            disabled={isActing}
-                            className="flex-1 bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
-                          >
-                            {isActing ? 'Processing…' : 'Approve & Send Termination Notice'}
-                          </button>
-                          <button
-                            onClick={() => handleTermAction(req.id, 'reject')}
-                            disabled={isActing}
-                            className="px-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-50 text-gray-400 font-semibold py-2.5 rounded-xl text-sm transition-colors"
-                          >
-                            Reject
-                          </button>
+                          <div className="grid grid-cols-2 gap-2 mb-3">
+                            <div className="bg-gray-800 rounded-xl p-2.5">
+                              <p className="text-xs text-gray-500 mb-0.5">Requested By</p>
+                              <p className="text-xs font-medium text-white">{req.requested_by_name}</p>
+                              <p className="text-[10px] text-gray-600 capitalize">{req.requested_by_role.replace('_', ' ')}</p>
+                            </div>
+                            <div className="bg-gray-800 rounded-xl p-2.5">
+                              <p className="text-xs text-gray-500 mb-0.5">Submitted</p>
+                              <p className="text-xs font-medium text-white">{fmtDateTime(req.created_at)}</p>
+                            </div>
+                            {req.approved_by_name && (
+                              <div className="bg-gray-800 rounded-xl p-2.5 col-span-2">
+                                <p className="text-xs text-gray-500 mb-0.5">{isApproved ? 'Approved' : 'Rejected'} By</p>
+                                <p className="text-xs font-medium text-white">{req.approved_by_name}{req.approved_at ? ` — ${fmtDateTime(req.approved_at)}` : ''}</p>
+                              </div>
+                            )}
+                          </div>
+                          <div className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2.5 mb-3">
+                            <p className="text-xs text-gray-500 mb-1">Reason(s) for Termination</p>
+                            <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{req.reasons}</p>
+                          </div>
+                          {isPending && ['sales_director','owner','developer'].includes(session.role) && (
+                            <div className="flex gap-2">
+                              <button onClick={() => handleTermAction(req.id, 'approve')} disabled={isActing}
+                                className="flex-1 bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                                {isActing ? 'Processing…' : 'Approve & Send Termination Notice'}
+                              </button>
+                              <button onClick={() => handleTermAction(req.id, 'reject')} disabled={isActing}
+                                className="px-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-50 text-gray-400 font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                                Reject
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── Terminated Employees sub-tab ── */}
+            {termSubTab === 'terminated' && (
+              <>
+                {/* Search */}
+                <div className="relative mb-4">
+                  <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={termSearch}
+                    onChange={e => setTermSearch(e.target.value)}
+                    placeholder="Search by name…"
+                    className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500"
+                  />
+                </div>
+
+                {termEmpLoading ? (
+                  <p className="text-center text-gray-500 py-10 text-sm">Loading…</p>
+                ) : (() => {
+                  const filtered = terminatedEmps.filter(e =>
+                    e.employee_name.toLowerCase().includes(termSearch.toLowerCase()) ||
+                    e.employee_email.toLowerCase().includes(termSearch.toLowerCase())
+                  )
+                  if (filtered.length === 0) return (
+                    <div className="text-center py-12">
+                      <p className="text-gray-500 text-sm">{termSearch ? 'No employees match your search.' : 'No terminated employees on record.'}</p>
                     </div>
                   )
-                })}
-              </div>
+                  return (
+                    <div className="space-y-2">
+                      {filtered.map(emp => (
+                        <button
+                          key={emp.id}
+                          onClick={() => openTermProfile(emp)}
+                          className="w-full text-left bg-gray-900 border border-gray-800 hover:border-red-800/50 rounded-2xl px-4 py-3.5 transition-colors"
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-white text-sm">{emp.employee_name}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">{emp.employee_email}</p>
+                              <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                {emp.approved_at && (
+                                  <span className="text-[10px] text-gray-600">Terminated {fmtDate(emp.approved_at)}</span>
+                                )}
+                                <span className="text-[10px] bg-red-900/20 border border-red-800/30 text-red-400 px-1.5 py-0.5 rounded-full font-medium">
+                                  {parseInt(emp.doc_count)} doc{parseInt(emp.doc_count) !== 1 ? 's' : ''} on file
+                                </span>
+                              </div>
+                            </div>
+                            <svg className="w-4 h-4 text-gray-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </>
             )}
           </div>
         )}
@@ -1504,6 +1834,188 @@ export default function AccountabilityPage() {
           onRejected={() => { setDetailId(null); loadDocs() }}
           onDelete={() => { setDetailId(null); loadDocs() }}
         />
+      )}
+
+      {/* Termination profile modal */}
+      {termProfile && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-gray-950">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3 px-4 pt-12 pb-4 border-b border-gray-800">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border bg-red-900/20 text-red-400 border-red-800/30">Terminated</span>
+              </div>
+              <p className="font-bold text-white text-base truncate">{termProfile.termRequest.employee_name}</p>
+              <p className="text-xs text-gray-500 truncate">{termProfile.termRequest.employee_email}</p>
+              {termProfile.termRequest.approved_at && (
+                <p className="text-xs text-gray-600 mt-0.5">Terminated {fmtDate(termProfile.termRequest.approved_at)}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => exportTerminationDoc(termProfile.termRequest.employee_id)}
+                disabled={termExporting}
+                className="flex items-center gap-1.5 bg-violet-700 hover:bg-violet-600 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                {termExporting ? 'Exporting…' : 'Export .docx'}
+              </button>
+              <button
+                onClick={() => setTermProfile(null)}
+                className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+
+            {/* Termination summary */}
+            <div className="bg-gray-900 border border-red-900/30 rounded-2xl p-4">
+              <p className="text-xs font-bold uppercase tracking-wider text-red-400 mb-2">Reason(s) for Termination</p>
+              <p className="text-sm text-gray-300 whitespace-pre-wrap leading-relaxed">{termProfile.termRequest.reasons}</p>
+              <div className="mt-3 pt-3 border-t border-gray-800 flex flex-wrap gap-x-4 gap-y-1">
+                <span className="text-xs text-gray-500">Requested by <span className="text-gray-400">{termProfile.termRequest.requested_by_name}</span></span>
+                {termProfile.termRequest.approved_by_name && (
+                  <span className="text-xs text-gray-500">Approved by <span className="text-gray-400">{termProfile.termRequest.approved_by_name}</span></span>
+                )}
+              </div>
+            </div>
+
+            {/* Documentation trail */}
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-3">
+                Accountability Documentation Trail
+                {!termProfileLoading && ` · ${termProfile.docs.length} doc${termProfile.docs.length !== 1 ? 's' : ''}`}
+              </p>
+
+              {termProfileLoading ? (
+                <div className="text-center py-10">
+                  <div className="inline-block w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                </div>
+              ) : termProfile.docs.length === 0 ? (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 text-center">
+                  <p className="text-sm text-gray-500">No accountability documents on file.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {termProfile.docs.map((doc, idx) => {
+                    const expanded = expandedDocs.has(doc.id)
+                    return (
+                      <div key={doc.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                        {/* Doc header — always visible, tap to expand */}
+                        <button
+                          className="w-full text-left px-4 py-3.5"
+                          onClick={() => setExpandedDocs(prev => {
+                            const next = new Set(prev)
+                            next.has(doc.id) ? next.delete(doc.id) : next.add(doc.id)
+                            return next
+                          })}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0"
+                                  style={{ background: doc.level === 'verbal' ? 'rgba(120,53,15,0.2)' : doc.level === 'written' ? 'rgba(124,45,18,0.2)' : 'rgba(127,29,29,0.2)',
+                                    color: doc.level === 'verbal' ? '#fbbf24' : doc.level === 'written' ? '#fb923c' : '#f87171',
+                                    borderColor: doc.level === 'verbal' ? 'rgba(120,53,15,0.4)' : doc.level === 'written' ? 'rgba(124,45,18,0.4)' : 'rgba(127,29,29,0.4)' }}>
+                                  {LEVEL_LABELS[doc.level] ?? doc.level}
+                                </span>
+                                <span className="text-[10px] text-gray-600 font-mono">{doc.ref_number}</span>
+                                <span className="text-[10px] text-gray-600">#{idx + 1}</span>
+                              </div>
+                              <p className="text-sm font-semibold text-white">{doc.title}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {fmtDate(doc.incident_date)} · {doc.author_name}
+                              </p>
+                            </div>
+                            <svg className={`w-4 h-4 text-gray-600 shrink-0 mt-0.5 transition-transform ${expanded ? 'rotate-90' : ''}`}
+                              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                          {/* Ack status row */}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            {doc.ack_status === 'acknowledged' && doc.ack_at ? (
+                              <span className="text-[10px] text-green-400">Acknowledged {fmtDateTime(doc.ack_at)}</span>
+                            ) : doc.ack_status === 'refused' ? (
+                              <span className="text-[10px] text-red-400">Refused acknowledgment</span>
+                            ) : (
+                              <span className="text-[10px] text-amber-400">Awaiting acknowledgment</span>
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Expanded content */}
+                        {expanded && (
+                          <div className="border-t border-gray-800 px-4 py-4 space-y-4">
+
+                            {/* Prior conversations */}
+                            {doc.prior_convos && doc.prior_convos.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Prior Conversations</p>
+                                <div className="space-y-2">
+                                  {doc.prior_convos.map((c, ci) => (
+                                    <div key={ci} className="bg-gray-800/50 rounded-xl px-3 py-2">
+                                      <p className="text-xs font-semibold text-gray-400 mb-0.5">{fmtDate(c.convo_date)}</p>
+                                      <p className="text-xs text-gray-300 leading-relaxed">{c.notes}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Incident notes */}
+                            <div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Incident Notes</p>
+                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{doc.notes}</p>
+                            </div>
+
+                            {/* Expectations */}
+                            <div>
+                              <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Expectations Set</p>
+                              <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">{doc.expectations}</p>
+                            </div>
+
+                            {/* Audit trail */}
+                            {doc.audit_trail && doc.audit_trail.length > 0 && (
+                              <div>
+                                <p className="text-[11px] font-bold uppercase tracking-wider text-gray-500 mb-2">Audit Trail</p>
+                                <div className="space-y-1.5">
+                                  {doc.audit_trail.map((entry, ei) => (
+                                    <div key={ei} className="flex gap-2">
+                                      <span className="text-violet-500 mt-0.5 shrink-0">•</span>
+                                      <div>
+                                        <p className="text-xs font-semibold text-gray-300">{actionLabel(entry.action)}</p>
+                                        <p className="text-[10px] text-gray-500">
+                                          {fmtDateTime(entry.created_at)}
+                                          {entry.actor_name ? ` · ${entry.actor_name}` : ''}
+                                        </p>
+                                        {entry.notes && (
+                                          <p className="text-[10px] text-gray-600 mt-0.5 italic">{entry.notes}</p>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

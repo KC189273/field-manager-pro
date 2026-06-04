@@ -39,7 +39,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false }
+const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -65,6 +65,11 @@ export default function TeamPage() {
   const [bulkLoading, setBulkLoading] = useState(false)
   const [bulkResults, setBulkResults] = useState<{ created: number; errors: number; results: { row: number; username: string; fullName: string; status: 'created' | 'error'; reason?: string }[] } | null>(null)
   const bulkFileRef = useRef<HTMLInputElement>(null)
+
+  const [terminateUser, setTerminateUser] = useState<User | null>(null)
+  const [terminateReasons, setTerminateReasons] = useState('')
+  const [terminateSaving, setTerminateSaving] = useState(false)
+  const [terminateError, setTerminateError] = useState('')
 
   const [roleFilter, setRoleFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
@@ -146,7 +151,7 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false })
+    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false })
     setShowCreate(false)
     setShowTempPw(false)
   }
@@ -178,7 +183,10 @@ export default function TeamPage() {
     if (!editUser) return
     setLoading(true)
     const body: Record<string, unknown> = { userId: editUser.id, isActive: editForm.isActive }
-    if (editForm.password) body.password = editForm.password
+    if (editForm.password) {
+      body.password = editForm.password
+      body.mustChangePassword = editForm.requirePasswordChange
+    }
     if (editForm.fullName !== editUser.full_name) body.fullName = editForm.fullName
     if (editForm.email !== editUser.email) body.email = editForm.email
     if (editForm.role !== editUser.role) body.role = editForm.role
@@ -229,6 +237,29 @@ export default function TeamPage() {
     } else {
       const data = await res.json()
       showMsg(data.error || 'Delete failed', 'error')
+    }
+  }
+
+  async function handleTerminate() {
+    if (!terminateUser || !terminateReasons.trim()) {
+      setTerminateError('Please enter the reasons for termination.')
+      return
+    }
+    setTerminateSaving(true)
+    setTerminateError('')
+    const res = await fetch('/api/accountability/termination', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_id: terminateUser.id, reasons: terminateReasons.trim() }),
+    })
+    setTerminateSaving(false)
+    if (res.ok) {
+      setTerminateUser(null)
+      setTerminateReasons('')
+      showMsg(`Termination request submitted for ${terminateUser.full_name}. Awaiting SD/Owner approval.`)
+    } else {
+      const d = await res.json()
+      setTerminateError(d.error ?? 'Failed to submit termination request.')
     }
   }
 
@@ -501,10 +532,21 @@ export default function TeamPage() {
                     <p className="text-xs text-amber-600">Employee must change this on first login</p>
                   </div>
                 )}
-                <div className="relative">
+                <div className="space-y-2">
                   <input placeholder="Reset password (leave blank to keep)" type="password" value={editForm.password}
                     onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                  {editForm.password && (
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={editForm.requirePasswordChange}
+                        onChange={e => setEditForm(p => ({ ...p, requirePasswordChange: e.target.checked }))}
+                        className="w-4 h-4 rounded accent-violet-500"
+                      />
+                      <span className="text-xs text-gray-400">Require password change on next login</span>
+                    </label>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Role</label>
@@ -622,6 +664,49 @@ export default function TeamPage() {
         )}
 
         {/* Delete confirmation */}
+        {/* Terminate modal */}
+        {terminateUser && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex flex-col justify-end" onClick={() => setTerminateUser(null)}>
+            <div className="bg-gray-900 rounded-t-3xl border-t border-gray-800 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-center pt-3 pb-1">
+                <div className="w-10 h-1 bg-gray-700 rounded-full" />
+              </div>
+              <div className="px-5 pb-8 pt-3">
+                <p className="text-xs font-bold text-red-400 uppercase tracking-wide mb-0.5">Initiate Termination</p>
+                <p className="font-semibold text-white mb-1">{terminateUser.full_name}</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  This will submit a termination request requiring approval from a Sales Director or Owner before any action is taken. If denied, it will be logged on record.
+                </p>
+                {terminateError && <p className="text-sm text-red-400 mb-3">{terminateError}</p>}
+                <label className="block text-xs text-gray-500 mb-1.5">Reason(s) for Termination</label>
+                <textarea
+                  value={terminateReasons}
+                  onChange={e => setTerminateReasons(e.target.value)}
+                  rows={5}
+                  placeholder="Describe the reasons for termination…"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none mb-4"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleTerminate}
+                    disabled={terminateSaving || !terminateReasons.trim()}
+                    className="flex-1 bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                  >
+                    {terminateSaving ? 'Submitting…' : 'Submit for Approval'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTerminateUser(null)}
+                    className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {confirmDelete && (
           <div className="bg-red-950 border border-red-800 rounded-2xl p-5 mb-5">
             <p className="text-white font-semibold mb-1">Permanently delete {confirmDelete.full_name}?</p>
@@ -768,6 +853,11 @@ export default function TeamPage() {
                         onEdit={() => openEdit(user)}
                         onToggle={() => toggleActive(user)}
                         onDelete={() => setConfirmDelete(user)}
+                        onTerminate={
+                          user.is_active && !['owner','developer','sales_director'].includes(user.role) && user.id !== session?.id
+                            ? () => { setTerminateUser(user); setTerminateReasons(''); setTerminateError('') }
+                            : undefined
+                        }
                         onStores={user.role === 'manager' ? () => openStorePanel(user.id) : undefined}
                         storesPanelOpen={storePanel === user.id}
                       />
@@ -902,6 +992,11 @@ export default function TeamPage() {
                       onEdit={() => openEdit(user)}
                       onToggle={() => toggleActive(user)}
                       onDelete={() => setConfirmDelete(user)}
+                      onTerminate={
+                        user.is_active && !['owner','developer','sales_director'].includes(user.role) && user.id !== session?.id
+                          ? () => { setTerminateUser(user); setTerminateReasons(''); setTerminateError('') }
+                          : undefined
+                      }
                     />
                   )
                 ))}
@@ -1251,6 +1346,7 @@ function UserCard({
   onEdit,
   onToggle,
   onDelete,
+  onTerminate,
   onStores,
   storesPanelOpen,
 }: {
@@ -1259,12 +1355,23 @@ function UserCard({
   onEdit: () => void
   onToggle: () => void
   onDelete: () => void
+  onTerminate?: () => void
   onStores?: () => void
   storesPanelOpen?: boolean
 }) {
+  const colorClass = ROLE_COLORS[user.role] ?? ROLE_COLORS.employee
+
   return (
     <div className={`bg-gray-900 border px-4 py-3 ${storesPanelOpen ? 'rounded-t-2xl border-gray-700' : 'rounded-2xl'} ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'}`}>
       <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          {user.avatar_url ? (
+            <img src={user.avatar_url} alt={user.full_name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+          ) : (
+            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${colorClass}`}>
+              {initials(user.full_name)}
+            </div>
+          )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <p className={`font-medium text-sm ${user.is_active ? 'text-white' : 'text-gray-400 line-through'}`}>
@@ -1278,6 +1385,7 @@ function UserCard({
             )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5 truncate">@{user.username} · {subtitle}</p>
+        </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0 flex-wrap justify-end">
           <button onClick={onEdit}
@@ -1298,6 +1406,15 @@ function UserCard({
             className={`text-xs font-semibold transition-colors ${user.is_active ? 'text-amber-400 hover:text-amber-300' : 'text-green-400 hover:text-green-300'}`}>
             {user.is_active ? 'Deactivate' : 'Reactivate'}
           </button>
+          {onTerminate && (
+            <>
+              <span className="text-gray-700">·</span>
+              <button onClick={onTerminate}
+                className="text-red-400 hover:text-red-300 text-xs font-semibold transition-colors">
+                Terminate
+              </button>
+            </>
+          )}
           <span className="text-gray-700">·</span>
           <button onClick={onDelete}
             className="text-red-500 hover:text-red-400 text-xs font-semibold transition-colors">

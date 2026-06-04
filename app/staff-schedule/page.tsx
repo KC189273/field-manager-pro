@@ -25,6 +25,8 @@ interface Employee {
   id: string
   full_name: string
   role: string
+  is_active?: boolean
+  is_terminated?: boolean
   avatar_url?: string | null
 }
 
@@ -172,7 +174,11 @@ export default function StaffSchedulePage() {
         setSelectedStore(storeList[0].id)
       }
       setEmployees(
-        (team.users ?? []).filter((u: Employee) => u.role === 'employee' || u.role === 'manager')
+        (team.users ?? []).filter((u: Employee) =>
+          (u.role === 'employee' || u.role === 'manager') &&
+          u.is_active !== false &&
+          !u.is_terminated
+        )
       )
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps

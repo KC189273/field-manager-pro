@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
+      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
        FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
@@ -59,7 +59,7 @@ export async function GET(req: NextRequest) {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
+      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
        FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest) {
 
   // Manager: their employees + peer DMs if withPeers=true + org-wide floaters for scheduling
   const employees = await query(
-    `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
+    `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
      FROM users WHERE manager_id = $1 AND role = 'employee' ORDER BY full_name`,
     [session.id]
   )
@@ -76,7 +76,7 @@ export async function GET(req: NextRequest) {
   let peers: Record<string, unknown>[] = []
   if (withPeers && session.org_id) {
     peers = await query(
-      `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
+      `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
        FROM users WHERE role = 'manager' AND org_id = $1 AND id != $2 AND is_active = TRUE ORDER BY full_name`,
       [session.org_id, session.id]
     )
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest) {
   let orgFloaters: Record<string, unknown>[] = []
   if (session.org_id) {
     orgFloaters = await query(
-      `SELECT id, username, email, full_name, role, is_active, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
+      `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
        FROM users WHERE is_floater = TRUE AND role = 'employee' AND is_active = TRUE
          AND org_id = $1 AND (manager_id IS NULL OR manager_id != $2)
        ORDER BY full_name`,
@@ -199,7 +199,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, isActive, password, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab } = await req.json()
+  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab } = await req.json()
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -226,10 +226,15 @@ export async function PATCH(req: NextRequest) {
   }
   if (password) {
     const hash = await bcrypt.hash(password, 12)
+    // mustChangePassword defaults to true unless caller explicitly passes false
+    const forceChange = mustChangePassword !== false
     await query(
-      `UPDATE users SET password_hash = $1, temp_password = $2, must_change_password = TRUE WHERE id = $3`,
-      [hash, password, userId]
+      `UPDATE users SET password_hash = $1, temp_password = $2, must_change_password = $3 WHERE id = $4`,
+      [hash, password, forceChange, userId]
     )
+  } else if (mustChangePassword === false) {
+    // Clear the flag without changing the password (e.g. for stable test accounts)
+    await query(`UPDATE users SET must_change_password = FALSE WHERE id = $1`, [userId])
   }
   if (fullName) await query(`UPDATE users SET full_name = $1 WHERE id = $2`, [fullName.trim(), userId])
   if (email) await query(`UPDATE users SET email = $1 WHERE id = $2`, [email.trim(), userId])

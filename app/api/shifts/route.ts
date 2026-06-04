@@ -5,6 +5,7 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 const canManageShifts = (role: Role) => isManager(role) || isOwner(role) || role === 'developer'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, manualTimeEntryHtml } from '@/lib/notifications'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -21,14 +22,16 @@ export async function GET(req: NextRequest) {
 
     const params: unknown[] = []
     let sql = `
-      SELECT s.*, u.full_name, u.username,
+      SELECT s.*, u.full_name, u.username, u.avatar_key,
         mb.full_name as manual_by_name,
+        sl.address as store_name,
         COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds,
         (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds,
-        (SELECT json_agg(json_build_object('break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
+        (SELECT json_agg(json_build_object('id', b.id, 'break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN users mb ON mb.id = s.manual_by
+      LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
       WHERE u.role != 'developer'
     `
 
@@ -44,7 +47,13 @@ export async function GET(req: NextRequest) {
     if (to) { params.push(to); sql += ` AND s.clock_in_at <= $${params.length}` }
     sql += ` ORDER BY u.full_name, s.clock_in_at`
 
-    const shifts = await query(sql, params)
+    const rawShifts = await query(sql, params)
+    const shifts = await Promise.all(
+      (rawShifts as Record<string, unknown>[]).map(async s => ({
+        ...s,
+        avatar_url: s.avatar_key ? await getReceiptViewUrl(s.avatar_key as string) : null,
+      }))
+    )
     return NextResponse.json({ shifts })
   }
 
@@ -55,14 +64,16 @@ export async function GET(req: NextRequest) {
   }
 
   let sql = `
-    SELECT s.*, u.full_name, u.username,
+    SELECT s.*, u.full_name, u.username, u.avatar_key,
       mb.full_name as manual_by_name,
+      sl.address as store_name,
       COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds,
       (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) as duration_seconds,
-      (SELECT json_agg(json_build_object('break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
+      (SELECT json_agg(json_build_object('id', b.id, 'break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL) as breaks
     FROM shifts s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN users mb ON mb.id = s.manual_by
+    LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
     WHERE s.user_id = $1
   `
   const params: unknown[] = [userId]
@@ -71,7 +82,13 @@ export async function GET(req: NextRequest) {
   if (to) { params.push(to); sql += ` AND s.clock_in_at <= $${params.length}` }
   sql += ` ORDER BY s.clock_in_at DESC LIMIT 50`
 
-  const shifts = await query(sql, params)
+  const rawShifts = await query(sql, params)
+  const shifts = await Promise.all(
+    (rawShifts as Record<string, unknown>[]).map(async s => ({
+      ...s,
+      avatar_url: s.avatar_key ? await getReceiptViewUrl(s.avatar_key as string) : null,
+    }))
+  )
   return NextResponse.json({ shifts })
 }
 

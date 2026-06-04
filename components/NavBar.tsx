@@ -208,7 +208,14 @@ export default function NavBar({ role, fullName }: NavBarProps) {
   useEffect(() => {
     if (role === 'developer' || role === 'owner' || role === 'sales_director') return
     if (isCapacitor()) {
-      resumeNativeTrackingIfClocked()
+      // Only resume background tracking if the user has already seen and acknowledged
+      // the prominent location disclosure (shown on first clock-in).
+      // Without this guard, the background-location permission dialog fires on every
+      // app open for clocked-in users — before any in-app disclosure — which fails
+      // Google Play's Prominent Disclosure policy.
+      if (localStorage.getItem('fmp_location_disclosure_ack')) {
+        resumeNativeTrackingIfClocked()
+      }
       return
     }
     // Use activeShift from the combined nav/status fetch (already in navActiveShiftRef)
@@ -314,22 +321,21 @@ export default function NavBar({ role, fullName }: NavBarProps) {
         </div>
       </header>
 
-      {/* Notification panel */}
+      {/* Notification sidebar */}
       {notifOpen && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-          onClick={() => setNotifOpen(false)}
-        >
+        <>
+          {/* Tap-outside backdrop — does not block the page, just catches outside taps */}
           <div
-            className="bg-gray-900 rounded-t-2xl max-h-[80vh] flex flex-col"
-            onClick={e => e.stopPropagation()}
+            className="fixed inset-0 z-40"
+            onClick={() => setNotifOpen(false)}
+          />
+          {/* Sidebar panel */}
+          <div
+            className="fixed top-14 right-0 bottom-16 z-50 w-80 bg-gray-900 border-l border-gray-800 shadow-2xl flex flex-col"
+            style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            <div className="flex justify-center pt-3 pb-1">
-              <div className="w-10 h-1 rounded-full bg-gray-700" />
-            </div>
-            <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
-              <p className="text-white font-bold text-base">Notifications</p>
+            <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between flex-shrink-0">
+              <p className="text-white font-bold text-sm">Notifications</p>
               <button onClick={() => setNotifOpen(false)} className="text-gray-500 hover:text-gray-300 transition-colors">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -338,7 +344,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
             </div>
             <div className="overflow-y-auto flex-1 divide-y divide-gray-800/60">
               {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="flex flex-col items-center justify-center py-16 text-center px-4">
                   <svg className="w-10 h-10 text-gray-700 mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                   </svg>
@@ -350,17 +356,16 @@ export default function NavBar({ role, fullName }: NavBarProps) {
                   return (
                     <button
                       key={n.id}
-                      className={`w-full text-left px-5 py-4 transition-colors ${n.read ? '' : 'bg-violet-950/20'} ${path ? 'hover:bg-gray-800/60 active:bg-gray-800' : ''}`}
+                      className={`w-full text-left px-4 py-3.5 transition-colors ${n.read ? '' : 'bg-violet-950/20'} ${path ? 'hover:bg-gray-800/60 active:bg-gray-800' : ''}`}
                       onClick={() => {
                         setNotifOpen(false)
                         if (path) router.push(path)
                       }}
                     >
-                      <div className="flex items-start gap-3">
-                        {!n.read && <div className="w-2 h-2 rounded-full bg-violet-500 flex-shrink-0 mt-1.5" />}
-                        {n.read && <div className="w-2 h-2 flex-shrink-0 mt-1.5" />}
+                      <div className="flex items-start gap-2.5">
+                        <div className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${n.read ? '' : 'bg-violet-500'}`} />
                         <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-semibold leading-tight ${n.read ? 'text-gray-300' : 'text-white'}`}>{n.title}</p>
+                          <p className={`text-xs font-semibold leading-tight ${n.read ? 'text-gray-300' : 'text-white'}`}>{n.title}</p>
                           <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{n.body}</p>
                           <div className="flex items-center gap-2 mt-1">
                             <p className="text-[10px] text-gray-600">{fmtNotifTime(n.created_at)}</p>
@@ -374,7 +379,7 @@ export default function NavBar({ role, fullName }: NavBarProps) {
               )}
             </div>
           </div>
-        </div>
+        </>
       )}
 
       {/* Profile sheet */}

@@ -13,6 +13,7 @@ interface SupplyRequest {
   id: string
   employee_id: string
   employee_name: string
+  employee_avatar_url?: string | null
   manager_id: string | null
   manager_name: string | null
   store_location_id: string | null
@@ -140,9 +141,15 @@ function RequestCard({
 
       {/* Employee / DM name (for managers / ops+) */}
       {session.role !== 'employee' && (
-        <p className="text-xs text-violet-400 mb-1">{req.employee_name}
-          {req.manager_name ? <span className="text-gray-600"> · DM: {req.manager_name}</span> : null}
-        </p>
+        <div className="flex items-center gap-1.5 mb-1">
+          {req.employee_avatar_url
+            ? <img src={req.employee_avatar_url} alt={req.employee_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+            : <div className="w-5 h-5 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{req.employee_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+          }
+          <p className="text-xs text-violet-400">{req.employee_name}
+            {req.manager_name ? <span className="text-gray-600"> · DM: {req.manager_name}</span> : null}
+          </p>
+        </div>
       )}
 
       {req.notes && <p className="text-xs text-gray-500 mb-2 italic">"{req.notes}"</p>}

@@ -14,8 +14,10 @@ interface SwapRequest {
   status: string
   requester_id: string
   requester_name: string
+  requester_avatar_url?: string | null
   target_id: string
   target_name: string
+  target_avatar_url?: string | null
   manager_id: string
   requester_note: string | null
   target_note: string | null
@@ -233,9 +235,15 @@ export default function ShiftSwapsPage() {
                 <div className="space-y-3">
                   {needsMyResponse.map(swap => (
                     <div key={swap.id} className="bg-gray-900 border border-yellow-600/40 rounded-2xl p-4">
-                      <p className="text-sm font-semibold text-white mb-1">
-                        {swap.requester_name} wants to swap shifts with you
-                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        {swap.requester_avatar_url
+                          ? <img src={swap.requester_avatar_url} alt={swap.requester_name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-7 h-7 rounded-full bg-violet-800 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{swap.requester_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                        }
+                        <p className="text-sm font-semibold text-white">
+                          {swap.requester_name} wants to swap shifts with you
+                        </p>
+                      </div>
                       <p className="text-xs text-gray-500 mb-3">
                         {swap.created_at ? new Date(swap.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}
                       </p>

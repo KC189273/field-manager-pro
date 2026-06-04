@@ -3,6 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { computeStops, matchStopsToStores, type StoreLocation } from '@/lib/gps'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 export async function GET() {
   const session = await getSession()
@@ -28,10 +29,11 @@ export async function GET() {
     userFilter = ` AND s.user_id = $${params.length}`
   }
 
-  const employees = await query<{
+  const rawEmployees = await query<{
     shift_id: string
     user_id: string
     full_name: string
+    avatar_key: string | null
     user_role: string
     clock_in_at: string
     lat: number | null
@@ -42,6 +44,7 @@ export async function GET() {
       s.id AS shift_id,
       s.user_id,
       u.full_name,
+      u.avatar_key,
       u.role AS user_role,
       s.clock_in_at::text,
       COALESCE(
@@ -64,6 +67,12 @@ export async function GET() {
       ${userFilter}
     ORDER BY u.full_name
   `, params)
+  const employees = await Promise.all(
+    rawEmployees.map(async e => ({
+      ...e,
+      avatar_url: e.avatar_key ? await getReceiptViewUrl(e.avatar_key) : null,
+    }))
+  )
 
   // Breadcrumbs only for DM (manager) shifts, and only for higher roles
   const canSeePaths = ['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)

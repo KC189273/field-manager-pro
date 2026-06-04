@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { unstable_cache } from 'next/cache'
 import { getSession, canViewTeam, canSubmitExpense } from '@/lib/auth'
+
+export const dynamic = 'force-dynamic'
 import { query, queryOne } from '@/lib/db'
 import NavBar from '@/components/NavBar'
 import WelcomeBanner from '@/components/WelcomeBanner'
@@ -13,10 +15,10 @@ const getCachedAggregates = unstable_cache(
     const [flagRow, clockedInRow, teamRow, pendingExpRow] = await Promise.all([
       queryOne<{ count: string }>(
         role === 'manager'
-          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.manager_id = $1`
+          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND f.created_at >= NOW() - INTERVAL '7 days' AND u.manager_id = $1`
           : orgId
-          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND u.org_id = $1`
-          : `SELECT COUNT(*) as count FROM flags WHERE resolved = FALSE`,
+          ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND f.created_at >= NOW() - INTERVAL '7 days' AND u.org_id = $1`
+          : `SELECT COUNT(*) as count FROM flags WHERE resolved = FALSE AND created_at >= NOW() - INTERVAL '7 days'`,
         role === 'manager' ? [managerId] : orgId ? [orgId] : []
       ).catch(() => null),
       queryOne<{ count: string }>(
@@ -116,13 +118,18 @@ export default async function DashboardPage() {
           [session.id]
         ).catch(() => [] as { shift_date: string; start_time: string; end_time: string; role_note: string | null; store_address: string }[])
       : Promise.resolve([] as { shift_date: string; start_time: string; end_time: string; role_note: string | null; store_address: string }[]),
-    // Tasks assigned to me — incomplete only
+    // Tasks assigned to me — incomplete and current only
+    // "Current" = has a due date not more than 30 days overdue, OR no due date and created within 90 days
     query<{ id: string; title: string; due_date: string | null }>(
       `SELECT t.id, t.title, t.due_date::text
        FROM tasks t
        LEFT JOIN task_completions tc ON tc.task_id = t.id
        WHERE t.assignee_id = $1
          AND tc.task_id IS NULL
+         AND (
+           (t.due_date IS NULL AND t.created_at >= NOW() - INTERVAL '90 days')
+           OR t.due_date >= CURRENT_DATE - INTERVAL '30 days'
+         )
        ORDER BY t.due_date ASC NULLS LAST, t.created_at ASC
        LIMIT 10`,
       [session.id]

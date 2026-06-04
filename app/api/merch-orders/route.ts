@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
@@ -104,15 +105,24 @@ export async function GET(req: NextRequest) {
     if (filterStore) { params.push(filterStore); where += ` AND mo.store_location_id = $${params.length}` }
   }
 
-  const orders = await query(`
+  const rawOrders = await query(`
     SELECT mo.*,
            mo.created_at::text,
            mo.ordered_at::text,
-           mo.updated_at::text
+           mo.updated_at::text,
+           u.avatar_key AS requester_avatar_key
     FROM merch_orders mo
+    LEFT JOIN users u ON u.id = mo.requester_id
     WHERE ${where}
     ORDER BY mo.created_at DESC
   `, params)
+
+  const orders = await Promise.all(
+    (rawOrders as Record<string, unknown>[]).map(async o => ({
+      ...o,
+      requester_avatar_url: o.requester_avatar_key ? await getReceiptViewUrl(o.requester_avatar_key as string) : null,
+    }))
+  )
 
   // Stores + ops managers for submit form (employee / DM)
   let stores: { id: string; address: string }[] = []

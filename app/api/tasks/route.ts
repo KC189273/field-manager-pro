@@ -114,7 +114,7 @@ export async function GET(req: NextRequest) {
   const tasks = await query<TaskRow>(`
     SELECT
       t.id, t.week_start::text, t.title, t.description, t.due_date::text,
-      t.assignee_id, a.full_name AS assignee_name,
+      t.assignee_id, a.full_name AS assignee_name, a.avatar_key AS assignee_avatar_key,
       t.created_by, cb.full_name AS created_by_name,
       t.created_at::text,
       tc.completed_at::text, tc.note, tc.photo_key, tc.photo_keys,
@@ -138,6 +138,9 @@ export async function GET(req: NextRequest) {
       ...t,
       photo_url: t.photo_key ? await getReceiptViewUrl(t.photo_key) : null,
       photo_urls: await Promise.all((t.photo_keys ?? []).map(k => getReceiptViewUrl(k))),
+      assignee_avatar_url: (t as unknown as Record<string, unknown>).assignee_avatar_key
+        ? await getReceiptViewUrl((t as unknown as Record<string, unknown>).assignee_avatar_key as string)
+        : null,
     }))
   )
 

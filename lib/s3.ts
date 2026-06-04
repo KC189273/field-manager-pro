@@ -14,8 +14,11 @@ const s3 = new S3Client({
 
 const BUCKET = process.env.S3_BUCKET!
 
-export async function getReceiptUploadUrl(key: string, contentType: string): Promise<string> {
-  const cmd = new PutObjectCommand({ Bucket: BUCKET, Key: key, ContentType: contentType })
+export async function getReceiptUploadUrl(key: string, contentType?: string): Promise<string> {
+  const cmd = new PutObjectCommand({
+    Bucket: BUCKET, Key: key,
+    ...(contentType ? { ContentType: contentType } : {}),
+  })
   return getSignedUrl(s3, cmd, { expiresIn: 300 })
 }
 

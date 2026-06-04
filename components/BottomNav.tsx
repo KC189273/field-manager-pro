@@ -52,7 +52,7 @@ const ALL_FEATURES: Feature[] = [
   { href: '/facilities',      label: 'Facilities',       short: 'Facilities',Icon: FacilitiesIcon,     show: () => true },
   { href: '/supply-requests', label: 'Supplies',         short: 'Supplies',  Icon: SupplyIcon,         show: () => true },
   { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: () => true },
-  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: r => r !== 'employee' },
+  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: () => true },
   { href: '/dm-visit',        label: 'DM Store Visit',   short: 'DM Visit',  Icon: StoreIcon,          show: canViewTeam },
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: isOpsPlus },
   { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => r !== 'employee' },
@@ -77,6 +77,11 @@ export default function BottomNav() {
   const [role, setRole] = useState<Role | null>(null)
   const [pinnedHrefs, setPinnedHrefs] = useState<string[]>([])
   const [moreOpen, setMoreOpen] = useState(false)
+
+  // Close the More sheet whenever the route changes
+  useEffect(() => {
+    setMoreOpen(false)
+  }, [pathname])
 
   // Load role — use localStorage cache for instant render, then confirm with API
   useEffect(() => {

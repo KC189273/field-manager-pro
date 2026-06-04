@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 import { sendEmail, timeOffRequestedHtml, timeOffDecisionHtml } from '@/lib/notifications'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
 let ensured = false
@@ -62,14 +63,20 @@ export async function GET() {
     SELECT tor.id, tor.start_date::text, tor.end_date::text, tor.reason,
            tor.status, tor.notes, tor.created_at::text,
            tor.partial_day, tor.partial_start_time::text, tor.partial_end_time::text,
-           u.full_name AS user_name, u.id AS user_id
+           u.full_name AS user_name, u.id AS user_id, u.avatar_key AS user_avatar_key
     FROM time_off_requests tor
     JOIN users u ON u.id = tor.user_id
     WHERE tor.approver_id = $1 AND tor.status = 'pending'
     ORDER BY tor.created_at ASC
   `, [session.id])
 
-  return NextResponse.json({ myRequests, pendingApprovals })
+  const pendingApprovalsWithAvatars = await Promise.all(
+    (pendingApprovals as Record<string, unknown>[]).map(async p => ({
+      ...p,
+      user_avatar_url: p.user_avatar_key ? await getReceiptViewUrl(p.user_avatar_key as string) : null,
+    }))
+  )
+  return NextResponse.json({ myRequests, pendingApprovals: pendingApprovalsWithAvatars })
 }
 
 // POST /api/time-off — submit a new request

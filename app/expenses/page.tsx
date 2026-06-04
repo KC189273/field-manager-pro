@@ -28,6 +28,7 @@ interface Expense {
   approved_at: string | null
   paid_at: string | null
   user_full_name: string
+  user_avatar_url?: string | null
   submitter_full_name: string
   approver_full_name: string | null
 }
@@ -431,9 +432,15 @@ export default function ExpensesPage() {
                     <div className="border-t border-gray-800 divide-y divide-gray-800/60">
                       {rows.map((exp) => (
                         <div key={exp.id} className="px-4 py-2.5 flex items-center justify-between gap-2">
-                          <div className="min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {exp.user_avatar_url
+                              ? <img src={exp.user_avatar_url} alt={exp.user_full_name} className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                              : <div className="w-7 h-7 rounded-full bg-violet-800 flex items-center justify-center text-[9px] font-bold text-white flex-shrink-0">{exp.user_full_name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                            }
+                            <div className="min-w-0">
                             <p className="text-sm text-white font-medium truncate">{exp.category}</p>
                             <p className="text-xs text-gray-500 truncate">{exp.user_full_name} · {exp.date}</p>
+                            </div>
                           </div>
                           <p className="text-sm font-semibold text-white shrink-0">${parseFloat(exp.amount).toFixed(2)}</p>
                         </div>

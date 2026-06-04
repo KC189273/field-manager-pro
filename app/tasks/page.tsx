@@ -48,6 +48,7 @@ interface Task {
   due_date: string | null
   assignee_id: string
   assignee_name: string
+  assignee_avatar_url?: string | null
   created_by: string | null
   created_by_name: string | null
   created_at: string
@@ -1268,7 +1269,11 @@ function TaskCard({
             <Linkified text={task.description} className="text-xs text-gray-500 mt-0.5" />
           )}
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${isStoreTask ? 'bg-blue-900/40 text-blue-300 border-blue-800/40' : 'bg-violet-900/40 text-violet-300 border-violet-800/40'}`}>
+            <span className={`inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border ${isStoreTask ? 'bg-blue-900/40 text-blue-300 border-blue-800/40' : 'bg-violet-900/40 text-violet-300 border-violet-800/40'}`}>
+              {!isStoreTask && (task.assignee_avatar_url
+                ? <img src={task.assignee_avatar_url} alt={task.assignee_name} className="w-3.5 h-3.5 rounded-full object-cover flex-shrink-0" />
+                : <div className="w-3.5 h-3.5 rounded-full bg-violet-700 flex items-center justify-center text-[6px] font-bold text-white flex-shrink-0">{task.assignee_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+              )}
               {isStoreTask ? '🏪 ' : ''}{assigneeLabel}
             </span>
             {task.created_by_name && (

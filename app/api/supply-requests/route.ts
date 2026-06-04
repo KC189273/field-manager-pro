@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUser, sendPushToUsers, isEmailEnabled } from '@/lib/apns'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
@@ -112,18 +113,27 @@ export async function GET(req: NextRequest) {
     if (filterStore) { params.push(filterStore); where += ` AND sr.store_location_id = $${params.length}` }
   }
 
-  const requests = await query(`
+  const rawRequests = await query(`
     SELECT sr.*,
            sr.created_at::text,
            sr.ordered_at::text,
            sr.received_at::text,
            sr.order_escalated_at::text,
            sr.receipt_escalated_at::text,
-           sr.updated_at::text
+           sr.updated_at::text,
+           u.avatar_key AS employee_avatar_key
     FROM supply_requests sr
+    LEFT JOIN users u ON u.id = sr.employee_id
     WHERE ${where}
     ORDER BY sr.urgency ASC, sr.created_at ASC
   `, params)
+
+  const requests = await Promise.all(
+    (rawRequests as Record<string, unknown>[]).map(async r => ({
+      ...r,
+      employee_avatar_url: r.employee_avatar_key ? await getReceiptViewUrl(r.employee_avatar_key as string) : null,
+    }))
+  )
 
   // For employees and DMs: return store list for the submit form
   let stores: { id: string; address: string }[] = []

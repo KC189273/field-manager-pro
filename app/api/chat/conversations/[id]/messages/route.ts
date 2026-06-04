@@ -6,6 +6,13 @@ import { getReceiptViewUrl } from '@/lib/s3'
 
 const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
 
+let replyColEnsured = false
+async function ensureReplyCol() {
+  if (replyColEnsured) return
+  replyColEnsured = true
+  await query(`ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS reply_to_id UUID REFERENCES chat_messages(id) ON DELETE SET NULL`).catch(() => {})
+}
+
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -14,6 +21,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params
   const { searchParams } = new URL(req.url)
   const after = searchParams.get('after') // ISO timestamp for polling
+
+  try { await ensureReplyCol() } catch {}
 
   // Verify user is a participant
   const participant = await queryOne(`
@@ -29,16 +38,26 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     body: string
     type: string
     created_at: string
+    reply_to_id: string | null
+    reply_to_body: string | null
+    reply_to_type: string | null
+    reply_to_sender_name: string | null
   }>(
     after
-      ? `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
+      ? `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at,
+                m.reply_to_id, rm.body AS reply_to_body, rm.type AS reply_to_type, ru.full_name AS reply_to_sender_name
          FROM chat_messages m
          JOIN users u ON u.id = m.sender_id
+         LEFT JOIN chat_messages rm ON rm.id = m.reply_to_id
+         LEFT JOIN users ru ON ru.id = rm.sender_id
          WHERE m.conversation_id = $1 AND m.created_at > $2
          ORDER BY m.created_at ASC`
-      : `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
+      : `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at,
+                m.reply_to_id, rm.body AS reply_to_body, rm.type AS reply_to_type, ru.full_name AS reply_to_sender_name
          FROM chat_messages m
          JOIN users u ON u.id = m.sender_id
+         LEFT JOIN chat_messages rm ON rm.id = m.reply_to_id
+         LEFT JOIN users ru ON ru.id = rm.sender_id
          WHERE m.conversation_id = $1
          ORDER BY m.created_at DESC LIMIT 100`,
     after ? [id, after] : [id]
@@ -47,12 +66,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Return in ascending order (oldest first) for display
   const ordered = after ? messages : [...messages].reverse()
 
-  // Sign URLs for image messages
+  // Sign URLs for image and file messages
   const withUrls = await Promise.all(
     ordered.map(async (msg) => {
       if (msg.type === 'image') {
         const url = await getReceiptViewUrl(msg.body).catch(() => msg.body)
         return { ...msg, body: url }
+      }
+      if (msg.type === 'file') {
+        const sepIdx = msg.body.indexOf('|||')
+        const key = sepIdx >= 0 ? msg.body.slice(0, sepIdx) : msg.body
+        const name = sepIdx >= 0 ? msg.body.slice(sepIdx + 3) : ''
+        const url = await getReceiptViewUrl(key).catch(() => key)
+        return { ...msg, body: `${url}|||${name}` }
       }
       return msg
     })
@@ -136,12 +162,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!CHAT_ROLES.includes(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id } = await params
-  const { body, type } = await req.json()
+  const { body, type, replyToId } = await req.json()
 
   if (!body?.trim()) return NextResponse.json({ error: 'Empty message' }, { status: 400 })
   if (type === 'image' && !body.startsWith('chat/')) {
     return NextResponse.json({ error: 'Invalid image key' }, { status: 400 })
   }
+  if (type === 'file' && !body.startsWith('chat/')) {
+    return NextResponse.json({ error: 'Invalid file key' }, { status: 400 })
+  }
+
+  try { await ensureReplyCol() } catch {}
 
   // Verify user is a participant
   const participant = await queryOne(`
@@ -150,10 +181,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!participant) return NextResponse.json({ error: 'Not a participant' }, { status: 403 })
 
   const message = await queryOne<{ id: string; created_at: string }>(`
-    INSERT INTO chat_messages (conversation_id, sender_id, body, type)
-    VALUES ($1, $2, $3, $4)
+    INSERT INTO chat_messages (conversation_id, sender_id, body, type, reply_to_id)
+    VALUES ($1, $2, $3, $4, $5)
     RETURNING id, created_at
-  `, [id, session.id, body.trim(), type || 'text'])
+  `, [id, session.id, body.trim(), type || 'text', replyToId || null])
 
   if (!message) return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
 
@@ -176,6 +207,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? `${session.fullName} sent a GIF`
     : type === 'image'
     ? `${session.fullName} sent a photo`
+    : type === 'file'
+    ? `${session.fullName} sent a file`
     : body.trim()
 
   // Get all other participants with mute status and username for mention matching
@@ -218,7 +251,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     ? await getReceiptViewUrl(body.trim()).catch(() => body.trim())
     : body.trim()
 
-  const senderRow = await queryOne<{ avatar_key: string | null }>(`SELECT avatar_key FROM users WHERE id = $1`, [session.id]).catch(() => null)
+  const [senderRow, replyRow] = await Promise.all([
+    queryOne<{ avatar_key: string | null }>(`SELECT avatar_key FROM users WHERE id = $1`, [session.id]).catch(() => null),
+    replyToId
+      ? queryOne<{ body: string; type: string; sender_name: string }>(
+          `SELECT rm.body, rm.type, u.full_name AS sender_name FROM chat_messages rm JOIN users u ON u.id = rm.sender_id WHERE rm.id = $1`,
+          [replyToId]
+        ).catch(() => null)
+      : Promise.resolve(null),
+  ])
   const senderAvatarUrl = senderRow?.avatar_key ? await getReceiptViewUrl(senderRow.avatar_key).catch(() => null) : null
 
   return NextResponse.json({
@@ -231,6 +272,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       type: type || 'text',
       created_at: message.created_at,
       reactions: [],
+      reply_to_id: replyToId || null,
+      reply_to_body: replyRow?.body || null,
+      reply_to_type: replyRow?.type || null,
+      reply_to_sender_name: replyRow?.sender_name || null,
     }
   })
 }

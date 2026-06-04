@@ -63,10 +63,17 @@ export async function GET(req: NextRequest) {
             body: string
             type: string
             created_at: string
+            reply_to_id: string | null
+            reply_to_body: string | null
+            reply_to_type: string | null
+            reply_to_sender_name: string | null
           }>(
-            `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at
+            `SELECT m.id, m.sender_id, u.full_name AS sender_name, u.avatar_key AS sender_avatar_key, m.body, m.type, m.created_at,
+                    m.reply_to_id, rm.body AS reply_to_body, rm.type AS reply_to_type, ru.full_name AS reply_to_sender_name
              FROM chat_messages m
              JOIN users u ON u.id = m.sender_id
+             LEFT JOIN chat_messages rm ON rm.id = m.reply_to_id
+             LEFT JOIN users ru ON ru.id = rm.sender_id
              WHERE m.conversation_id = $1 AND m.created_at > $2
              ORDER BY m.created_at ASC`,
             [conversationId, after]

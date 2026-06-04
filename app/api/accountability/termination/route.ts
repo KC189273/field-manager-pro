@@ -31,7 +31,7 @@ async function ensureTerminationTables() {
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ`)
 }
 
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
@@ -40,7 +40,44 @@ export async function GET(_req: NextRequest) {
 
   try { await ensureTerminationTables() } catch {}
 
+  const { searchParams } = new URL(req.url)
   const orgFilter = await getOrgFilter(session)
+
+  // ── Terminated employees directory ───────────────────────────────────────
+  if (searchParams.get('view') === 'terminated') {
+    const params: unknown[] = []
+    const conditions: string[] = [`tr.status = 'approved'`]
+
+    if (orgFilter.filterByOrg && orgFilter.orgId) {
+      params.push(orgFilter.orgId)
+      conditions.push(`tr.org_id = $${params.length}`)
+    }
+    if (session.role === 'manager') {
+      params.push(session.id)
+      conditions.push(`tr.requested_by = $${params.length}`)
+    }
+
+    const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+    const employees = await query<{
+      id: string; employee_id: string; employee_name: string; employee_email: string
+      requested_by_name: string; requested_by_role: string; reasons: string
+      approved_by_name: string | null; approved_at: string | null; created_at: string
+      doc_count: string
+    }>(`
+      SELECT tr.*,
+        COALESCE((
+          SELECT COUNT(*)::text FROM accountability_docs ad
+          WHERE ad.subject_id = tr.employee_id AND ad.status IN ('approved','needs_revision')
+        ), '0') AS doc_count
+      FROM termination_requests tr
+      ${whereClause}
+      ORDER BY tr.approved_at DESC NULLS LAST, tr.created_at DESC
+    `, params)
+
+    return NextResponse.json({ employees })
+  }
+
+  // ── Pending / all termination requests ───────────────────────────────────
   let whereClause = ''
   const queryParams: unknown[] = []
 
@@ -49,7 +86,6 @@ export async function GET(_req: NextRequest) {
     queryParams.push(orgFilter.orgId)
   }
 
-  // Managers only see their own termination requests
   if (session.role === 'manager') {
     const param = queryParams.length + 1
     whereClause = whereClause

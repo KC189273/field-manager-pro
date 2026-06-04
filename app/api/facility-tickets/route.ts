@@ -3,6 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { sendEmail } from '@/lib/notifications'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
 const CATEGORIES = [
@@ -124,7 +125,7 @@ export async function GET(req: NextRequest) {
     where += appendOrgFilter(orgFilter, params, 'ft')
   }
 
-  const tickets = await query<{
+  const rawTickets = await query<{
     id: string; store_address: string | null; category: string; custom_category: string | null
     title: string; description: string | null; urgency: string; photo_key: string | null
     status: string; submitted_by: string | null; submitted_by_name: string
@@ -133,14 +134,23 @@ export async function GET(req: NextRequest) {
     SELECT ft.id, ft.store_address, ft.category, ft.custom_category,
            ft.title, ft.description, ft.urgency, ft.photo_key,
            ft.status, ft.submitted_by, ft.submitted_by_name,
-           ft.created_at::text, ft.updated_at::text
+           ft.created_at::text, ft.updated_at::text,
+           u.avatar_key AS submitted_by_avatar_key
     FROM facility_tickets ft
+    LEFT JOIN users u ON u.id = ft.submitted_by
     WHERE ${where}
     ORDER BY
       CASE ft.urgency WHEN 'urgent' THEN 0 ELSE 1 END,
       CASE ft.status WHEN 'open' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
       ft.created_at DESC
   `, params)
+
+  const tickets = await Promise.all(
+    (rawTickets as unknown as Record<string, unknown>[]).map(async t => ({
+      ...t,
+      submitted_by_avatar_url: t.submitted_by_avatar_key ? await getReceiptViewUrl(t.submitted_by_avatar_key as string) : null,
+    }))
+  )
 
   // Stores available for submission form
   let stores: { id: string; address: string }[] = []

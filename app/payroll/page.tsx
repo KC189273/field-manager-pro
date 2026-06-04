@@ -41,6 +41,7 @@ interface Period {
 }
 
 interface EmployeeHours {
+  avatar_url?: string | null
   user_id: string
   full_name: string
   regular_hours: number
@@ -270,7 +271,15 @@ export default function PayrollPage() {
                               <tbody>
                                 {myHours.map(emp => (
                                   <tr key={emp.user_id} className="border-b border-gray-700/50 last:border-0">
-                                    <td className="px-3 py-2 text-gray-200">{emp.full_name}</td>
+                                    <td className="px-3 py-2 text-gray-200">
+                                      <div className="flex items-center gap-2">
+                                        {emp.avatar_url
+                                          ? <img src={emp.avatar_url} alt={emp.full_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                                          : <div className="w-6 h-6 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{emp.full_name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                                        }
+                                        {emp.full_name}
+                                      </div>
+                                    </td>
                                     <td className="px-3 py-2 text-right text-gray-300">{emp.regular_hours.toFixed(2)}</td>
                                     <td className={`px-3 py-2 text-right font-medium ${emp.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
                                       {emp.ot_hours.toFixed(2)}

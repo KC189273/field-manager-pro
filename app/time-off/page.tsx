@@ -34,6 +34,7 @@ interface PendingApproval {
   created_at: string
   user_name: string
   user_id: string
+  user_avatar_url?: string | null
   partial_day: boolean
   partial_start_time: string | null
   partial_end_time: string | null
@@ -272,7 +273,12 @@ export default function TimeOffPage() {
                   {pendingApprovals.map(approval => (
                     <div key={approval.id} className="bg-gray-900 border border-amber-800/50 rounded-2xl p-4">
                       <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                          {approval.user_avatar_url
+                            ? <img src={approval.user_avatar_url} alt={approval.user_name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                            : <div className="w-8 h-8 rounded-full bg-violet-800 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">{approval.user_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                          }
+                          <div className="min-w-0 flex-1">
                           <p className="text-white font-semibold text-sm">{approval.user_name}</p>
                           <p className="text-amber-400 text-sm font-medium mt-0.5">{fmtDateRange(approval.start_date, approval.end_date, approval.partial_day, approval.partial_start_time, approval.partial_end_time)}</p>
                           {approval.reason && (
@@ -281,6 +287,7 @@ export default function TimeOffPage() {
                           <p className="text-gray-600 text-[10px] mt-1">
                             Submitted {new Date(approval.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                           </p>
+                          </div>
                         </div>
                       </div>
                       <div className="flex gap-2 mt-3">

@@ -3,6 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { computeStops, matchStopsToStores, type StoreLocation } from '@/lib/gps'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username, u.role AS user_role
+             u.full_name, u.username, u.role AS user_role, u.avatar_key
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE s.user_id = $1${df}
       ORDER BY s.clock_in_at DESC LIMIT 50
@@ -63,7 +64,7 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username, u.role AS user_role
+             u.full_name, u.username, u.role AS user_role, u.avatar_key
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE 1=1${dateFilter}${orgClause}
       ORDER BY s.clock_in_at DESC LIMIT 200
@@ -105,12 +106,20 @@ export async function GET(req: NextRequest) {
     shifts = await query(`
       SELECT s.id, s.user_id, s.clock_in_at, s.clock_in_lat, s.clock_in_lng, s.clock_in_address,
              s.clock_out_at, s.clock_out_lat, s.clock_out_lng, s.clock_out_address,
-             u.full_name, u.username, u.role AS user_role
+             u.full_name, u.username, u.role AS user_role, u.avatar_key
       FROM shifts s JOIN users u ON u.id = s.user_id
       WHERE s.user_id = $1${df}
       ORDER BY s.clock_in_at DESC LIMIT 50
     `, params)
   }
+
+  // Compute avatar URLs from keys
+  shifts = await Promise.all(
+    (shifts as Record<string, unknown>[]).map(async s => ({
+      ...s,
+      avatar_url: s.avatar_key ? await getReceiptViewUrl(s.avatar_key as string) : null,
+    }))
+  )
 
   // Fetch breadcrumbs only for DM (manager) shifts, and only for roles that can see paths
   const canSeePaths = ['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)

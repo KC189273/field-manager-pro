@@ -13,6 +13,7 @@ interface MerchOrder {
   id: string
   requester_id: string
   requester_name: string
+  requester_avatar_url?: string | null
   requester_role: string
   manager_id: string | null
   manager_name: string | null
@@ -85,7 +86,12 @@ function OrderCard({
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
       {/* Header */}
       <div className="flex items-start justify-between gap-3 mb-2">
-        <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {order.requester_avatar_url
+            ? <img src={order.requester_avatar_url} alt={order.requester_name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+            : <div className="w-8 h-8 rounded-full bg-violet-800 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">{order.requester_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+          }
+          <div className="min-w-0 flex-1">
           <p className="text-white font-semibold text-sm">
             {order.requester_name}
             {order.requester_role === 'manager' && (
@@ -98,6 +104,7 @@ function OrderCard({
           {order.store_address && (
             <p className="text-xs text-gray-500 mt-0.5">{order.store_address}</p>
           )}
+          </div>
         </div>
         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize shrink-0 ${STATUS_COLOR[order.status]}`}>
           {order.status}

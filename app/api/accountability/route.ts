@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 import crypto from 'crypto'
@@ -111,18 +112,25 @@ async function ensureTable() {
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS revision_requested_at TIMESTAMPTZ`).catch(() => {})
   await query(`ALTER TABLE accountability_docs DROP CONSTRAINT IF EXISTS accountability_docs_status_check`).catch(() => {})
   await query(`ALTER TABLE accountability_docs ADD CONSTRAINT accountability_docs_status_check CHECK (status IN ('pending_approval','approved','rejected','needs_revision'))`).catch(() => {})
+  // Migrate: add conversation workflow columns
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_status TEXT`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_approved_at TIMESTAMPTZ`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_escalated_at TIMESTAMPTZ`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`).catch(() => {})
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 async function generateRefNumber(orgId: string): Promise<string> {
   const year = new Date().getFullYear()
-  const rows = await query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM accountability_docs
-     WHERE org_id = $1 AND EXTRACT(YEAR FROM created_at) = $2`,
-    [orgId, year]
+  const prefix = `ACC-${year}-`
+  const row = await queryOne<{ max_seq: string | null }>(
+    `SELECT MAX(SUBSTRING(ref_number FROM ${prefix.length + 1})::int)::text AS max_seq
+     FROM accountability_docs
+     WHERE org_id = $1 AND ref_number LIKE $2`,
+    [orgId, `${prefix}%`]
   )
-  const seq = (parseInt(rows[0]?.count ?? '0') + 1).toString().padStart(4, '0')
-  return `ACC-${year}-${seq}`
+  const seq = ((parseInt(row?.max_seq ?? '0') || 0) + 1).toString().padStart(4, '0')
+  return `${prefix}${seq}`
 }
 
 function generateAckToken(): string {
@@ -429,6 +437,26 @@ async function sendApprovedDocEmails(doc: {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Employees: return only their own approved notices (with ack_token so they can acknowledge in-app)
+  if (session.role === 'employee') {
+    try { await ensureTable() } catch {}
+    const myDocs = await query<{
+      id: string; ref_number: string; level: string; title: string
+      incident_date: string; status: string; ack_status: string; ack_at: string | null
+      author_name: string; ack_token: string | null; created_at: string
+    }>(
+      `SELECT id, ref_number, level, title, incident_date::text, status, ack_status, ack_at,
+              author_name, ack_token, created_at
+       FROM accountability_docs
+       WHERE subject_id = $1 AND status = 'approved'
+         AND (conversation_status IS NULL OR conversation_status IN ('complete', 'bypassed'))
+       ORDER BY created_at DESC`,
+      [session.id]
+    ).catch(() => [])
+    return NextResponse.json({ docs: myDocs, pendingApproval: [], subjects: [], authors: [] })
+  }
+
   if (!VIEWER_ROLES.includes(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   try { await ensureTable() } catch { /* already exists */ }
@@ -476,17 +504,25 @@ export async function GET(req: NextRequest) {
     rejected_at: string | null; rejected_by_name: string | null; rejection_notes: string | null
     created_at: string
   }>(
-    `SELECT id, ref_number, org_id, subject_id, subject_name, subject_role,
-            author_id, author_name, author_role, level, title, incident_date::text,
-            status, ack_status, ack_at, sd_name, approver_name, approved_at,
-            rejected_at, rejected_by_name, rejection_notes,
-            revision_notes, revision_requested_by_name, conversation_status,
-            created_at
+    `SELECT d.id, d.ref_number, d.org_id, d.subject_id, d.subject_name, d.subject_role,
+            d.author_id, d.author_name, d.author_role, d.level, d.title, d.incident_date::text,
+            d.status, d.ack_status, d.ack_at, d.sd_name, d.approver_name, d.approved_at,
+            d.rejected_at, d.rejected_by_name, d.rejection_notes,
+            d.revision_notes, d.revision_requested_by_name, d.conversation_status,
+            d.created_at,
+            u.avatar_key AS subject_avatar_key
      FROM accountability_docs d
+     LEFT JOIN users u ON u.id = d.subject_id
      ${whereClause}
      ORDER BY d.created_at DESC
      LIMIT 200`,
     params
+  )
+  const docsWithAvatars = await Promise.all(
+    (docs as Record<string, unknown>[]).map(async d => ({
+      ...d,
+      subject_avatar_url: d.subject_avatar_key ? await getReceiptViewUrl(d.subject_avatar_key as string) : null,
+    }))
   )
 
   // Pending approval queue — docs awaiting this SD or owner's action
@@ -506,15 +542,23 @@ export async function GET(req: NextRequest) {
     }
 
     pendingApproval = await query(
-      `SELECT id, ref_number, org_id, subject_id, subject_name, subject_role,
-              author_id, author_name, author_role, level, title, incident_date::text,
-              status, ack_status, ack_at, sd_name, approver_name, approved_at,
-              rejected_at, rejected_by_name, rejection_notes, created_at
+      `SELECT d.id, d.ref_number, d.org_id, d.subject_id, d.subject_name, d.subject_role,
+              d.author_id, d.author_name, d.author_role, d.level, d.title, d.incident_date::text,
+              d.status, d.ack_status, d.ack_at, d.sd_name, d.approver_name, d.approved_at,
+              d.rejected_at, d.rejected_by_name, d.rejection_notes, d.created_at,
+              u.avatar_key AS subject_avatar_key
        FROM accountability_docs d
+       LEFT JOIN users u ON u.id = d.subject_id
        WHERE ${pendingWhere.join(' AND ')}
        ORDER BY d.created_at ASC`,
       pendingParams
     )
+    pendingApproval = await Promise.all(
+      (pendingApproval as Record<string, unknown>[]).map(async d => ({
+        ...d,
+        subject_avatar_url: d.subject_avatar_key ? await getReceiptViewUrl(d.subject_avatar_key as string) : null,
+      }))
+    ) as unknown as typeof pendingApproval
   }
 
   // Subjects list for filter dropdowns (direct reports for DM, broader for higher roles)
@@ -538,6 +582,13 @@ export async function GET(req: NextRequest) {
         [orgFilter.orgId, session.id]
       )
     }
+  } else if (session.role === 'sales_director') {
+    // SD can only write up DMs who report directly to them
+    subjects = await query(
+      `SELECT id, full_name, role FROM users
+       WHERE manager_id = $1 AND role = 'manager' AND is_active = TRUE ORDER BY full_name`,
+      [session.id]
+    )
   } else if (session.role === 'manager') {
     subjects = await query(
       `SELECT id, full_name, role FROM users
@@ -564,7 +615,7 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  return NextResponse.json({ docs, pendingApproval, subjects, authors })
+  return NextResponse.json({ docs: docsWithAvatars, pendingApproval, subjects, authors })
 }
 
 // ─── POST — create a new accountability doc ───────────────────────────────────
@@ -575,6 +626,7 @@ export async function POST(req: NextRequest) {
 
   try { await ensureTable() } catch { /* already exists */ }
 
+  try {
   const body = await req.json()
   const {
     subjectId, level, title, incidentDate, notes, expectations,
@@ -632,31 +684,45 @@ export async function POST(req: NextRequest) {
   const initialStatus = (autoApprove || level === 'verbal') ? 'approved' : 'pending_approval'
   const ackToken = (autoApprove || level === 'verbal') ? generateAckToken() : null
 
-  const refNumber = await generateRefNumber(orgId)
-
-  const [doc] = await query<{ id: string; created_at: string }>(
-    `INSERT INTO accountability_docs
-      (ref_number, org_id, subject_id, subject_name, subject_role, subject_email,
-       author_id, author_name, author_role, author_email,
-       level, title, incident_date, notes, expectations,
-       status, sd_id, sd_name, sd_email,
-       ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
-     RETURNING id, created_at`,
-    [
-      refNumber, orgId,
-      subject.id, subject.full_name, subject.role, subject.email,
-      session.id, session.fullName, session.role, session.email,
-      level, title.trim(), incidentDate, notes.trim(), expectations.trim(),
-      initialStatus,
-      sd?.id ?? null, sd?.name ?? null, sd?.email ?? null,
-      ackToken, 'pending',
-      true,
-      (autoApprove || level === 'verbal') ? new Date().toISOString() : null,
-      (autoApprove || level === 'verbal') ? session.id : null,
-      (autoApprove || level === 'verbal') ? session.fullName : null,
-    ]
-  )
+  let refNumber = await generateRefNumber(orgId)
+  let doc: { id: string; created_at: string }
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const rows = await query<{ id: string; created_at: string }>(
+        `INSERT INTO accountability_docs
+          (ref_number, org_id, subject_id, subject_name, subject_role, subject_email,
+           author_id, author_name, author_role, author_email,
+           level, title, incident_date, notes, expectations,
+           status, sd_id, sd_name, sd_email,
+           ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+         RETURNING id, created_at`,
+        [
+          refNumber, orgId,
+          subject.id, subject.full_name, subject.role, subject.email,
+          session.id, session.fullName, session.role, session.email,
+          level, title.trim(), incidentDate, notes.trim(), expectations.trim(),
+          initialStatus,
+          sd?.id ?? null, sd?.name ?? null, sd?.email ?? null,
+          ackToken, 'pending',
+          true,
+          (autoApprove || level === 'verbal') ? new Date().toISOString() : null,
+          (autoApprove || level === 'verbal') ? session.id : null,
+          (autoApprove || level === 'verbal') ? session.fullName : null,
+        ]
+      )
+      doc = rows[0]
+      break
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ''
+      if (attempt < 4 && msg.includes('ref_number')) {
+        refNumber = await generateRefNumber(orgId)
+        continue
+      }
+      throw err
+    }
+  }
+  doc = doc!
 
   // Insert prior convos
   if (Array.isArray(priorConvos) && priorConvos.length) {
@@ -703,7 +769,9 @@ export async function POST(req: NextRequest) {
         notes, expectations, sd_id: sd?.id ?? null, sd_name: sd?.name ?? null, sd_email: sd?.email ?? null,
         ack_token: ackToken!, created_at: doc.created_at,
       }
-      await sendApprovedDocEmails(docFull, savedPriorConvos, linkedVerbals)
+      await sendApprovedDocEmails(docFull, savedPriorConvos, linkedVerbals).catch((emailErr: unknown) => {
+        console.error('sendApprovedDocEmails error:', emailErr)
+      })
       sendPushToUser(session.id, 'Accountability Notice Sent', `${refNumber} — ${subject.full_name} has been notified.`, 'accountability').catch(() => {})
       if (sd) sendPushToUser(sd.id, 'Accountability Notice Filed', `${session.fullName} filed a ${level} notice on ${subject.full_name} (${refNumber}).`, 'accountability').catch(() => {})
       await auditLog(doc.id, 'emails_sent', session.id, session.fullName, `${autoApprove ? 'Owner auto-approved' : 'Verbal'} — sent to subject and author`)
@@ -754,4 +822,8 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, id: doc.id, refNumber })
+  } catch (err) {
+    console.error('POST /api/accountability error:', err)
+    return NextResponse.json({ error: 'Submission failed. Please try again.' }, { status: 500 })
+  }
 }

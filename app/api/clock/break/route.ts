@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
+import { getSession, isManager, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUsers } from '@/lib/apns'
 
@@ -19,11 +19,50 @@ async function ensureBreaksTable() {
   `)
 }
 
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session || (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+  const { breakId } = await req.json()
+  if (!breakId) return NextResponse.json({ error: 'Missing breakId' }, { status: 400 })
+  await query(`DELETE FROM shift_breaks WHERE id = $1`, [breakId])
+  return NextResponse.json({ ok: true })
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { action } = await req.json()
+  const body = await req.json()
+  const { action } = body
+
+  // ── Manager: manually insert a completed break on any shift ──────────────
+  if (action === 'manual_add') {
+    if (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer') {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const { shiftId, breakStart, breakEnd } = body
+    if (!shiftId || !breakStart || !breakEnd) {
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+    }
+    const startMs = new Date(breakStart).getTime()
+    const endMs = new Date(breakEnd).getTime()
+    if (isNaN(startMs) || isNaN(endMs) || startMs >= endMs) {
+      return NextResponse.json({ error: 'Invalid break times — end must be after start' }, { status: 400 })
+    }
+    try { await ensureBreaksTable() } catch {}
+    const shift = await queryOne<{ id: string; user_id: string }>(
+      `SELECT id, user_id FROM shifts WHERE id = $1`, [shiftId]
+    )
+    if (!shift) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
+    await query(
+      `INSERT INTO shift_breaks (shift_id, user_id, break_start, break_end) VALUES ($1, $2, $3, $4)`,
+      [shiftId, shift.user_id, breakStart, breakEnd]
+    )
+    return NextResponse.json({ ok: true })
+  }
+
   if (action !== 'start' && action !== 'end') {
     return NextResponse.json({ error: 'action must be "start" or "end"' }, { status: 400 })
   }

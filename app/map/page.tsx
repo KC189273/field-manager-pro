@@ -36,6 +36,7 @@ interface LiveEmployee {
   shift_id: string
   user_id: string
   full_name: string
+  avatar_url?: string | null
   user_role: string
   clock_in_at: string
   lat: number | null

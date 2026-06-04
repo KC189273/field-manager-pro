@@ -19,6 +19,7 @@ interface Flag {
   resolved: boolean
   full_name: string
   username: string
+  avatar_url?: string | null
   created_at: string
   resolution_note: string | null
   resolved_by_name: string | null
@@ -158,7 +159,15 @@ export default function FlagsPage() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-sm">{FLAG_LABELS[flag.type] ?? flag.type}</p>
-                      {isManager && <p className="text-xs opacity-70 mt-0.5">{flag.full_name}</p>}
+                      {isManager && (
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {flag.avatar_url
+                            ? <img src={flag.avatar_url} alt={flag.full_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                            : <div className="w-5 h-5 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{flag.full_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                          }
+                          <p className="text-xs opacity-70">{flag.full_name}</p>
+                        </div>
+                      )}
                       <p className="text-xs opacity-60 mt-0.5">
                         {new Date(flag.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                       </p>
@@ -204,7 +213,13 @@ export default function FlagsPage() {
               {FLAG_LABELS[activeFlag.type] ?? activeFlag.type}
             </div>
 
-            <h2 className="text-lg font-bold text-white mb-1">{activeFlag.full_name}</h2>
+            <div className="flex items-center gap-3 mb-1">
+              {activeFlag.avatar_url
+                ? <img src={activeFlag.avatar_url} alt={activeFlag.full_name} className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                : <div className="w-10 h-10 rounded-full bg-violet-800 flex items-center justify-center text-sm font-bold text-white flex-shrink-0">{activeFlag.full_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+              }
+              <h2 className="text-lg font-bold text-white">{activeFlag.full_name}</h2>
+            </div>
             <p className="text-sm text-gray-400 mb-1">
               {new Date(activeFlag.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
             </p>

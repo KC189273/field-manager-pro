@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const fromClause = from ? (params.push(from), `AND e.date >= $${params.length}`) : ''
     const toClause = to ? (params.push(to), `AND e.date <= $${params.length}`) : ''
     rows = await query(
-      `SELECT e.*, u.full_name as user_full_name, u.email as user_email,
+      `SELECT e.*, u.full_name as user_full_name, u.email as user_email, u.avatar_key as user_avatar_key,
               s.full_name as submitter_full_name,
               a.full_name as approver_full_name
        FROM expenses e
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
     const fromClause = from ? (params.push(from), `AND e.date >= $${params.length}`) : ''
     const toClause = to ? (params.push(to), `AND e.date <= $${params.length}`) : ''
     rows = await query(
-      `SELECT e.*, u.full_name as user_full_name, u.email as user_email,
+      `SELECT e.*, u.full_name as user_full_name, u.email as user_email, u.avatar_key as user_avatar_key,
               s.full_name as submitter_full_name,
               a.full_name as approver_full_name
        FROM expenses e
@@ -80,6 +80,7 @@ export async function GET(req: NextRequest) {
           e.receipt_urls = []
         }
       }
+      e.user_avatar_url = e.user_avatar_key ? await getReceiptViewUrl(e.user_avatar_key as string) : null
       return e
     })
   )

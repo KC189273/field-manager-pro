@@ -22,6 +22,7 @@ interface Ticket {
   status: string
   submitted_by: string | null
   submitted_by_name: string
+  submitted_by_avatar_url?: string | null
   created_at: string
   updated_at: string
 }
@@ -244,7 +245,13 @@ export default function FacilitiesPage() {
                   <p className="text-xs text-gray-500 mb-1">{ticket.store_address}</p>
                 )}
                 <div className="flex items-center justify-between mt-2">
-                  <span className="text-xs text-gray-600">{ticket.submitted_by_name}</span>
+                  <div className="flex items-center gap-1.5">
+                    {ticket.submitted_by_avatar_url
+                      ? <img src={ticket.submitted_by_avatar_url} alt={ticket.submitted_by_name} className="w-5 h-5 rounded-full object-cover flex-shrink-0" />
+                      : <div className="w-5 h-5 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{ticket.submitted_by_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                    }
+                    <span className="text-xs text-gray-600">{ticket.submitted_by_name}</span>
+                  </div>
                   <span className="text-xs text-gray-600">
                     {new Date(ticket.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                   </span>

@@ -34,13 +34,22 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   accountability: '/accountability',
   shift_swap: '/shift-swaps',
   supply_request: '/supply-requests',
+  supply_ordered: '/supply-requests',
+  supply_received: '/supply-requests',
   merch_order: '/merch-orders',
+  merch_ordered: '/merch-orders',
   payroll: '/payroll',
+  clock: '/clock',
   clock_out: '/timecards',
+  clock_in_reminder: '/clock',
+  clock_out_reminder: '/clock',
+  auto_clock_out: '/timecards',
   handoff_note: '/timecards',
   calendar_event: '/calendar',
   calendar_invite: '/calendar',
   calendar_rsvp: '/calendar',
+  pending_approval: '/team',
+  gps_alert: '/map',
 }
 
 interface Org { id: string; name: string }

@@ -58,7 +58,7 @@ export async function GET() {
     )
     created++
 
-    sendPushToUser(manager.id, 'New Task', TITLE).catch(() => {})
+    sendPushToUser(manager.id, 'New Task', TITLE, 'task_assigned').catch(() => {})
 
     const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
     sendEmail(

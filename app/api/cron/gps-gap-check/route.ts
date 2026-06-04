@@ -51,7 +51,8 @@ export async function GET() {
         sendPushToUser(
           u.id,
           'Location Alert',
-          `${shift.full_name}'s location hasn't updated in ${shift.gap_minutes} min.`
+          `${shift.full_name}'s location hasn't updated in ${shift.gap_minutes} min.`,
+          'gps_alert'
         ).catch(() => {})
       }
     }

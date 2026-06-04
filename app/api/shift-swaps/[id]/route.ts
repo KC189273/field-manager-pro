@@ -126,7 +126,7 @@ export async function PATCH(
         `UPDATE shift_swap_requests SET status = 'target_declined', target_note = $1, responded_at = NOW() WHERE id = $2`,
         [note?.trim() || null, id]
       )
-      sendPushToUser(swap.requester_id, 'Swap Request Declined', `${session.fullName} declined your shift swap request`, 'task_assigned').catch(() => {})
+      sendPushToUser(swap.requester_id, 'Swap Request Declined', `${session.fullName} declined your shift swap request`, 'shift_swap').catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
@@ -151,7 +151,7 @@ export async function PATCH(
     ])
 
     // Notify requester that target accepted
-    sendPushToUser(swap.requester_id, 'Swap Request Accepted!', `${targetInfo?.full_name} accepted — awaiting manager approval`, 'task_assigned').catch(() => {})
+    sendPushToUser(swap.requester_id, 'Swap Request Accepted!', `${targetInfo?.full_name} accepted — awaiting manager approval`, 'shift_swap').catch(() => {})
 
     if (rShift && tShift && managerInfo) {
       const rPeriod = getBiWeeklyPeriod(rShift.shift_date)
@@ -163,7 +163,7 @@ export async function PATCH(
       ])
 
       sendPushToUser(swap.manager_id, 'Shift Swap Needs Approval',
-        `${requesterInfo?.full_name} ↔ ${targetInfo?.full_name} — tap to review`, 'task_assigned').catch(() => {})
+        `${requesterInfo?.full_name} ↔ ${targetInfo?.full_name} — tap to review`, 'shift_swap').catch(() => {})
 
       if (managerInfo.email && await isEmailEnabled(swap.manager_id)) {
         const html = shiftSwapDmReviewHtml({
@@ -205,8 +205,8 @@ export async function PATCH(
         `UPDATE shift_swap_requests SET status = 'denied', dm_note = $1, decided_at = NOW() WHERE id = $2`,
         [note.trim(), id]
       )
-      sendPushToUser(swap.requester_id, 'Shift Swap Denied', 'Your manager denied the swap request. Check the app for details.', 'task_assigned').catch(() => {})
-      sendPushToUser(swap.target_id, 'Shift Swap Denied', 'Your manager denied the swap request. Check the app for details.', 'task_assigned').catch(() => {})
+      sendPushToUser(swap.requester_id, 'Shift Swap Denied', 'Your manager denied the swap request. Check the app for details.', 'shift_swap').catch(() => {})
+      sendPushToUser(swap.target_id, 'Shift Swap Denied', 'Your manager denied the swap request. Check the app for details.', 'shift_swap').catch(() => {})
       return NextResponse.json({ ok: true })
     }
 
@@ -228,9 +228,9 @@ export async function PATCH(
     const fmtDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
     sendPushToUser(swap.requester_id, 'Shift Swap Approved!',
-      `Your ${rShift ? fmtDate(rShift.shift_date) : ''} shift has been swapped with ${tInfo?.full_name}`, 'task_assigned').catch(() => {})
+      `Your ${rShift ? fmtDate(rShift.shift_date) : ''} shift has been swapped with ${tInfo?.full_name}`, 'shift_swap').catch(() => {})
     sendPushToUser(swap.target_id, 'Shift Swap Approved!',
-      `Your ${tShift ? fmtDate(tShift.shift_date) : ''} shift has been swapped with ${rInfo?.full_name}`, 'task_assigned').catch(() => {})
+      `Your ${tShift ? fmtDate(tShift.shift_date) : ''} shift has been swapped with ${rInfo?.full_name}`, 'shift_swap').catch(() => {})
 
     return NextResponse.json({ ok: true })
   }

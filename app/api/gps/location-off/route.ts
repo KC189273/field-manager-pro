@@ -12,7 +12,8 @@ export async function POST() {
   sendPushToUser(
     session.id,
     'Location Access Required',
-    'Field Manager Pro needs location access to track your store visits. Please re-enable Location Services.'
+    'Field Manager Pro needs location access to track your store visits. Please re-enable Location Services.',
+    'gps_alert'
   ).catch(() => {})
 
   // Notify ops managers in the same org
@@ -26,7 +27,8 @@ export async function POST() {
       sendPushToUser(
         u.id,
         'Location Alert',
-        `${session.fullName} has disabled location tracking.`
+        `${session.fullName} has disabled location tracking.`,
+        'gps_alert'
       ).catch(() => {})
     }
   }

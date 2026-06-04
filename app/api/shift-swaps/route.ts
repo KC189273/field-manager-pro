@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
+import { getReceiptViewUrl } from '@/lib/s3'
 import { sendEmail, shiftSwapRequestedHtml } from '@/lib/notifications'
 
 let ensured = false
@@ -79,8 +80,8 @@ export async function GET(req: NextRequest) {
     SELECT
       ssr.id, ssr.status, ssr.requester_note, ssr.target_note, ssr.dm_note,
       ssr.created_at::text, ssr.responded_at::text, ssr.decided_at::text,
-      ssr.requester_id, ru.full_name AS requester_name,
-      ssr.target_id, tu.full_name AS target_name,
+      ssr.requester_id, ru.full_name AS requester_name, ru.avatar_key AS requester_avatar_key,
+      ssr.target_id, tu.full_name AS target_name, tu.avatar_key AS target_avatar_key,
       ssr.manager_id,
       rs.id AS requester_shift_id, rs.shift_date::text AS requester_shift_date,
       rs.start_time::text AS requester_shift_start, rs.end_time::text AS requester_shift_end,
@@ -99,8 +100,15 @@ export async function GET(req: NextRequest) {
     ORDER BY ssr.created_at DESC
     LIMIT 100
   `, [session.id])
+  const swapsWithAvatars = await Promise.all(
+    (swaps as Record<string, unknown>[]).map(async s => ({
+      ...s,
+      requester_avatar_url: s.requester_avatar_key ? await getReceiptViewUrl(s.requester_avatar_key as string) : null,
+      target_avatar_url: s.target_avatar_key ? await getReceiptViewUrl(s.target_avatar_key as string) : null,
+    }))
+  )
 
-  return NextResponse.json({ swaps })
+  return NextResponse.json({ swaps: swapsWithAvatars })
 }
 
 // POST /api/shift-swaps — create swap request (employees only)
@@ -171,7 +179,7 @@ export async function POST(req: NextRequest) {
     weekday: 'short', month: 'short', day: 'numeric',
   })
 
-  sendPushToUser(targetId, 'Shift Swap Request', `${session.fullName} wants to swap shifts with you`, 'task_assigned').catch(() => {})
+  sendPushToUser(targetId, 'Shift Swap Request', `${session.fullName} wants to swap shifts with you`, 'shift_swap').catch(() => {})
 
   if (await isEmailEnabled(targetId)) {
     sendEmail(

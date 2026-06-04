@@ -8,8 +8,19 @@ const PDF_URL = 'https://fieldmanagerpro.app/service-analysis.pdf'
 
 function openPdf() {
   if (isCapacitor()) {
-    // Android/iOS WebViews can't render PDFs via target="_blank" — open in system browser instead
-    window.open(PDF_URL, '_system')
+    // Use Web Share API when available — on Android this surfaces the native share sheet
+    // which includes a Print option via the system print framework.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cap = (window as any)?.Capacitor
+    const isAndroid = cap?.getPlatform?.() === 'android'
+    if (isAndroid && navigator.share) {
+      navigator.share({ title: 'Service Analysis Sheet', url: PDF_URL }).catch(() => {
+        window.open(PDF_URL, '_blank')
+      })
+    } else {
+      // iOS and fallback: open in system browser
+      window.open(PDF_URL, '_system')
+    }
   } else {
     window.open('/service-analysis.pdf', '_blank')
   }

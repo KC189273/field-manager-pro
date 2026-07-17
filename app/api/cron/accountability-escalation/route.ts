@@ -95,9 +95,13 @@ export async function GET(_req: NextRequest) {
         ).catch(() => {})
       }
 
-      // Also alert owners
+      // Also alert owners (respecting notification preferences)
       const owners = await query<{ id: string }>(
-        `SELECT id FROM users WHERE org_id = $1 AND role IN ('owner', 'developer') AND is_active = TRUE`,
+        `SELECT u.id FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+         WHERE u.org_id = $1 AND u.role IN ('owner', 'developer') AND u.is_active = TRUE
+           AND COALESCE(np.accountability_docs, TRUE) = TRUE
+           AND COALESCE(np.push_enabled, TRUE) = TRUE`,
         [doc.org_id]
       )
       if (owners.length) {
@@ -140,15 +144,19 @@ export async function GET(_req: NextRequest) {
     )
 
     for (const doc of overdueApprovals) {
-      // Find all owners in this org
-      const owners = await query<{ id: string; email: string; full_name: string }>(
-        `SELECT id, email, full_name FROM users
-         WHERE role IN ('owner','developer') AND org_id = $1 AND is_active = TRUE`,
+      // Find all owners in this org (respecting notification preferences)
+      const owners = await query<{ id: string; email: string; full_name: string; push_ok: boolean; email_ok: boolean }>(
+        `SELECT u.id, u.email, u.full_name,
+           (COALESCE(np.accountability_docs, TRUE) AND COALESCE(np.push_enabled, TRUE)) as push_ok,
+           (COALESCE(np.accountability_docs, TRUE) AND COALESCE(np.email_enabled, TRUE)) as email_ok
+         FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+         WHERE u.role IN ('owner','developer') AND u.org_id = $1 AND u.is_active = TRUE`,
         [doc.org_id]
       )
 
-      const ownerIds = owners.map(o => o.id)
-      const ownerEmails = owners.map(o => o.email)
+      const ownerIds = owners.filter(o => o.push_ok).map(o => o.id)
+      const ownerEmails = owners.filter(o => o.email_ok).map(o => o.email)
 
       if (ownerIds.length) {
         sendPushToUsers(ownerIds,

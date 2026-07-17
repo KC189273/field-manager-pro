@@ -51,6 +51,7 @@ interface CalEvent {
   location: string | null
   recurrence: string
   recurrence_id: string | null
+  exception_date: string | null
   task_id: string | null
   calendar_owner_id: string | null
   created_by: string | null
@@ -142,6 +143,8 @@ export default function CalendarPage() {
   const [saving, setSaving]             = useState(false)
   const [deleting, setDeleting]         = useState(false)
   const [modalError, setModalError]     = useState('')
+  const [scopePicker, setScopePicker]   = useState<{ action: 'edit' | 'delete'; event: CalEvent } | null>(null)
+  const [editScope, setEditScope]       = useState<'this' | 'all'>('all')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [uploadingAttachment, setUploadingAttachment] = useState(false)
 
@@ -249,7 +252,8 @@ export default function CalendarPage() {
     setModal('add')
   }
 
-  function openEdit(ev: CalEvent) {
+  function openEdit(ev: CalEvent, scope: 'this' | 'all' = 'all') {
+    setEditScope(scope)
     setEditingEvent(ev)
     setModalError('')
     setForm({
@@ -359,6 +363,9 @@ export default function CalendarPage() {
         reminderMinutes: form.reminderMinutes,
         ...(ownerId ? { ownerId } : {}),
         ...(modal === 'edit' ? { id: editingEvent?.id } : {}),
+        ...(modal === 'edit' && editScope === 'this' && editingEvent && editingEvent.recurrence !== 'none' && !editingEvent.exception_date
+          ? { editScope: 'this', instanceDate: editingEvent.start_date }
+          : {}),
       }
 
       const res = await fetch('/api/calendar', {
@@ -398,12 +405,26 @@ export default function CalendarPage() {
   // ── Delete event ──
   async function deleteEvent() {
     if (!editingEvent) return
+    // Recurring series events: ask which scope to delete
+    if (editingEvent.recurrence !== 'none' && !editingEvent.exception_date) {
+      setScopePicker({ action: 'delete', event: editingEvent })
+      return
+    }
+    await doDeleteWithScope('all')
+  }
+
+  async function doDeleteWithScope(scope: 'this' | 'all') {
+    if (!editingEvent) return
     setDeleting(true)
+    setScopePicker(null)
     try {
       const res = await fetch('/api/calendar', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingEvent.id }),
+        body: JSON.stringify({
+          id: editingEvent.id,
+          ...(scope === 'this' ? { deleteScope: 'this', instanceDate: editingEvent.start_date } : {}),
+        }),
       })
       if (!res.ok) { setModalError('Failed to delete event.'); return }
       setModal(null)
@@ -412,6 +433,17 @@ export default function CalendarPage() {
       setModalError('Network error. Please try again.')
     } finally {
       setDeleting(false)
+    }
+  }
+
+  function onScopeChosen(scope: 'this' | 'all') {
+    if (!scopePicker) return
+    const ev = scopePicker.event
+    setScopePicker(null)
+    if (scopePicker.action === 'delete') {
+      doDeleteWithScope(scope)
+    } else {
+      openEdit(ev, scope)
     }
   }
 
@@ -615,7 +647,7 @@ export default function CalendarPage() {
                           return (
                             <div
                               key={ev.id + ev.start_date}
-                              onClick={e => { e.stopPropagation(); openEdit(ev) }}
+                              onClick={e => { e.stopPropagation(); if (ev.recurrence !== 'none' && !ev.exception_date) { setScopePicker({ action: 'edit', event: ev }) } else { openEdit(ev) } }}
                               className={`text-[9px] sm:text-[11px] font-semibold px-1 py-px rounded truncate leading-tight text-white cursor-pointer ${
                                 isPending ? `${cat.bg} opacity-60 border border-dashed border-white/40` : cat.bg
                               }`}
@@ -674,7 +706,7 @@ export default function CalendarPage() {
                         <div key={ev.id + ev.start_date} className="px-4 py-3.5">
                           <div
                             className="flex items-start gap-3 cursor-pointer"
-                            onClick={() => canEdit(ev) ? openEdit(ev) : undefined}
+                            onClick={() => { if (!canEdit(ev)) return; if (ev.recurrence !== 'none' && !ev.exception_date) { setScopePicker({ action: 'edit', event: ev }) } else { openEdit(ev) } }}
                           >
                             <div className={`w-2.5 h-2.5 rounded-full mt-1.5 shrink-0 ${cat.dot}`} />
                             <div className="flex-1 min-w-0">
@@ -1113,6 +1145,48 @@ export default function CalendarPage() {
                   {saving ? 'Saving…' : modal === 'edit' ? 'Save Changes' : 'Add Event'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Scope picker modal (recurring edit/delete) ── */}
+      {scopePicker && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center"
+          onClick={() => setScopePicker(null)}
+        >
+          <div
+            className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm border border-gray-800 p-5"
+            onClick={e => e.stopPropagation()}
+          >
+            <h2 className="text-base font-bold text-white mb-1">Recurring Event</h2>
+            <p className="text-sm text-gray-400 mb-5">
+              {scopePicker.action === 'edit' ? 'Which events do you want to edit?' : 'Which events do you want to delete?'}
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={() => onScopeChosen('this')}
+                className="w-full py-3 rounded-xl bg-gray-800 hover:bg-gray-700 text-sm font-semibold text-white transition-colors text-left px-4"
+              >
+                This event only
+              </button>
+              <button
+                onClick={() => onScopeChosen('all')}
+                className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors text-left px-4 ${
+                  scopePicker.action === 'delete'
+                    ? 'bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-600/30'
+                    : 'bg-gray-800 hover:bg-gray-700 text-white'
+                }`}
+              >
+                All events in series
+              </button>
+              <button
+                onClick={() => setScopePicker(null)}
+                className="w-full py-3 rounded-xl border border-gray-700 text-sm text-gray-400 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

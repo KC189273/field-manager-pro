@@ -39,6 +39,74 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
 
+  // Return employee's own upcoming published shifts for swap creation
+  if (searchParams.get('myShifts') === 'true') {
+    if (session.role !== 'employee') return NextResponse.json({ myShifts: [] })
+
+    const today = new Date().toISOString().split('T')[0]
+    const myShifts = await query<{ id: string; shift_date: string; start_time: string; end_time: string; store_address: string | null }>(`
+      SELECT ss.id, ss.shift_date::text, ss.start_time::text, ss.end_time::text, sl.address AS store_address
+      FROM scheduled_shifts ss
+      LEFT JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+      WHERE ss.employee_id = $1
+        AND ss.shift_date >= $2
+        AND EXISTS (
+          SELECT 1 FROM scheduled_shifts_publish ssp
+          WHERE ssp.store_location_id = ss.store_location_id
+            AND ssp.week_start = ss.shift_date - ((EXTRACT(DOW FROM ss.shift_date)::int + 6) % 7)
+        )
+      ORDER BY ss.shift_date, ss.start_time
+      LIMIT 14
+    `, [session.id, today])
+
+    return NextResponse.json({ myShifts })
+  }
+
+  // Return available target shifts (coworkers under same manager) for a given shift
+  if (searchParams.get('availableFor')) {
+    if (session.role !== 'employee') return NextResponse.json({ targets: [] })
+
+    const shiftId = searchParams.get('availableFor')!
+    const myShift = await queryOne<{ shift_date: string; store_location_id: string }>(`
+      SELECT shift_date::text, store_location_id FROM scheduled_shifts WHERE id = $1 AND employee_id = $2
+    `, [shiftId, session.id])
+    if (!myShift) return NextResponse.json({ targets: [] })
+
+    const myInfo = await queryOne<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [session.id])
+    if (!myInfo?.manager_id) return NextResponse.json({ targets: [] })
+
+    // Get the week range for this shift
+    const shiftDate = new Date(myShift.shift_date + 'T12:00:00')
+    const dow = shiftDate.getDay()
+    const monday = new Date(shiftDate)
+    monday.setDate(shiftDate.getDate() - (dow === 0 ? 6 : dow - 1))
+    const sunday = new Date(monday)
+    sunday.setDate(monday.getDate() + 6)
+    const weekStart = monday.toISOString().split('T')[0]
+    const weekEnd = sunday.toISOString().split('T')[0]
+
+    const targets = await query<{ id: string; shift_date: string; start_time: string; end_time: string; employee_name: string; store_address: string | null }>(`
+      SELECT ss.id, ss.shift_date::text, ss.start_time::text, ss.end_time::text,
+             u.full_name AS employee_name, sl.address AS store_address
+      FROM scheduled_shifts ss
+      JOIN users u ON u.id = ss.employee_id
+      LEFT JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+      WHERE u.manager_id = $1
+        AND ss.employee_id != $2
+        AND ss.shift_date >= $3
+        AND ss.shift_date <= $4
+        AND u.is_active = TRUE
+        AND EXISTS (
+          SELECT 1 FROM scheduled_shifts_publish ssp
+          WHERE ssp.store_location_id = ss.store_location_id
+            AND ssp.week_start = ss.shift_date - ((EXTRACT(DOW FROM ss.shift_date)::int + 6) % 7)
+        )
+      ORDER BY u.full_name, ss.shift_date, ss.start_time
+    `, [myInfo.manager_id, session.id, weekStart, weekEnd])
+
+    return NextResponse.json({ targets })
+  }
+
   if (searchParams.get('peerShifts') === 'true') {
     if (session.role !== 'employee') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 

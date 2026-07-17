@@ -20,6 +20,24 @@ interface Prefs {
   expense_submitted: boolean
   schedule_published: boolean
   time_off_request: boolean
+  eod_recap: boolean
+  weekly_coaching: boolean
+  accountability_docs: boolean
+  ops_alerts: boolean
+  morning_digest: boolean
+  weekly_report: boolean
+  shift_swaps: boolean
+  supply_requests: boolean
+  facility_tickets: boolean
+  clock_events: boolean
+  schedule_changes: boolean
+  payroll_alerts: boolean
+  db_health_report: boolean
+  payroll_report: boolean
+  monthly_expense_report: boolean
+  termination_docs: boolean
+  dm_clockout_alerts: boolean
+  dm_focus_emails: boolean
 }
 
 interface PrefDef {
@@ -27,51 +45,45 @@ interface PrefDef {
   label: string
   description: string
   roles: Session['role'][]
+  group: string
 }
 
+const MGR_PLUS: Session['role'][] = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const ALL_ROLES: Session['role'][] = ['employee', ...MGR_PLUS]
+
 const PREF_DEFS: PrefDef[] = [
-  {
-    key: 'task_assigned',
-    label: 'Task assigned to me',
-    description: 'Notify me when a new task is assigned to me.',
-    roles: ['employee', 'manager', 'ops_manager', 'owner', 'sales_director', 'developer'],
-  },
-  {
-    key: 'task_completed',
-    label: 'Task completed',
-    description: 'Notify me when someone completes a task I assigned.',
-    roles: ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'],
-  },
-  {
-    key: 'time_off_request',
-    label: 'Time off requests',
-    description: 'Notify me when someone submits a time off request for my approval, or when my request is decided.',
-    roles: ['employee', 'manager', 'ops_manager', 'owner', 'sales_director', 'developer'],
-  },
-  {
-    key: 'checklist_submitted',
-    label: 'Checklist submitted',
-    description: 'Notify me when an employee submits an opening or closing checklist for my store.',
-    roles: ['manager'],
-  },
-  {
-    key: 'flag_created',
-    label: 'Overtime flag raised',
-    description: 'Notify me when an employee hits overtime (40+ hours).',
-    roles: ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'],
-  },
-  {
-    key: 'expense_submitted',
-    label: 'Expense submitted',
-    description: 'Notify me when a new expense is submitted for approval.',
-    roles: ['owner', 'sales_director', 'ops_manager'],
-  },
-  {
-    key: 'schedule_published',
-    label: 'Schedule published',
-    description: 'Notify me when my schedule for the week is published.',
-    roles: ['employee', 'manager'],
-  },
+  // Daily & Weekly Reports
+  { key: 'eod_recap', label: 'DM End-of-Day Recaps', description: 'AI-generated daily recap when each DM clocks out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'morning_digest', label: 'Morning Digest', description: 'Daily morning summary email.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'weekly_report', label: 'Weekly Report', description: 'End-of-week summary report.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'weekly_coaching', label: 'Weekly Coaching Insights', description: 'AI coaching insights email sent Sundays.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'ops_alerts', label: 'App Health / Ops Alerts', description: 'Daily ops check email and health push notifications.', roles: ['developer'], group: 'Reports' },
+  { key: 'db_health_report', label: 'DB Health Report', description: 'Monthly database health report with cleanup actions.', roles: ['developer'], group: 'Reports' },
+  { key: 'payroll_report', label: 'Payroll Report', description: 'Weekly payroll Excel spreadsheet email.', roles: ['owner', 'sales_director', 'ops_manager', 'developer'], group: 'Reports' },
+  { key: 'monthly_expense_report', label: 'Monthly Expense Report', description: 'Monthly expense Excel spreadsheet email.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'dm_focus_emails', label: 'DM Tomorrow\'s Focus', description: 'Get a copy of the AI coaching suggestions sent to each DM after they clock out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+
+  // Tasks & Assignments
+  { key: 'task_assigned', label: 'Task Assigned', description: 'When a task is assigned to me.', roles: ALL_ROLES, group: 'Tasks' },
+  { key: 'task_completed', label: 'Task Completed', description: 'When someone completes a task I assigned.', roles: MGR_PLUS, group: 'Tasks' },
+
+  // Schedule & Time
+  { key: 'schedule_published', label: 'Schedule Published', description: 'When my weekly schedule is published.', roles: ['employee', 'manager'], group: 'Schedule' },
+  { key: 'schedule_changes', label: 'Schedule Changes', description: 'Schedule reminders, overstaffing alerts.', roles: MGR_PLUS, group: 'Schedule' },
+  { key: 'time_off_request', label: 'Time Off Requests', description: 'Submissions and approval decisions.', roles: ALL_ROLES, group: 'Schedule' },
+  { key: 'shift_swaps', label: 'Shift Swaps', description: 'Swap requests and approvals.', roles: ALL_ROLES, group: 'Schedule' },
+  { key: 'clock_events', label: 'Clock Events', description: 'Clock reminders, auto-clockout, OT warnings.', roles: ALL_ROLES, group: 'Schedule' },
+  { key: 'dm_clockout_alerts', label: 'DM Clock-Out Alerts', description: 'Push notification when a DM clocks out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Schedule' },
+
+  // Operations
+  { key: 'checklist_submitted', label: 'Checklists', description: 'Opening/closing checklist submissions.', roles: ['manager'], group: 'Operations' },
+  { key: 'accountability_docs', label: 'Accountability Docs', description: 'New docs, approvals, escalations.', roles: MGR_PLUS, group: 'Operations' },
+  { key: 'flag_created', label: 'Overtime Flags', description: 'When employees hit overtime thresholds.', roles: MGR_PLUS, group: 'Operations' },
+  { key: 'expense_submitted', label: 'Expenses', description: 'Expense submissions for approval.', roles: ['owner', 'sales_director', 'ops_manager'], group: 'Operations' },
+  { key: 'supply_requests', label: 'Supply Requests', description: 'Supply orders and escalations.', roles: MGR_PLUS, group: 'Operations' },
+  { key: 'facility_tickets', label: 'Facility Tickets', description: 'Maintenance requests and updates.', roles: MGR_PLUS, group: 'Operations' },
+  { key: 'payroll_alerts', label: 'Payroll', description: 'Payroll reminders and approval requests.', roles: ['owner', 'sales_director', 'developer'], group: 'Operations' },
+  { key: 'termination_docs', label: 'Termination Notices', description: 'Management copy emails for termination notices.', roles: MGR_PLUS, group: 'Operations' },
 ]
 
 function Toggle({ on, disabled, onToggle }: { on: boolean; disabled: boolean; onToggle: () => void }) {
@@ -249,23 +261,30 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Per-event prefs */}
-            {visibleEventPrefs.length > 0 && (
-              <div className="bg-gray-900 rounded-2xl border border-gray-800 divide-y divide-gray-800">
-                <div className="px-5 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Alert Types</p>
-                </div>
-                {visibleEventPrefs.map(def => (
-                  <div key={def.key} className="flex items-start justify-between gap-4 px-5 py-4">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-white text-sm font-medium">{def.label}</p>
-                      <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{def.description}</p>
+            {/* Per-event prefs grouped by category */}
+            {(() => {
+              const groups = [...new Set(visibleEventPrefs.map(p => p.group))]
+              return groups.map(group => {
+                const groupPrefs = visibleEventPrefs.filter(p => p.group === group)
+                if (groupPrefs.length === 0) return null
+                return (
+                  <div key={group} className="bg-gray-900 rounded-2xl border border-gray-800 divide-y divide-gray-800">
+                    <div className="px-5 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">{group}</p>
                     </div>
-                    <Toggle on={prefs[def.key]} disabled={saving === def.key} onToggle={() => toggle(def.key)} />
+                    {groupPrefs.map(def => (
+                      <div key={def.key} className="flex items-start justify-between gap-4 px-5 py-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white text-sm font-medium">{def.label}</p>
+                          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{def.description}</p>
+                        </div>
+                        <Toggle on={prefs[def.key]} disabled={saving === def.key} onToggle={() => toggle(def.key)} />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )
+              })
+            })()}
           </div>
         )}
 

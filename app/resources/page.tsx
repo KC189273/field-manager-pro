@@ -24,6 +24,7 @@ interface Resource {
   contact_role: string | null
   contact_phone: string | null
   contact_email: string | null
+  contact_avatar_url: string | null
   created_by: string | null
   created_by_name: string | null
   sort_order: number
@@ -40,11 +41,11 @@ const TYPE_OPTS: { key: ResourceType; label: string; icon: string }[] = [
   { key: 'contact',      label: 'Key Contact',  icon: '👤' },
 ]
 
-const TYPE_SECTIONS: { type: ResourceType; heading: string; description: string }[] = [
-  { type: 'announcement', heading: 'Announcements',      description: 'Company-wide updates and news' },
-  { type: 'document',     heading: 'Documents',          description: 'Handbooks, SOPs, and training files' },
-  { type: 'link',         heading: 'Links & Resources',  description: 'Important URLs and reference links' },
-  { type: 'contact',      heading: 'Key Contacts',       description: 'Important people and numbers' },
+const SECTION_TABS: { type: ResourceType; label: string }[] = [
+  { type: 'announcement', label: 'Announcements' },
+  { type: 'document',     label: 'Documents' },
+  { type: 'link',         label: 'Links' },
+  { type: 'contact',      label: 'Key Contacts' },
 ]
 
 export default function ResourcesPage() {
@@ -52,6 +53,7 @@ export default function ResourcesPage() {
   const [resources, setResources] = useState<Resource[]>([])
   const [loading, setLoading]     = useState(true)
   const [search, setSearch]       = useState('')
+  const [activeTab, setActiveTab] = useState<ResourceType>('announcement')
 
   // Modal
   const [modal, setModal]               = useState<'add' | 'edit' | null>(null)
@@ -90,7 +92,6 @@ export default function ResourcesPage() {
     if (session) loadResources()
   }, [session, loadResources])
 
-  // Refresh when user returns to the tab + every 60s so changes by admins are visible to everyone
   useEffect(() => {
     if (!session) return
     const onVisible = () => { if (document.visibilityState === 'visible') loadResources() }
@@ -104,7 +105,6 @@ export default function ResourcesPage() {
 
   const canManage = session ? CAN_MANAGE.includes(session.role) : false
 
-  // ── File upload ──
   async function handleDocFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -126,11 +126,8 @@ export default function ResourcesPage() {
     }
   }
 
-  // ── Open doc ──
   async function openDocument(resource: Resource) {
     if (!resource.s3_key) return
-    // Use calendar attachment-url pattern for view URL — but resources has own key prefix
-    // We'll fetch a signed URL from a generic approach via resources API
     const res = await fetch(`/api/resources/view-url?key=${encodeURIComponent(resource.s3_key)}`)
     if (res.ok) {
       const { url } = await res.json()
@@ -138,8 +135,7 @@ export default function ResourcesPage() {
     }
   }
 
-  // ── Modal helpers ──
-  function openAdd(type: ResourceType = 'announcement') {
+  function openAdd(type: ResourceType = activeTab) {
     setEditingResource(null)
     setModalError('')
     setForm({ type, title: '', body: '', url: '', s3Key: '', filename: '', contactName: '', contactRole: '', contactPhone: '', contactEmail: '' })
@@ -167,20 +163,14 @@ export default function ResourcesPage() {
   async function saveResource() {
     setModalError('')
     if (!form.title.trim()) { setModalError('Title is required.'); return }
-
     setSaving(true)
     try {
       const payload = {
-        type: form.type,
-        title: form.title.trim(),
-        body: form.body.trim() || null,
-        url: form.url.trim() || null,
-        s3Key: form.s3Key || null,
-        filename: form.filename || null,
-        contactName: form.contactName.trim() || null,
-        contactRole: form.contactRole.trim() || null,
-        contactPhone: form.contactPhone.trim() || null,
-        contactEmail: form.contactEmail.trim() || null,
+        type: form.type, title: form.title.trim(),
+        body: form.body.trim() || null, url: form.url.trim() || null,
+        s3Key: form.s3Key || null, filename: form.filename || null,
+        contactName: form.contactName.trim() || null, contactRole: form.contactRole.trim() || null,
+        contactPhone: form.contactPhone.trim() || null, contactEmail: form.contactEmail.trim() || null,
         ...(modal === 'edit' ? { id: editingResource?.id } : {}),
       }
       const res = await fetch('/api/resources', {
@@ -221,45 +211,12 @@ export default function ResourcesPage() {
     }
   }
 
-  // ── Up/down reorder ──
-  function moveItem(id: string, type: ResourceType, direction: 'up' | 'down') {
-    const sectionItems = resources.filter(r => r.type === type)
-    const idx = sectionItems.findIndex(r => r.id === id)
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1
-    if (swapIdx < 0 || swapIdx >= sectionItems.length) return
-
-    // Swap the two items in the section
-    const reordered = [...sectionItems]
-    ;[reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]]
-    const updated = reordered.map((r, i) => ({ ...r, sort_order: i }))
-
-    // Find the positions of the two swapped items in the full resources array and swap them there too
-    const fullIdxA = resources.findIndex(r => r.id === sectionItems[idx].id)
-    const fullIdxB = resources.findIndex(r => r.id === sectionItems[swapIdx].id)
-    const newArr = [...resources]
-    ;[newArr[fullIdxA], newArr[fullIdxB]] = [newArr[fullIdxB], newArr[fullIdxA]]
-
-    // Apply updated sort_orders
-    const updatedMap = new Map(updated.map(r => [r.id, r]))
-    setResources(newArr.map(r => updatedMap.get(r.id) ?? r))
-
-    fetch('/api/resources', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reorder: updated.map(r => ({ id: r.id, sort_order: r.sort_order })) }),
-    }).catch(() => loadResources())
-  }
-
   async function togglePin(resource: Resource) {
     const action = resource.is_pinned ? 'unpin' : 'pin'
     if (!resource.is_pinned) {
       const pinned = resources.filter(r => r.is_pinned)
-      if (pinned.length >= 4) {
-        alert('Maximum 4 items can be pinned. Unpin one first.')
-        return
-      }
+      if (pinned.length >= 4) { alert('Maximum 4 items can be pinned. Unpin one first.'); return }
     }
-    // Optimistic update
     setResources(prev => prev.map(r => r.id === resource.id ? { ...r, is_pinned: !r.is_pinned } : r))
     const res = await fetch('/api/resources', {
       method: 'PATCH',
@@ -285,6 +242,9 @@ export default function ResourcesPage() {
     return new Date(ts).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/Chicago' })
   }
 
+  const activeItems = byType(activeTab)
+  const pinnedItems = resources.filter(r => r.is_pinned)
+
   return (
     <div className="min-h-screen bg-gray-950 pb-24 pt-14">
       <NavBar role={session.role} fullName={session.fullName} />
@@ -298,10 +258,8 @@ export default function ResourcesPage() {
             <p className="text-xs text-gray-500 mt-0.5">Company reference hub</p>
           </div>
           {canManage && (
-            <button
-              onClick={() => openAdd()}
-              className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shrink-0"
-            >
+            <button onClick={() => openAdd()}
+              className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors shrink-0">
               <span className="text-base leading-none">+</span>
               <span>Add</span>
             </button>
@@ -309,22 +267,17 @@ export default function ResourcesPage() {
         </div>
 
         {/* Search */}
-        <div className="relative mb-5">
+        <div className="relative mb-4">
           <svg className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          <input
-            type="text"
-            placeholder="Search resources…"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-600"
-          />
+          <input type="text" placeholder="Search resources…" value={search} onChange={e => setSearch(e.target.value)}
+            className="w-full bg-gray-900 border border-gray-800 rounded-2xl pl-10 pr-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-600" />
         </div>
 
-        {/* ── Pinned section ── */}
-        {!loading && !search && resources.some(r => r.is_pinned) && (
-          <div className="mb-6">
+        {/* Pinned */}
+        {!loading && !search && pinnedItems.length > 0 && (
+          <div className="mb-5">
             <div className="flex items-center gap-2 mb-2">
               <svg className="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M16 4v6l2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V4h-1V2h10v2h-1z"/>
@@ -332,22 +285,32 @@ export default function ResourcesPage() {
               <h2 className="text-sm font-bold text-white">Pinned</h2>
             </div>
             <div className="space-y-2">
-              {resources.filter(r => r.is_pinned).map(r => (
-                <ResourceCard
-                  key={`pin-${r.id}`}
-                  resource={r}
-                  canManage={canManage}
-                  canReorder={false}
-                  onEdit={() => openEdit(r)}
-                  onOpen={() => openDocument(r)}
-                  fmtDate={fmtDate}
-                  onTogglePin={canManage ? () => togglePin(r) : undefined}
-                />
+              {pinnedItems.map(r => (
+                <ResourceCard key={`pin-${r.id}`} resource={r} canManage={canManage}
+                  onEdit={() => openEdit(r)} onOpen={() => openDocument(r)} fmtDate={fmtDate}
+                  onTogglePin={canManage ? () => togglePin(r) : undefined} />
               ))}
             </div>
           </div>
         )}
 
+        {/* Section Tabs */}
+        <div className="flex border-b border-gray-800 mb-4 overflow-x-auto">
+          {SECTION_TABS.map(t => {
+            const count = byType(t.type).length
+            return (
+              <button key={t.type} onClick={() => setActiveTab(t.type)}
+                className={`px-4 py-2.5 text-sm font-semibold whitespace-nowrap transition-colors border-b-2 ${
+                  activeTab === t.type ? 'border-violet-500 text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-300'
+                }`}>
+                {t.label}
+                {count > 0 && <span className="ml-1.5 text-xs text-gray-600">({count})</span>}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Active Tab Content */}
         {loading ? (
           <div className="space-y-3">
             {[1,2,3].map(i => (
@@ -357,78 +320,86 @@ export default function ResourcesPage() {
               </div>
             ))}
           </div>
-        ) : filtered.length === 0 && search ? (
-          <div className="text-center py-16">
-            <p className="text-gray-500 text-sm">No results for &quot;{search}&quot;</p>
+        ) : activeItems.length === 0 ? (
+          <div className="bg-gray-900/50 border border-dashed border-gray-800 rounded-2xl px-4 py-12 text-center">
+            <p className="text-sm text-gray-600 mb-3">No {SECTION_TABS.find(t => t.type === activeTab)?.label.toLowerCase()} yet</p>
+            {canManage && (
+              <button onClick={() => openAdd(activeTab)}
+                className="text-xs text-violet-400 hover:text-violet-300 font-semibold border border-violet-800/40 hover:border-violet-600/60 px-4 py-2 rounded-lg transition-colors">
+                + Add {SECTION_TABS.find(t => t.type === activeTab)?.label.slice(0, -1)}
+              </button>
+            )}
           </div>
-        ) : (
-          <div className="space-y-6">
-            {TYPE_SECTIONS.map(section => {
-              const items = byType(section.type)
-              if (items.length === 0 && !canManage) return null
-
-              return (
-                <div key={section.type}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h2 className="text-sm font-bold text-white">{section.heading}</h2>
-                      <p className="text-xs text-gray-600">{section.description}</p>
-                    </div>
-                    {canManage && (
-                      <button
-                        onClick={() => openAdd(section.type)}
-                        className="text-xs text-violet-400 hover:text-violet-300 font-medium border border-violet-800/40 hover:border-violet-600/60 px-3 py-1.5 rounded-lg transition-colors"
-                      >
-                        + Add
-                      </button>
+        ) : activeTab === 'contact' ? (
+          /* Contact cards — grid layout with avatars */
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {activeItems.map(r => (
+              <div key={r.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <div className="flex items-start gap-3">
+                  {/* Avatar */}
+                  <div className="w-10 h-10 rounded-full bg-gray-800 flex items-center justify-center shrink-0 overflow-hidden">
+                    {r.contact_avatar_url ? (
+                      <img src={r.contact_avatar_url} alt="" className="w-10 h-10 rounded-full object-cover" />
+                    ) : (
+                      <span className="text-gray-500 text-sm font-bold">
+                        {(r.contact_name || r.title).charAt(0).toUpperCase()}
+                      </span>
                     )}
                   </div>
-
-                  {items.length === 0 ? (
-                    <div className="bg-gray-900/50 border border-dashed border-gray-800 rounded-2xl px-4 py-6 text-center">
-                      <p className="text-sm text-gray-600">No {section.heading.toLowerCase()} yet</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-semibold text-white truncate">{r.contact_name || r.title}</p>
+                      {canManage && (
+                        <button onClick={() => openEdit(r)} className="text-gray-600 hover:text-gray-300 transition-colors shrink-0">
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {items.map((r, idx) => (
-                        <ResourceCard
-                          key={r.id}
-                          resource={r}
-                          canManage={canManage}
-                          canReorder={canManage && !search}
-                          isFirst={idx === 0}
-                          isLast={idx === items.length - 1}
-                          onEdit={() => openEdit(r)}
-                          onOpen={() => openDocument(r)}
-                          fmtDate={fmtDate}
-                          onTogglePin={canManage ? () => togglePin(r) : undefined}
-                          onMoveUp={() => moveItem(r.id, section.type, 'up')}
-                          onMoveDown={() => moveItem(r.id, section.type, 'down')}
-                        />
-                      ))}
+                    {r.contact_role && <p className="text-xs text-gray-500 mt-0.5">{r.contact_role}</p>}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                      {r.contact_phone && (
+                        <a href={`tel:${r.contact_phone}`} className="inline-flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                          </svg>
+                          {r.contact_phone}
+                        </a>
+                      )}
+                      {r.contact_email && (
+                        <a href={`mailto:${r.contact_email}`} className="inline-flex items-center gap-1 text-xs text-violet-400 hover:text-violet-300 transition-colors truncate">
+                          <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                          {r.contact_email}
+                        </a>
+                      )}
                     </div>
-                  )}
+                    {r.body && <p className="text-xs text-gray-500 mt-2">{r.body}</p>}
+                  </div>
                 </div>
-              )
-            })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          /* Standard vertical list for announcements, documents, links */
+          <div className="space-y-2">
+            {activeItems.map(r => (
+              <ResourceCard key={r.id} resource={r} canManage={canManage}
+                onEdit={() => openEdit(r)} onOpen={() => openDocument(r)} fmtDate={fmtDate}
+                onTogglePin={canManage ? () => togglePin(r) : undefined} />
+            ))}
           </div>
         )}
       </div>
 
       {/* ── Add / Edit Modal ── */}
       {modal && (
-        <div
-          className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center"
-          onClick={() => setModal(null)}
-        >
-          <div
-            className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg border border-gray-800 p-5 max-h-[92vh] overflow-y-auto"
-            onClick={e => e.stopPropagation()}
-          >
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setModal(null)}>
+          <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg border border-gray-800 p-5 max-h-[92vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-base font-bold text-white">
-                {modal === 'edit' ? 'Edit Resource' : 'New Resource'}
-              </h2>
+              <h2 className="text-base font-bold text-white">{modal === 'edit' ? 'Edit Resource' : 'New Resource'}</h2>
               <button onClick={() => setModal(null)} className="text-gray-500 hover:text-gray-300">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -437,78 +408,44 @@ export default function ResourcesPage() {
             </div>
 
             <div className="space-y-4">
-              {/* Type selector */}
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Type</label>
                 <div className="grid grid-cols-2 gap-2">
                   {TYPE_OPTS.map(t => (
-                    <button
-                      key={t.key}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, type: t.key }))}
+                    <button key={t.key} type="button" onClick={() => setForm(f => ({ ...f, type: t.key }))}
                       className={`flex items-center gap-2 text-sm font-semibold px-3 py-2.5 rounded-xl border transition-colors ${
-                        form.type === t.key
-                          ? 'bg-violet-600/20 border-violet-500 text-violet-300'
-                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      <span>{t.icon}</span>
-                      <span>{t.label}</span>
+                        form.type === t.key ? 'bg-violet-600/20 border-violet-500 text-violet-300' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                      }`}>
+                      <span>{t.icon}</span><span>{t.label}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Title */}
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">Title</label>
-                <input
-                  type="text"
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                  placeholder={
-                    form.type === 'announcement' ? 'e.g. Q2 Policy Update' :
-                    form.type === 'document' ? 'e.g. Employee Handbook' :
-                    form.type === 'link' ? 'e.g. Payroll Portal' :
-                    'e.g. HR Contact'
-                  }
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
-                  autoFocus
-                />
+                <input type="text" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                  placeholder={form.type === 'announcement' ? 'e.g. Q2 Policy Update' : form.type === 'document' ? 'e.g. Employee Handbook' : form.type === 'link' ? 'e.g. Payroll Portal' : 'e.g. HR Contact'}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" autoFocus />
               </div>
 
-              {/* Body / description */}
               {(form.type === 'announcement' || form.type === 'link') && (
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">
-                    {form.type === 'announcement' ? 'Message' : 'Description'}{' '}
-                    <span className="text-gray-600 font-normal">— optional</span>
-                  </label>
-                  <textarea
-                    rows={form.type === 'announcement' ? 4 : 2}
-                    value={form.body}
-                    onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
+                  <label className="block text-xs text-gray-400 mb-1.5">{form.type === 'announcement' ? 'Message' : 'Description'} <span className="text-gray-600 font-normal">— optional</span></label>
+                  <textarea rows={form.type === 'announcement' ? 4 : 2} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
                     placeholder={form.type === 'announcement' ? 'Write your announcement…' : 'Brief description of this link'}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 resize-none"
-                  />
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 resize-none" />
                 </div>
               )}
 
-              {/* URL */}
               {form.type === 'link' && (
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">URL</label>
-                  <input
-                    type="url"
-                    value={form.url}
-                    onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
-                    placeholder="https://…"
-                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
-                  />
+                  <input type="url" value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://…"
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                 </div>
               )}
 
-              {/* Document upload */}
               {form.type === 'document' && (
                 <div>
                   <label className="block text-xs text-gray-400 mb-1.5">File</label>
@@ -525,17 +462,9 @@ export default function ResourcesPage() {
                       </button>
                     </div>
                   ) : (
-                    /* Overlay pattern — reliable on Android WebView where programmatic .click() on hidden inputs fails */
-                    <div
-                      className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}
-                    >
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        onChange={handleDocFile}
-                        disabled={uploadingDoc}
-                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }}
-                      />
+                    <div className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${uploadingDoc ? 'opacity-50 pointer-events-none' : ''}`}>
+                      <input ref={fileInputRef} type="file" onChange={handleDocFile} disabled={uploadingDoc}
+                        style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
                       {uploadingDoc ? 'Uploading…' : (
                         <>
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -548,43 +477,33 @@ export default function ResourcesPage() {
                   )}
                   <div>
                     <label className="block text-xs text-gray-400 mb-1.5 mt-3">Description <span className="text-gray-600 font-normal">— optional</span></label>
-                    <input
-                      type="text"
-                      value={form.body}
-                      onChange={e => setForm(f => ({ ...f, body: e.target.value }))}
-                      placeholder="Brief description of this document"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
-                    />
+                    <input type="text" value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} placeholder="Brief description of this document"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                   </div>
                 </div>
               )}
 
-              {/* Contact fields */}
               {form.type === 'contact' && (
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs text-gray-400 mb-1.5">Full Name</label>
-                    <input type="text" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))}
-                      placeholder="e.g. Jane Smith"
+                    <input type="text" value={form.contactName} onChange={e => setForm(f => ({ ...f, contactName: e.target.value }))} placeholder="e.g. Jane Smith"
                       className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                   </div>
                   <div>
                     <label className="block text-xs text-gray-400 mb-1.5">Role / Department</label>
-                    <input type="text" value={form.contactRole} onChange={e => setForm(f => ({ ...f, contactRole: e.target.value }))}
-                      placeholder="e.g. HR Director"
+                    <input type="text" value={form.contactRole} onChange={e => setForm(f => ({ ...f, contactRole: e.target.value }))} placeholder="e.g. HR Director"
                       className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-gray-400 mb-1.5">Phone <span className="text-gray-600 font-normal">— optional</span></label>
-                      <input type="tel" value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))}
-                        placeholder="(555) 000-0000"
+                      <input type="tel" value={form.contactPhone} onChange={e => setForm(f => ({ ...f, contactPhone: e.target.value }))} placeholder="(555) 000-0000"
                         className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                     </div>
                     <div>
                       <label className="block text-xs text-gray-400 mb-1.5">Email <span className="text-gray-600 font-normal">— optional</span></label>
-                      <input type="email" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))}
-                        placeholder="jane@company.com"
+                      <input type="email" value={form.contactEmail} onChange={e => setForm(f => ({ ...f, contactEmail: e.target.value }))} placeholder="jane@company.com"
                         className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-3 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500" />
                     </div>
                   </div>
@@ -597,22 +516,14 @@ export default function ResourcesPage() {
 
               <div className="flex gap-3 pt-1">
                 {modal === 'edit' && (
-                  <button
-                    onClick={deleteResource}
-                    disabled={deleting || saving}
-                    className="px-4 py-3 rounded-xl bg-red-600/20 hover:bg-red-600/40 disabled:opacity-50 text-red-400 font-medium text-sm border border-red-600/30 transition-colors"
-                  >
+                  <button onClick={deleteResource} disabled={deleting || saving}
+                    className="px-4 py-3 rounded-xl bg-red-600/20 hover:bg-red-600/40 disabled:opacity-50 text-red-400 font-medium text-sm border border-red-600/30 transition-colors">
                     {deleting ? '…' : 'Delete'}
                   </button>
                 )}
-                <button onClick={() => setModal(null)} className="flex-1 py-3 rounded-xl border border-gray-700 text-sm text-gray-400 hover:text-white transition-colors">
-                  Cancel
-                </button>
-                <button
-                  onClick={saveResource}
-                  disabled={saving || uploadingDoc}
-                  className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-                >
+                <button onClick={() => setModal(null)} className="flex-1 py-3 rounded-xl border border-gray-700 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+                <button onClick={saveResource} disabled={saving || uploadingDoc}
+                  className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
                   {saving ? 'Saving…' : modal === 'edit' ? 'Save Changes' : 'Add Resource'}
                 </button>
               </div>
@@ -624,54 +535,37 @@ export default function ResourcesPage() {
   )
 }
 
-// ── Resource card ──────────────────────────────────────────────────────────────
+// ── Resource card (for non-contact items + pinned) ──────────────────────────
 
 function ResourceCard({
-  resource, canManage, canReorder, isFirst, isLast,
-  onEdit, onOpen, fmtDate, onTogglePin, onMoveUp, onMoveDown,
+  resource, canManage, onEdit, onOpen, fmtDate, onTogglePin,
 }: {
   resource: Resource
   canManage: boolean
-  canReorder?: boolean
-  isFirst?: boolean
-  isLast?: boolean
   onEdit: () => void
   onOpen: () => void
   fmtDate: (ts: string) => string
   onTogglePin?: () => void
-  onMoveUp?: () => void
-  onMoveDown?: () => void
 }) {
-  const { type, title, body, url, filename, contact_name, contact_role, contact_phone, contact_email, created_by_name, created_at } = resource
+  const { type, title, body, url, filename, contact_name, contact_role, contact_phone, contact_email, contact_avatar_url, created_by_name, created_at } = resource
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 transition-all">
       <div className="flex items-start gap-3">
-        {canReorder && (
-          <div className="flex flex-col gap-0.5 shrink-0 mt-0.5">
-            <button
-              onClick={onMoveUp}
-              disabled={isFirst}
-              className="text-gray-600 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-              </svg>
-            </button>
-            <button
-              onClick={onMoveDown}
-              disabled={isLast}
-              className="text-gray-600 hover:text-gray-300 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
+        {type === 'contact' && (
+          <div className="w-9 h-9 rounded-full bg-gray-800 flex items-center justify-center shrink-0 overflow-hidden mt-0.5">
+            {contact_avatar_url ? (
+              <img src={contact_avatar_url} alt="" className="w-9 h-9 rounded-full object-cover" />
+            ) : (
+              <span className="text-gray-500 text-xs font-bold">{(contact_name || title).charAt(0).toUpperCase()}</span>
+            )}
           </div>
         )}
-        <div className="text-xl shrink-0 mt-0.5">
-          {type === 'announcement' ? '📢' : type === 'document' ? '📄' : type === 'link' ? '🔗' : '👤'}
-        </div>
+        {type !== 'contact' && (
+          <div className="text-xl shrink-0 mt-0.5">
+            {type === 'announcement' ? '📢' : type === 'document' ? '📄' : '🔗'}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -685,11 +579,8 @@ function ResourceCard({
             {canManage && (
               <div className="flex items-center gap-1.5 shrink-0">
                 {onTogglePin && (
-                  <button
-                    onClick={onTogglePin}
-                    title={resource.is_pinned ? 'Unpin' : 'Pin to top'}
-                    className={`transition-colors ${resource.is_pinned ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-amber-400'}`}
-                  >
+                  <button onClick={onTogglePin} title={resource.is_pinned ? 'Unpin' : 'Pin to top'}
+                    className={`transition-colors ${resource.is_pinned ? 'text-amber-400 hover:text-amber-300' : 'text-gray-600 hover:text-amber-400'}`}>
                     <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M16 4v6l2 2v2h-5v6l-1 1-1-1v-6H6v-2l2-2V4h-1V2h10v2h-1z"/>
                     </svg>
@@ -704,10 +595,8 @@ function ResourceCard({
             )}
           </div>
 
-          {/* Announcement / doc description */}
           {body && <p className="text-sm text-gray-400 mt-1 leading-relaxed whitespace-pre-wrap">{body}</p>}
 
-          {/* Link */}
           {url && (
             <a href={url} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 mt-1.5 transition-colors">
@@ -718,7 +607,6 @@ function ResourceCard({
             </a>
           )}
 
-          {/* Document download */}
           {filename && resource.s3_key && (
             <button onClick={onOpen}
               className="inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 mt-1.5 transition-colors">
@@ -729,7 +617,6 @@ function ResourceCard({
             </button>
           )}
 
-          {/* Contact */}
           {contact_name && (
             <div className="mt-1.5 space-y-1">
               {contact_role && <p className="text-xs text-gray-500">{contact_role}</p>}
@@ -755,7 +642,7 @@ function ResourceCard({
           )}
 
           <p className="text-[10px] text-gray-700 mt-2">
-            {created_by_name ? `Added by ${created_by_name} · ` : ''}{fmtDate(created_at)}
+            {created_by_name && <span>Added by {created_by_name} · </span>}{fmtDate(created_at)}
           </p>
         </div>
       </div>

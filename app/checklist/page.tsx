@@ -51,6 +51,9 @@ interface SubmissionDetail {
   cash_drawer_photo_url: string | null
   reconciliation_photo_url: string | null
   reconciliation_photo_2_url: string | null
+  voice_lines: string | null
+  mim: string | null
+  home_internet: string | null
   comment: string | null
 }
 
@@ -151,6 +154,9 @@ export default function ChecklistPage() {
   const [reconciliationPhotoPreview, setReconciliationPhotoPreview] = useState<string | null>(null)
   const [reconciliationPhoto2Key, setReconciliationPhoto2Key] = useState<string | null>(null)
   const [reconciliationPhoto2Preview, setReconciliationPhoto2Preview] = useState<string | null>(null)
+  const [voiceLines, setVoiceLines] = useState('')
+  const [mim, setMim] = useState('')
+  const [homeInternet, setHomeInternet] = useState('')
   const [comment, setComment] = useState('')
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -230,6 +236,9 @@ export default function ChecklistPage() {
     setReconciliationPhotoPreview(null)
     setReconciliationPhoto2Key(null)
     setReconciliationPhoto2Preview(null)
+    setVoiceLines('')
+    setMim('')
+    setHomeInternet('')
     setComment('')
     setSubmitError('')
     setFormView('form')
@@ -295,6 +304,9 @@ export default function ChecklistPage() {
       cashDrawerPhotoKey: checklistType === 'closing' ? cashDrawerPhotoKey : null,
       reconciliationPhotoKey: checklistType === 'closing' ? reconciliationPhotoKey : null,
       reconciliationPhoto2Key: checklistType === 'closing' ? reconciliationPhoto2Key : null,
+      voiceLines: checklistType === 'closing' ? voiceLines.trim() : undefined,
+      mim: checklistType === 'closing' ? mim.trim() : undefined,
+      homeInternet: checklistType === 'closing' ? homeInternet.trim() : undefined,
       comment: comment.trim() || null,
       items: items.map(item => ({
         item_number: item.item_number,
@@ -326,8 +338,9 @@ export default function ChecklistPage() {
   const allChecked = items.every(item => checked.has(item.item_number))
   const photoRequired = checklistType === 'opening'
   const closingPhotosReady = checklistType !== 'closing' || (!!salesFloorPhotoKey && !!cashDrawerPhotoKey)
+  const closingMetricsReady = checklistType !== 'closing' || (!!voiceLines.trim() && !!mim.trim() && !!homeInternet.trim())
   const canSubmit = allChecked && !!storeId && !uploading && !submitting &&
-    (!photoRequired || !!photoKey) && closingPhotosReady
+    (!photoRequired || !!photoKey) && closingPhotosReady && closingMetricsReady
 
   // Dashboard: group stores by DM
   const storesByDm = stores.reduce<Record<string, { dmName: string; stores: Store[] }>>((acc, store) => {
@@ -614,6 +627,48 @@ export default function ChecklistPage() {
                 ))}
               </div>
 
+              {/* End-of-day metrics — closing only, mandatory */}
+              {checklistType === 'closing' && (
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-800">
+                    <p className="text-sm font-semibold text-white">End of Day Numbers <span className="text-red-400">*</span></p>
+                    <p className="text-xs text-gray-500 mt-0.5">All fields required</p>
+                  </div>
+                  <div className="divide-y divide-gray-800/60">
+                    <div className="px-4 py-3">
+                      <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Voice Lines</label>
+                      <input
+                        type="text"
+                        value={voiceLines}
+                        onChange={e => setVoiceLines(e.target.value)}
+                        placeholder="Enter number"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="px-4 py-3">
+                      <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">MIM (Magenta In Metro)</label>
+                      <input
+                        type="text"
+                        value={mim}
+                        onChange={e => setMim(e.target.value)}
+                        placeholder="Enter number"
+                        className={inputCls}
+                      />
+                    </div>
+                    <div className="px-4 py-3">
+                      <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Home Internet</label>
+                      <input
+                        type="text"
+                        value={homeInternet}
+                        onChange={e => setHomeInternet(e.target.value)}
+                        placeholder="Enter number"
+                        className={inputCls}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Closing photos — required */}
               {checklistType === 'closing' && (
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -682,6 +737,9 @@ export default function ChecklistPage() {
                 )}
                 {checklistType === 'closing' && !closingPhotosReady && (
                   <span className="text-amber-400">Closing photos required</span>
+                )}
+                {checklistType === 'closing' && !closingMetricsReady && (
+                  <span className="text-amber-400">End of day numbers required</span>
                 )}
               </div>
 
@@ -916,6 +974,31 @@ export default function ChecklistPage() {
                           <p className="text-xs text-gray-400 mb-1.5">Reconciliation Photo 2</p>
                           <img src={detail.reconciliation_photo_2_url} alt="Reconciliation 2" className="w-full rounded-xl object-contain max-h-72 bg-gray-800 border border-gray-700" onError={e => { (e.target as HTMLImageElement).style.display = 'none' }} />
                           <a href={detail.reconciliation_photo_2_url} target="_blank" rel="noopener noreferrer" className="block text-center text-xs text-violet-400 hover:text-violet-300 underline mt-2">Open full size</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* End of day metrics */}
+                  {(detail.voice_lines || detail.mim || detail.home_internet) && (
+                    <div className="bg-gray-800 rounded-xl overflow-hidden">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 pt-3 pb-2">End of Day Numbers</p>
+                      {detail.voice_lines && (
+                        <div className="px-4 py-2 flex justify-between border-t border-gray-700/50">
+                          <span className="text-xs text-gray-400">Voice Lines</span>
+                          <span className="text-xs font-semibold text-white">{detail.voice_lines}</span>
+                        </div>
+                      )}
+                      {detail.mim && (
+                        <div className="px-4 py-2 flex justify-between border-t border-gray-700/50">
+                          <span className="text-xs text-gray-400">MIM (Magenta In Metro)</span>
+                          <span className="text-xs font-semibold text-white">{detail.mim}</span>
+                        </div>
+                      )}
+                      {detail.home_internet && (
+                        <div className="px-4 py-2 flex justify-between border-t border-gray-700/50">
+                          <span className="text-xs text-gray-400">Home Internet</span>
+                          <span className="text-xs font-semibold text-white">{detail.home_internet}</span>
                         </div>
                       )}
                     </div>

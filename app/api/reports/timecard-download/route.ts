@@ -19,6 +19,7 @@ interface ShiftRow {
   is_manual: boolean
   manual_note: string | null
   manual_by_name: string | null
+  store_address: string | null
 }
 
 interface PayCodeRow {
@@ -231,6 +232,7 @@ export async function buildTimecardWorkbook(
   detailSheet.columns = [
     { key: 'name', width: 22 },
     { key: 'org', width: 16 },
+    { key: 'store', width: 30 },
     { key: 'date', width: 16 },
     { key: 'in', width: 14 },
     { key: 'out', width: 14 },
@@ -240,13 +242,13 @@ export async function buildTimecardWorkbook(
     { key: 'by', width: 18 },
   ]
 
-  detailSheet.mergeCells('A1:I1')
+  detailSheet.mergeCells('A1:J1')
   const dTitle = detailSheet.getCell('A1')
   dTitle.value = `Time Detail — ${dateLabel}`
   dTitle.font = { bold: true, size: 13, color: { argb: VIOLET } }
   detailSheet.getRow(1).height = 28
 
-  const detailHeaders = ['Employee', 'Organization', 'Date', 'Clock In', 'Clock Out', 'Hours', 'Corrected?', 'Correction Note', 'Corrected By']
+  const detailHeaders = ['Employee', 'Organization', 'Store', 'Date', 'Clock In', 'Clock Out', 'Hours', 'Corrected?', 'Correction Note', 'Corrected By']
   const detailHeaderRow = detailSheet.getRow(2)
   detailHeaders.forEach((h, i) => {
     const cell = detailHeaderRow.getCell(i + 1)
@@ -254,7 +256,7 @@ export async function buildTimecardWorkbook(
     cell.font = headerFont
     cell.fill = headerFill
     cell.border = headerBorder
-    cell.alignment = { horizontal: i >= 3 ? 'center' : 'left', vertical: 'middle' }
+    cell.alignment = { horizontal: i >= 4 ? 'center' : 'left', vertical: 'middle' }
   })
   detailHeaderRow.height = 22
 
@@ -265,14 +267,15 @@ export async function buildTimecardWorkbook(
     const row = detailSheet.getRow(i + 3)
     row.getCell(1).value = s.full_name
     row.getCell(2).value = s.org_name ?? 'Unassigned'
-    row.getCell(3).value = fmtDate(s.clock_in_at)
-    row.getCell(4).value = fmtTime(s.clock_in_at)
-    row.getCell(5).value = s.clock_out_at ? fmtTime(s.clock_out_at) : 'Still In'
-    row.getCell(6).value = parseFloat(hours.toFixed(2))
-    row.getCell(6).numFmt = '0.00'
-    row.getCell(7).value = s.is_manual ? '⚠ Yes' : ''
-    row.getCell(8).value = s.manual_note ?? ''
-    row.getCell(9).value = s.manual_by_name ?? ''
+    row.getCell(3).value = s.store_address ?? ''
+    row.getCell(4).value = fmtDate(s.clock_in_at)
+    row.getCell(5).value = fmtTime(s.clock_in_at)
+    row.getCell(6).value = s.clock_out_at ? fmtTime(s.clock_out_at) : 'Still In'
+    row.getCell(7).value = parseFloat(hours.toFixed(2))
+    row.getCell(7).numFmt = '0.00'
+    row.getCell(8).value = s.is_manual ? '⚠ Yes' : ''
+    row.getCell(9).value = s.manual_note ?? ''
+    row.getCell(10).value = s.manual_by_name ?? ''
 
     if (s.is_manual) {
       row.eachCell(cell => {
@@ -347,6 +350,114 @@ export async function buildTimecardWorkbook(
     row.height = 18
   })
 
+  // ── Sheet 4: Hours by State (ADP-ready) ────────────────────────────────────
+
+  const stateSheet = workbook.addWorksheet('Hours by State')
+  stateSheet.columns = [
+    { key: 'name', width: 24 },
+    { key: 'state', width: 10 },
+    { key: 'store', width: 34 },
+    { key: 'hours', width: 14 },
+    { key: 'shifts', width: 10 },
+  ]
+
+  stateSheet.mergeCells('A1:E1')
+  const sTitle = stateSheet.getCell('A1')
+  sTitle.value = `Hours by State — ${dateLabel}`
+  sTitle.font = { bold: true, size: 13, color: { argb: VIOLET } }
+  stateSheet.getRow(1).height = 28
+
+  stateSheet.mergeCells('A2:E2')
+  const sSubtitle = stateSheet.getCell('A2')
+  sSubtitle.value = 'Employees grouped by state for ADP multi-state payroll processing.'
+  sSubtitle.font = { size: 9, color: { argb: 'FF6B7280' }, italic: true }
+
+  // Extract state from store address (last word)
+  function extractState(address: string | null): string {
+    if (!address) return 'Unknown'
+    const parts = address.trim().split(' ')
+    const last = parts[parts.length - 1]
+    return last.length === 2 ? last.toUpperCase() : 'Unknown'
+  }
+
+  // Group shifts by state → employee
+  const byState = new Map<string, Map<string, { name: string; hours: number; shifts: number; stores: Set<string> }>>()
+
+  for (const s of shifts) {
+    const state = extractState(s.store_address)
+    if (!byState.has(state)) byState.set(state, new Map())
+    const stateMap = byState.get(state)!
+    if (!stateMap.has(s.user_id)) {
+      stateMap.set(s.user_id, { name: s.full_name, hours: 0, shifts: 0, stores: new Set() })
+    }
+    const emp = stateMap.get(s.user_id)!
+    emp.hours += Number(s.duration_seconds) / 3600
+    emp.shifts++
+    if (s.store_address) emp.stores.add(s.store_address)
+  }
+
+  // Sort states alphabetically
+  const sortedStates = [...byState.keys()].sort()
+
+  let stateRow = 3
+  for (const state of sortedStates) {
+    const stateMap = byState.get(state)!
+    const employees = [...stateMap.values()].sort((a, b) => a.name.localeCompare(b.name))
+    const totalHours = employees.reduce((s, e) => s + e.hours, 0)
+
+    // State header row
+    const headerRow = stateSheet.getRow(stateRow)
+    stateSheet.mergeCells(`A${stateRow}:E${stateRow}`)
+    headerRow.getCell(1).value = `${state} — ${employees.length} employee${employees.length !== 1 ? 's' : ''} — ${totalHours.toFixed(1)} total hours`
+    headerRow.getCell(1).font = { bold: true, size: 12, color: { argb: WHITE } }
+    headerRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: VIOLET } }
+    headerRow.getCell(1).alignment = { horizontal: 'left', vertical: 'middle' }
+    headerRow.height = 24
+    stateRow++
+
+    // Column headers
+    const colHeaderRow = stateSheet.getRow(stateRow)
+    const colHeaders = ['Employee', 'State', 'Store(s)', 'Hours', 'Shifts']
+    colHeaders.forEach((h, i) => {
+      const cell = colHeaderRow.getCell(i + 1)
+      cell.value = h
+      cell.font = { bold: true, size: 10, color: { argb: 'FF6B7280' } }
+      cell.border = { bottom: { style: 'thin', color: { argb: 'FFE5E7EB' } } }
+      cell.alignment = { horizontal: i >= 3 ? 'center' : 'left' }
+    })
+    stateRow++
+
+    // Employee rows
+    for (const emp of employees) {
+      const row = stateSheet.getRow(stateRow)
+      row.getCell(1).value = emp.name
+      row.getCell(2).value = state
+      row.getCell(2).alignment = { horizontal: 'center' }
+      row.getCell(3).value = [...emp.stores].join(', ')
+      row.getCell(4).value = parseFloat(emp.hours.toFixed(2))
+      row.getCell(4).numFmt = '0.00'
+      row.getCell(4).alignment = { horizontal: 'center' }
+      row.getCell(5).value = emp.shifts
+      row.getCell(5).alignment = { horizontal: 'center' }
+      row.height = 18
+      stateRow++
+    }
+
+    // State subtotal
+    const subRow = stateSheet.getRow(stateRow)
+    subRow.getCell(1).value = `${state} Subtotal`
+    subRow.getCell(1).font = { bold: true, size: 10 }
+    subRow.getCell(4).value = parseFloat(totalHours.toFixed(2))
+    subRow.getCell(4).numFmt = '0.00'
+    subRow.getCell(4).font = { bold: true }
+    subRow.getCell(4).alignment = { horizontal: 'center' }
+    subRow.getCell(5).value = employees.reduce((s, e) => s + e.shifts, 0)
+    subRow.getCell(5).font = { bold: true }
+    subRow.getCell(5).alignment = { horizontal: 'center' }
+    subRow.eachCell(cell => { cell.border = { top: { style: 'thin', color: { argb: VIOLET } } } })
+    stateRow += 2 // blank row between states
+  }
+
   const buf = await workbook.xlsx.writeBuffer()
   return Buffer.from(buf)
 }
@@ -376,11 +487,13 @@ export async function POST(req: NextRequest) {
       (EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) AS duration_seconds,
       s.is_manual,
       s.manual_note,
-      mb.full_name AS manual_by_name
+      mb.full_name AS manual_by_name,
+      sl.address AS store_address
     FROM shifts s
     JOIN users u ON u.id = s.user_id
     LEFT JOIN organizations o ON o.id = u.org_id
     LEFT JOIN users mb ON mb.id = s.manual_by
+    LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
     WHERE s.clock_in_at >= $1 AND s.clock_in_at <= $2
       AND u.role NOT IN ('developer')
   `
@@ -431,9 +544,12 @@ export async function POST(req: NextRequest) {
     </div>
   `
 
+  const freshUser = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+  const toEmail = freshUser[0]?.email ?? session.email
+
   await resend.emails.send({
     from: process.env.REPORT_EMAIL_FROM!,
-    to: [session.email],
+    to: [toEmail],
     subject: `FMP Timecard Report — ${dateLabel}`,
     html: htmlBody,
     attachments: [{ filename, content: buffer.toString('base64') }],

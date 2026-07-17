@@ -250,6 +250,26 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Notify ops managers, SDs, and owners in the org
+  if (user?.org_id) {
+    const opsRecipients = await query<{ id: string; email: string; full_name: string }>(
+      `SELECT id, email, full_name FROM users WHERE org_id = $1 AND is_active = TRUE
+         AND role IN ('ops_manager', 'sales_director', 'owner', 'developer')`,
+      [user.org_id]
+    )
+    const lvl = urgency === 1 ? 'Level 1 — 24 hrs' : urgency === 2 ? 'Level 2 — 72 hrs' : 'Level 3 — 1 week'
+    for (const r of opsRecipients) {
+      sendPushToUser(r.id, 'New Supply Request', `${session.fullName} needs "${itemName.trim()}" (${lvl})`, 'supply_request').catch(() => {})
+      if (r.email && await isEmailEnabled(r.id)) {
+        sendEmail(
+          r.email,
+          `New Supply Request: ${itemName.trim()}`,
+          supplyRequestEmailHtml(r.full_name, session.fullName, itemName.trim(), quantity?.trim() || '1', urgency, storeAddress, notes?.trim() || null)
+        ).catch(() => {})
+      }
+    }
+  }
+
   return NextResponse.json({ ok: true })
 }
 

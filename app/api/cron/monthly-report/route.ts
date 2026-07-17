@@ -129,14 +129,21 @@ export async function GET(req: NextRequest) {
 
   const orgIds = [...new Set(expenses.map(e => e.org_id))]
 
-  // Recipients: owners of each org + developer
+  // Recipients: owners of each org + developer — respecting notification preferences
   const owners = await query<{ email: string; org_id: string }>(`
-    SELECT email, org_id FROM users
-    WHERE role IN ('owner','sales_director') AND is_active = TRUE AND org_id IS NOT NULL
+    SELECT u.email, u.org_id FROM users u
+    LEFT JOIN notification_preferences np ON np.user_id = u.id
+    WHERE u.role IN ('owner','sales_director') AND u.is_active = TRUE AND u.org_id IS NOT NULL
+      AND COALESCE(np.monthly_expense_report, TRUE) = TRUE
+      AND COALESCE(np.email_enabled, TRUE) = TRUE
   `)
 
   const developers = await query<{ email: string }>(`
-    SELECT email FROM users WHERE role = 'developer' AND is_active = TRUE
+    SELECT u.email FROM users u
+    LEFT JOIN notification_preferences np ON np.user_id = u.id
+    WHERE u.role = 'developer' AND u.is_active = TRUE
+      AND COALESCE(np.monthly_expense_report, TRUE) = TRUE
+      AND COALESCE(np.email_enabled, TRUE) = TRUE
   `)
 
   const subject = `FMP Monthly Expense Report — ${monthLabel}`

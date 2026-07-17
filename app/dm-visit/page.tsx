@@ -31,6 +31,7 @@ interface DashRow {
   dm_name: string
   submitted_by_id: string
   store_address: string
+  visit_type: string
   count: string
 }
 
@@ -49,9 +50,10 @@ interface HoursRow {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-type Tab = 'new' | 'quick' | 'dashboard' | 'report' | 'stores'
+type Tab = 'new' | 'quick' | 'coaching' | 'dashboard' | 'report' | 'stores'
 
 const DRAFT_KEY = 'dm-visit-draft'
+const COACHING_DRAFT_KEY = 'dm-coaching-draft'
 
 const RDM_OPTIONS = ['Kalee Heinzman', 'Don Woods', 'Jeff Goodman', 'Gary Meier', 'Zac Okerstrom', 'Curt Hauk']
 const VISIT_REASONS = ['Scheduled Visit', 'Performance Coaching', 'Recognition Visit', 'Training Support', 'Compliance Review', 'Other']
@@ -112,7 +114,7 @@ const EMPTY_FORM = {
 export default function DmVisitPage() {
   const router = useRouter()
   const [session, setSession] = useState<Session | null>(null)
-  const [tab, setTab] = useState<Tab>('new')
+  const [tab, setTab] = useState<Tab>('quick')
   const [locations, setLocations] = useState<StoreLocation[]>([])
   const [form, setForm] = useState({ ...EMPTY_FORM })
   const [submitting, setSubmitting] = useState(false)
@@ -120,14 +122,100 @@ export default function DmVisitPage() {
   const [hasDraft, setHasDraft] = useState(false)
 
   // Quick Visit
-  const [quickForm, setQuickForm] = useState({ store_location_id: '', store_address: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+  const [quickForm, setQuickForm] = useState({ store_location_id: '', store_address: '', assigned_rdm: '', intentionality: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+
+  // DM Coaching Checklist
+  const EMPTY_COACHING = {
+    store_location_id: '', store_address: '', employee_name: '',
+    obs_greeted_customer: false, obs_offered_mim: false, obs_offered_hsi: false, obs_pitched_accessories: false, obs_open_ended_questions: false, obs_educated_survey: false, obs_primary_issue: '',
+    rp_demonstrated_mim: false, rp_demonstrated_hsi: false, rp_score: '', rp_notes: '',
+    kc_mim_knowledge: '', kc_hsi_knowledge: '', kc_objection_handling: '', kc_gap_notes: '',
+    commitments_gained: '',
+    fu_follow_up_date: '',
+  }
+  const [coachingForm, setCoachingForm] = useState({ ...EMPTY_COACHING })
+  const [coachingSubmitting, setCoachingSubmitting] = useState(false)
+  const [coachingSubmitted, setCoachingSubmitted] = useState(false)
+  const [coachingError, setCoachingError] = useState('')
+  const [hasCoachingDraft, setHasCoachingDraft] = useState(false)
+  // Quick Visit coaching add-on
+  const [quickIncludeCoaching, setQuickIncludeCoaching] = useState(false)
+  const EMPTY_QUICK_COACHING = {
+    employee_name: '',
+    obs_greeted_customer: false, obs_offered_mim: false, obs_offered_hsi: false, obs_pitched_accessories: false, obs_open_ended_questions: false, obs_educated_survey: false, obs_primary_issue: '',
+    rp_demonstrated_mim: false, rp_demonstrated_hsi: false, rp_score: '', rp_notes: '',
+    kc_mim_knowledge: '', kc_hsi_knowledge: '', kc_objection_handling: '', kc_gap_notes: '',
+    commitments_gained: '',
+    fu_follow_up_date: '',
+  }
+  const [quickCoaching, setQuickCoaching] = useState({ ...EMPTY_QUICK_COACHING })
+
   const [quickSubmitting, setQuickSubmitting] = useState(false)
   const [quickSubmitted, setQuickSubmitted] = useState(false)
   const [quickError, setQuickError] = useState('')
+  const [quickPhotoKeys, setQuickPhotoKeys] = useState<string[]>([])
+  const [quickPhotoUploading, setQuickPhotoUploading] = useState(false)
 
   // Dashboard
   const [dashRows, setDashRows] = useState<DashRow[]>([])
   const [typeCounts, setTypeCounts] = useState<{ visit_type: string; count: string }[]>([])
+  type VisitRecord = {
+    id: string; dm_name: string; store_address: string; visit_type: string; submitted_at: string
+    assigned_rdm: string | null; reason_for_visit: string | null
+    intentionality: string | null; quick_interaction_notes: string | null
+    quick_takeaways: string | null; quick_actions: string | null; quick_impact: string | null
+    additional_comments: string | null
+    employees_working: string | null; scorecard_grade: string | null
+    pre_visit_1: string | null; pre_visit_2: string | null; pre_visit_3: string | null
+    scorecard_1: string | null; scorecard_2: string | null; scorecard_3: string | null
+    live_interaction_observed: boolean | null
+    coaching_1: string | null; coaching_3: string | null
+    impact_1: string | null; impact_2: string | null; impact_3: string | null; impact_4: string | null
+    ops_notes: string | null
+    photo_keys: string[] | null
+    photo_urls: string[] | null
+    // Coaching data for quick_coaching visits
+    coaching_employee_name: string | null
+    coaching_obs_greeted_customer: boolean | null; coaching_obs_offered_mim: boolean | null
+    coaching_obs_offered_hsi: boolean | null; coaching_obs_pitched_accessories: boolean | null
+    coaching_obs_open_ended_questions: boolean | null; coaching_obs_educated_survey: boolean | null
+    coaching_obs_primary_issue: string | null
+    coaching_rp_demonstrated_mim: boolean | null; coaching_rp_demonstrated_hsi: boolean | null
+    coaching_rp_score: string | null; coaching_rp_notes: string | null
+    coaching_kc_mim_knowledge: string | null; coaching_kc_hsi_knowledge: string | null
+    coaching_kc_objection_handling: string | null; coaching_kc_gap_notes: string | null
+    coaching_commitments_gained: string | null; coaching_fu_follow_up_date: string | null
+  }
+  const [visitRecords, setVisitRecords] = useState<VisitRecord[]>([])
+  const [selectedVisit, setSelectedVisit] = useState<VisitRecord | null>(null)
+  type CoachingRow = {
+    id: string
+    dm_name: string
+    submitted_by_id: string
+    store_address: string
+    employee_name: string
+    submitted_at: string
+    count: string
+    obs_greeted_customer: boolean
+    obs_offered_mim: boolean
+    obs_offered_hsi: boolean
+    obs_pitched_accessories: boolean
+    obs_open_ended_questions: boolean
+    obs_educated_survey: boolean
+    obs_primary_issue: string | null
+    rp_demonstrated_mim: boolean
+    rp_demonstrated_hsi: boolean
+    rp_score: string | null
+    rp_notes: string | null
+    kc_mim_knowledge: string | null
+    kc_hsi_knowledge: string | null
+    kc_objection_handling: string | null
+    kc_gap_notes: string | null
+    commitments_gained: string | null
+    fu_follow_up_date: string | null
+  }
+  const [coachingRows, setCoachingRows] = useState<CoachingRow[]>([])
+  const [selectedCoaching, setSelectedCoaching] = useState<CoachingRow | null>(null)
   const [dashViewMode, setDashViewMode] = useState<'monthly' | 'range'>('monthly')
   const [dashMonth, setDashMonth] = useState(() => {
     const d = new Date()
@@ -223,6 +311,25 @@ export default function DmVisitPage() {
     try { localStorage.setItem(DRAFT_KEY, JSON.stringify(form)) } catch { /* ignore */ }
   }, [form, session])
 
+  // Restore coaching draft when session loads
+  useEffect(() => {
+    if (!session) return
+    try {
+      const saved = localStorage.getItem(COACHING_DRAFT_KEY)
+      if (saved) {
+        const draft = JSON.parse(saved)
+        setCoachingForm(f => ({ ...EMPTY_COACHING, ...draft }))
+        setHasCoachingDraft(true)
+      }
+    } catch { /* ignore */ }
+  }, [session])
+
+  // Auto-save coaching form to localStorage on every change
+  useEffect(() => {
+    if (!session) return
+    try { localStorage.setItem(COACHING_DRAFT_KEY, JSON.stringify(coachingForm)) } catch { /* ignore */ }
+  }, [coachingForm, session])
+
   // Keepalive ping every 4 minutes to prevent session expiry
   useEffect(() => {
     const id = setInterval(() => { fetch('/api/auth/me').catch(() => {}) }, 4 * 60 * 1000)
@@ -245,6 +352,14 @@ export default function DmVisitPage() {
     fetch(`/api/dm-store-visits?${p}`).then(r => r.json()).then(d => {
       if (d.rows) setDashRows(d.rows)
       if (d.typeCounts) setTypeCounts(d.typeCounts)
+      if (d.visitRecords) setVisitRecords(d.visitRecords)
+    })
+    const cp = new URLSearchParams()
+    if (dashFrom) cp.set('from', dashFrom)
+    if (dashTo) cp.set('to', dashTo)
+    if (dashDmId) cp.set('dmId', dashDmId)
+    fetch(`/api/dm-coaching-checklist?${cp}`).then(r => r.json()).then(d => {
+      if (d.rows) setCoachingRows(d.rows)
     })
   }, [dashFrom, dashTo, dashDmId])
 
@@ -318,19 +433,43 @@ export default function DmVisitPage() {
     }
   }
 
+  async function handleQuickPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setQuickPhotoUploading(true)
+    try {
+      const res = await fetch('/api/dm-store-visits/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+      })
+      const { url, key } = await res.json()
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      setQuickPhotoKeys(prev => [...prev, key])
+    } catch {
+      setQuickError('Photo upload failed. Please try again.')
+    } finally {
+      setQuickPhotoUploading(false)
+      e.target.value = ''
+    }
+  }
+
   async function handleQuickSubmit(e: React.FormEvent) {
     e.preventDefault()
     setQuickError('')
     if (!quickForm.store_address) { setQuickError('Please select a store.'); return }
-    if (!quickForm.quick_takeaways.trim()) { setQuickError('Key Visit Takeaways is required.'); return }
-    if (!quickForm.quick_actions.trim()) { setQuickError('Actions/Commitments is required.'); return }
+    if (!quickForm.quick_takeaways.trim()) { setQuickError('Key Takeaways & Commitments is required.'); return }
     if (!quickForm.quick_impact.trim()) { setQuickError('DM Visit Impact Made is required.'); return }
+    if (quickIncludeCoaching && !quickCoaching.employee_name.trim()) { setQuickError('Employee name is required for coaching.'); return }
     setQuickSubmitting(true)
     try {
+      const visitType = quickIncludeCoaching ? 'quick_coaching' : 'quick'
+      const payload: Record<string, unknown> = { visit_type: visitType, ...quickForm, photoKeys: quickPhotoKeys }
+      if (quickIncludeCoaching) payload.coaching = quickCoaching
       const res = await fetch('/api/dm-store-visits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ visit_type: 'quick', ...quickForm }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const d = await res.json().catch(() => ({}))
@@ -338,11 +477,42 @@ export default function DmVisitPage() {
         return
       }
       setQuickSubmitted(true)
-      setQuickForm({ store_location_id: '', store_address: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+      setQuickForm({ store_location_id: '', store_address: '', assigned_rdm: '', intentionality: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
+      setQuickIncludeCoaching(false)
+      setQuickPhotoKeys([])
+      setQuickCoaching({ ...EMPTY_QUICK_COACHING })
     } catch {
       setQuickError('Network error. Please try again.')
     } finally {
       setQuickSubmitting(false)
+    }
+  }
+
+  async function handleCoachingSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setCoachingError('')
+    if (!coachingForm.store_address) { setCoachingError('Please select a store.'); return }
+    if (!coachingForm.employee_name.trim()) { setCoachingError('Employee name is required.'); return }
+    setCoachingSubmitting(true)
+    try {
+      const res = await fetch('/api/dm-coaching-checklist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(coachingForm),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setCoachingError(d.error ?? 'Submission failed.')
+        return
+      }
+      try { localStorage.removeItem(COACHING_DRAFT_KEY) } catch { /* ignore */ }
+      setHasCoachingDraft(false)
+      setCoachingSubmitted(true)
+      setCoachingForm({ ...EMPTY_COACHING })
+    } catch {
+      setCoachingError('Network error. Please try again.')
+    } finally {
+      setCoachingSubmitting(false)
     }
   }
 
@@ -549,8 +719,9 @@ export default function DmVisitPage() {
   )
 
   const tabs: { id: Tab; label: string }[] = [
-    { id: 'new', label: 'New Checklist' },
+    ...(session.role === 'developer' ? [{ id: 'new' as Tab, label: 'New Checklist (dev)' }] : []),
     { id: 'quick', label: 'Quick Visit' },
+    ...(session.role === 'developer' ? [{ id: 'coaching' as Tab, label: 'DM Coaching (dev)' }] : []),
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'report', label: 'Download Report' },
     ...(canManageStores(session.role) || session.role === 'manager' ? [{ id: 'stores' as Tab, label: 'Manage Stores' }] : []),
@@ -588,7 +759,7 @@ export default function DmVisitPage() {
           <button key={t.id} onClick={() => { setTab(t.id); setSubmitted(false) }}
             className={`px-4 py-3 text-sm font-semibold whitespace-nowrap transition-colors border-b-2 ${
               tab === t.id ? 'border-violet-500 text-violet-400' : 'border-transparent text-gray-500 hover:text-gray-300'
-            }`}>
+            } ${t.label.includes('(dev)') ? 'italic opacity-70' : ''}`}>
             {t.label}
           </button>
         ))}
@@ -873,6 +1044,25 @@ export default function DmVisitPage() {
               </div>
 
               <div className={fieldWrap}>
+                <label className={labelCls}>Assigned RDM</label>
+                <select value={quickForm.assigned_rdm} onChange={e => setQuickForm(f => ({ ...f, assigned_rdm: e.target.value }))} required className={inputCls}>
+                  <option value="">Select RDM</option>
+                  {RDM_OPTIONS.map(r => <option key={r}>{r}</option>)}
+                </select>
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Intentionality</label>
+                <textarea
+                  value={quickForm.intentionality}
+                  onChange={e => setQuickForm(f => ({ ...f, intentionality: e.target.value }))}
+                  rows={3}
+                  placeholder="What is your objective (plan of attack) in this visit?"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              <div className={fieldWrap}>
                 <label className={labelCls}>Observed Customer Interaction Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
                 <textarea
                   value={quickForm.quick_interaction_notes}
@@ -884,25 +1074,13 @@ export default function DmVisitPage() {
               </div>
 
               <div className={fieldWrap}>
-                <label className={labelCls}>Key Visit Takeaways <span className="text-red-500">*</span></label>
+                <label className={labelCls}>Key Takeaways & Commitments <span className="text-red-500">*</span></label>
                 <textarea
                   value={quickForm.quick_takeaways}
                   onChange={e => setQuickForm(f => ({ ...f, quick_takeaways: e.target.value }))}
                   required
                   rows={3}
-                  placeholder="What were the main observations from this visit?"
-                  className={inputCls + ' resize-none'}
-                />
-              </div>
-
-              <div className={fieldWrap}>
-                <label className={labelCls}>Actions / Commitments <span className="text-red-500">*</span></label>
-                <textarea
-                  value={quickForm.quick_actions}
-                  onChange={e => setQuickForm(f => ({ ...f, quick_actions: e.target.value }))}
-                  required
-                  rows={3}
-                  placeholder="What actions or commitments were made?"
+                  placeholder="What were the main observations and what commitments were made?"
                   className={inputCls + ' resize-none'}
                 />
               </div>
@@ -914,10 +1092,218 @@ export default function DmVisitPage() {
                   onChange={e => setQuickForm(f => ({ ...f, quick_impact: e.target.value }))}
                   required
                   rows={3}
-                  placeholder="What impact did your visit make?"
+                  placeholder="What impact did your visit make and how did your plan work out?"
                   className={inputCls + ' resize-none'}
                 />
               </div>
+
+              {/* Photo Upload */}
+              <div className={fieldWrap}>
+                <label className={labelCls}>Photos / Attachments <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                {quickPhotoKeys.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {quickPhotoKeys.map((key, i) => (
+                      <div key={i} className="relative">
+                        <div className="w-16 h-16 bg-gray-800 rounded-lg flex items-center justify-center">
+                          <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <button type="button" onClick={() => setQuickPhotoKeys(prev => prev.filter((_, j) => j !== i))}
+                          className="absolute -top-1 -right-1 w-4 h-4 bg-red-600 rounded-full flex items-center justify-center">
+                          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${quickPhotoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <input type="file" accept="image/*" onChange={handleQuickPhotoUpload} disabled={quickPhotoUploading}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
+                  {quickPhotoUploading ? 'Uploading...' : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Add Photo
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Coaching Add-On Toggle */}
+              <div className={fieldWrap}>
+                <button
+                  type="button"
+                  onClick={() => setQuickIncludeCoaching(!quickIncludeCoaching)}
+                  className={`w-full flex items-center justify-between py-3 px-4 rounded-xl border text-sm font-semibold transition-colors ${
+                    quickIncludeCoaching
+                      ? 'bg-violet-600/20 border-violet-500 text-violet-300'
+                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                  }`}>
+                  <span>Add DM Coaching</span>
+                  <svg className={`w-5 h-5 transition-transform ${quickIncludeCoaching ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              </div>
+
+              {quickIncludeCoaching && (
+                <>
+                  <div className={sectionHeaderCls}>DM Coaching</div>
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Employee Name <span className="text-red-500">*</span></label>
+                    <input
+                      type="text"
+                      value={quickCoaching.employee_name}
+                      onChange={e => setQuickCoaching(f => ({ ...f, employee_name: e.target.value }))}
+                      placeholder="Name of the employee being coached"
+                      className={inputCls}
+                    />
+                  </div>
+
+                  <div className={sectionHeaderCls}>1. Observe — Watch 2-3 Transactions</div>
+
+                  {([
+                    ['obs_greeted_customer', 'Did the rep greet the customer within 5 seconds?'],
+                    ['obs_offered_mim', 'Did the rep offer MIM?'],
+                    ['obs_offered_hsi', 'Did the rep offer HSI?'],
+                    ['obs_pitched_accessories', 'Did the rep pitch accessories?'],
+                    ['obs_open_ended_questions', 'Did they ask open ended questions?'],
+                    ['obs_educated_survey', 'Did they educate on the survey?'],
+                  ] as [keyof typeof quickCoaching, string][]).map(([key, label]) => (
+                    <div key={key} className={fieldWrap}>
+                      <label className={labelCls}>{label}</label>
+                      <div className="flex gap-3">
+                        {['Yes', 'No'].map(opt => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => setQuickCoaching(f => ({ ...f, [key]: opt === 'Yes' }))}
+                            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                              quickCoaching[key] === (opt === 'Yes')
+                                ? opt === 'Yes' ? 'bg-green-600 border-green-500 text-white' : 'bg-red-600 border-red-500 text-white'
+                                : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                            }`}>
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Primary Issue</label>
+                    <div className="flex gap-3">
+                      {['Skill', 'Will', 'None'].map(opt => (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setQuickCoaching(f => ({ ...f, obs_primary_issue: f.obs_primary_issue === opt ? '' : opt }))}
+                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                            quickCoaching.obs_primary_issue === opt
+                              ? 'bg-violet-600 border-violet-500 text-white'
+                              : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                          }`}>
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={sectionHeaderCls}>2. Role Play</div>
+
+                  {([
+                    ['rp_demonstrated_mim', 'Demonstrated MIM Script'],
+                    ['rp_demonstrated_hsi', 'Demonstrated HSI Presentation'],
+                  ] as [keyof typeof quickCoaching, string][]).map(([key, label]) => (
+                    <div key={key} className={fieldWrap}>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" checked={!!quickCoaching[key]}
+                          onChange={e => setQuickCoaching(f => ({ ...f, [key]: e.target.checked }))}
+                          className="accent-violet-500 w-4 h-4 flex-shrink-0" />
+                        <span className="text-sm text-gray-200">{label}</span>
+                      </label>
+                    </div>
+                  ))}
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Score</label>
+                    <div className="flex gap-3">
+                      {['Poor', 'Needs Work', 'Solid'].map(opt => (
+                        <button key={opt} type="button"
+                          onClick={() => setQuickCoaching(f => ({ ...f, rp_score: f.rp_score === opt ? '' : opt }))}
+                          className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                            quickCoaching.rp_score === opt
+                              ? opt === 'Solid' ? 'bg-green-600 border-green-500 text-white'
+                              : opt === 'Poor' ? 'bg-red-600 border-red-500 text-white'
+                              : 'bg-amber-600 border-amber-500 text-white'
+                              : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                          }`}>
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                    <textarea value={quickCoaching.rp_notes} onChange={e => setQuickCoaching(f => ({ ...f, rp_notes: e.target.value }))}
+                      rows={3} placeholder="Notes on the role play…" className={inputCls + ' resize-none'} />
+                  </div>
+
+                  <div className={sectionHeaderCls}>3. Knowledge Check</div>
+
+                  {([
+                    ['kc_mim_knowledge', 'MIM Knowledge'],
+                    ['kc_hsi_knowledge', 'HSI Knowledge'],
+                    ['kc_objection_handling', 'Objection Handling'],
+                  ] as [keyof typeof quickCoaching, string][]).map(([key, label]) => (
+                    <div key={key} className={fieldWrap}>
+                      <label className={labelCls}>{label}</label>
+                      <div className="flex gap-3">
+                        {['Pass', 'Fail'].map(opt => (
+                          <button key={opt} type="button"
+                            onClick={() => setQuickCoaching(f => ({ ...f, [key]: (f[key] as string) === opt ? '' : opt }))}
+                            className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                              quickCoaching[key] === opt
+                                ? opt === 'Pass' ? 'bg-green-600 border-green-500 text-white' : 'bg-red-600 border-red-500 text-white'
+                                : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                            }`}>
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Gap / Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                    <textarea value={quickCoaching.kc_gap_notes} onChange={e => setQuickCoaching(f => ({ ...f, kc_gap_notes: e.target.value }))}
+                      rows={3} placeholder="Knowledge gaps or additional notes…" className={inputCls + ' resize-none'} />
+                  </div>
+
+                  <div className={sectionHeaderCls}>4. Commitments Gained</div>
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Commitments Gained</label>
+                    <textarea value={quickCoaching.commitments_gained} onChange={e => setQuickCoaching(f => ({ ...f, commitments_gained: e.target.value }))}
+                      rows={3} placeholder="What commitments were gained during this coaching session?" className={inputCls + ' resize-none'} />
+                  </div>
+
+                  <div className={sectionHeaderCls}>5. Follow-Up</div>
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Follow-Up Date</label>
+                    <input type="text" value={quickCoaching.fu_follow_up_date}
+                      onChange={e => setQuickCoaching(f => ({ ...f, fu_follow_up_date: e.target.value }))}
+                      placeholder="e.g. June 30, 2026" className={inputCls} />
+                  </div>
+                </>
+              )}
 
               {quickError && (
                 <div className="px-4 py-3 bg-red-900/30 border-b border-red-700/40">
@@ -928,7 +1314,258 @@ export default function DmVisitPage() {
               <div className="px-4 py-5">
                 <button type="submit" disabled={quickSubmitting}
                   className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-                  {quickSubmitting ? 'Submitting…' : 'Submit Quick Visit'}
+                  {quickSubmitting ? 'Submitting…' : (quickIncludeCoaching ? 'Submit Quick Visit w/ Coaching' : 'Submit Quick Visit')}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* ── DM COACHING CHECKLIST ── */}
+      {tab === 'coaching' && (
+        <div className="max-w-xl mx-auto">
+          {coachingSubmitted ? (
+            <div className="flex flex-col items-center justify-center py-20 px-6 text-center">
+              <div className="w-16 h-16 rounded-full bg-green-500/20 flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Coaching Checklist Saved</h2>
+              <p className="text-gray-400 text-sm mb-6">Your coaching session has been recorded.</p>
+              <button onClick={() => setCoachingSubmitted(false)} className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-6 py-2.5 rounded-xl transition-colors">
+                Submit Another
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleCoachingSubmit} className="divide-y divide-gray-800/50">
+              {hasCoachingDraft && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 bg-amber-900/30 border-b border-amber-700/40">
+                  <div className="flex items-center gap-2 text-amber-300 text-sm">
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Draft restored — your progress was saved automatically.
+                  </div>
+                  <button type="button" onClick={() => {
+                    try { localStorage.removeItem(COACHING_DRAFT_KEY) } catch { /* ignore */ }
+                    setCoachingForm({ ...EMPTY_COACHING })
+                    setHasCoachingDraft(false)
+                  }} className="text-xs text-amber-400 hover:text-amber-200 underline shrink-0">
+                    Discard draft
+                  </button>
+                </div>
+              )}
+              <div className={sectionHeaderCls}>Visit Info</div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Store Address</label>
+                <select
+                  value={coachingForm.store_location_id}
+                  onChange={e => {
+                    const loc = locations.find(l => l.id === e.target.value)
+                    setCoachingForm(f => ({ ...f, store_location_id: e.target.value, store_address: loc?.address ?? '' }))
+                  }}
+                  required className={inputCls}>
+                  <option value="">Select a store</option>
+                  {locations.filter(l => l.active).map(l => (
+                    <option key={l.id} value={l.id}>{l.address}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Employee Name</label>
+                <input
+                  type="text"
+                  value={coachingForm.employee_name}
+                  onChange={e => setCoachingForm(f => ({ ...f, employee_name: e.target.value }))}
+                  required
+                  placeholder="Name of the employee being coached"
+                  className={inputCls}
+                />
+              </div>
+
+              {/* Section 1: Observe */}
+              <div className={sectionHeaderCls}>1. Observe — Watch 2-3 Transactions</div>
+
+              {([
+                ['obs_greeted_customer', 'Did the rep greet the customer within 5 seconds?'],
+                ['obs_offered_mim', 'Did the rep offer MIM?'],
+                ['obs_offered_hsi', 'Did the rep offer HSI?'],
+                ['obs_pitched_accessories', 'Did the rep pitch accessories?'],
+                ['obs_open_ended_questions', 'Did they ask open ended questions?'],
+                ['obs_educated_survey', 'Did they educate on the survey?'],
+              ] as [keyof typeof coachingForm, string][]).map(([key, label]) => (
+                <div key={key} className={fieldWrap}>
+                  <label className={labelCls}>{label}</label>
+                  <div className="flex gap-3">
+                    {['Yes', 'No'].map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setCoachingForm(f => ({ ...f, [key]: opt === 'Yes' }))}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                          coachingForm[key] === (opt === 'Yes')
+                            ? opt === 'Yes' ? 'bg-green-600 border-green-500 text-white' : 'bg-red-600 border-red-500 text-white'
+                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                        }`}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Primary Issue</label>
+                <div className="flex gap-3">
+                  {['Skill', 'Will', 'None'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setCoachingForm(f => ({ ...f, obs_primary_issue: f.obs_primary_issue === opt ? '' : opt }))}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                        coachingForm.obs_primary_issue === opt
+                          ? 'bg-violet-600 border-violet-500 text-white'
+                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                      }`}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 2: Role Play */}
+              <div className={sectionHeaderCls}>2. Role Play</div>
+
+              {([
+                ['rp_demonstrated_mim', 'Demonstrated MIM Script'],
+                ['rp_demonstrated_hsi', 'Demonstrated HSI Presentation'],
+              ] as [keyof typeof coachingForm, string][]).map(([key, label]) => (
+                <div key={key} className={fieldWrap}>
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!coachingForm[key]}
+                      onChange={e => setCoachingForm(f => ({ ...f, [key]: e.target.checked }))}
+                      className="accent-violet-500 w-4 h-4 flex-shrink-0"
+                    />
+                    <span className="text-sm text-gray-200">{label}</span>
+                  </label>
+                </div>
+              ))}
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Score</label>
+                <div className="flex gap-3">
+                  {['Poor', 'Needs Work', 'Solid'].map(opt => (
+                    <button
+                      key={opt}
+                      type="button"
+                      onClick={() => setCoachingForm(f => ({ ...f, rp_score: f.rp_score === opt ? '' : opt }))}
+                      className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                        coachingForm.rp_score === opt
+                          ? opt === 'Solid' ? 'bg-green-600 border-green-500 text-white'
+                          : opt === 'Poor' ? 'bg-red-600 border-red-500 text-white'
+                          : 'bg-amber-600 border-amber-500 text-white'
+                          : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                      }`}>
+                      {opt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                <textarea
+                  value={coachingForm.rp_notes}
+                  onChange={e => setCoachingForm(f => ({ ...f, rp_notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Notes on the role play…"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              {/* Section 3: Knowledge Check */}
+              <div className={sectionHeaderCls}>3. Knowledge Check</div>
+
+              {([
+                ['kc_mim_knowledge', 'MIM Knowledge'],
+                ['kc_hsi_knowledge', 'HSI Knowledge'],
+                ['kc_objection_handling', 'Objection Handling'],
+              ] as [keyof typeof coachingForm, string][]).map(([key, label]) => (
+                <div key={key} className={fieldWrap}>
+                  <label className={labelCls}>{label}</label>
+                  <div className="flex gap-3">
+                    {['Pass', 'Fail'].map(opt => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setCoachingForm(f => ({ ...f, [key]: (f[key] as string) === opt ? '' : opt }))}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-colors border ${
+                          coachingForm[key] === opt
+                            ? opt === 'Pass' ? 'bg-green-600 border-green-500 text-white' : 'bg-red-600 border-red-500 text-white'
+                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'
+                        }`}>
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Gap / Notes <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
+                <textarea
+                  value={coachingForm.kc_gap_notes}
+                  onChange={e => setCoachingForm(f => ({ ...f, kc_gap_notes: e.target.value }))}
+                  rows={3}
+                  placeholder="Knowledge gaps or additional notes…"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              {/* Section 4: Commitments Gained */}
+              <div className={sectionHeaderCls}>4. Commitments Gained</div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Commitments Gained</label>
+                <textarea
+                  value={coachingForm.commitments_gained}
+                  onChange={e => setCoachingForm(f => ({ ...f, commitments_gained: e.target.value }))}
+                  rows={3}
+                  placeholder="What commitments were gained during this coaching session?"
+                  className={inputCls + ' resize-none'}
+                />
+              </div>
+
+              {/* Section 5: Follow-Up */}
+              <div className={sectionHeaderCls}>5. Follow-Up</div>
+
+              <div className={fieldWrap}>
+                <label className={labelCls}>Follow-Up Date</label>
+                <input
+                  type="text"
+                  value={coachingForm.fu_follow_up_date}
+                  onChange={e => setCoachingForm(f => ({ ...f, fu_follow_up_date: e.target.value }))}
+                  placeholder="e.g. June 30, 2026"
+                  className={inputCls}
+                />
+              </div>
+
+              {coachingError && (
+                <div className="px-4 py-3 bg-red-900/30 border-b border-red-700/40">
+                  <p className="text-sm text-red-400">{coachingError}</p>
+                </div>
+              )}
+
+              <div className="px-4 py-5">
+                <button type="submit" disabled={coachingSubmitting}
+                  className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                  {coachingSubmitting ? 'Submitting…' : 'Submit Coaching Checklist'}
                 </button>
               </div>
             </form>
@@ -940,9 +1577,11 @@ export default function DmVisitPage() {
       {tab === 'dashboard' && (() => {
         const normalCount = Number(typeCounts.find(t => t.visit_type === 'normal')?.count ?? 0)
         const quickCount = Number(typeCounts.find(t => t.visit_type === 'quick')?.count ?? 0)
-        const typeTotal = normalCount + quickCount
+        const quickCoachingCount = Number(typeCounts.find(t => t.visit_type === 'quick_coaching')?.count ?? 0)
+        const typeTotal = normalCount + quickCount + quickCoachingCount
         const normalPct = typeTotal > 0 ? Math.round(normalCount / typeTotal * 100) : 0
-        const quickPct = typeTotal > 0 ? 100 - normalPct : 0
+        const quickCoachingPct = typeTotal > 0 ? Math.round(quickCoachingCount / typeTotal * 100) : 0
+        const quickPct = typeTotal > 0 ? 100 - normalPct - quickCoachingPct : 0
 
         return (
         <div className="max-w-2xl mx-auto px-4 py-4 space-y-4">
@@ -1007,40 +1646,108 @@ export default function DmVisitPage() {
                 <div className="h-2 rounded-full overflow-hidden bg-gray-700 mb-2 flex">
                   {normalPct > 0 && <div className="bg-violet-500 h-full transition-all" style={{ width: `${normalPct}%` }} />}
                   {quickPct > 0 && <div className="bg-amber-500 h-full transition-all" style={{ width: `${quickPct}%` }} />}
+                  {quickCoachingPct > 0 && <div className="bg-emerald-500 h-full transition-all" style={{ width: `${quickCoachingPct}%` }} />}
                 </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" />
-                    <span className="text-gray-300">{normalPct}% Normal</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-                    <span className="text-gray-300">{quickPct}% Quick</span>
-                  </div>
+                <div className="flex items-center gap-3 flex-wrap text-xs">
+                  {quickPct > 0 && <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" /><span className="text-gray-300">{quickPct}% Quick Visit</span></div>}
+                  {quickCoachingPct > 0 && <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" /><span className="text-gray-300">{quickCoachingPct}% Quick w/ Coaching</span></div>}
+                  {normalPct > 0 && <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-violet-500 shrink-0" /><span className="text-gray-300">{normalPct}% Legacy</span></div>}
                 </div>
               </div>
             )}
           </div>
 
-          {/* By DM / Store */}
-          {Object.entries(dashByDm).length === 0 ? (
-            <p className="text-gray-500 text-sm text-center py-10">No submissions found.</p>
-          ) : (
-            Object.entries(dashByDm).map(([dmName, { stores, total }]) => (
+          {/* By DM — Store Visits */}
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">Store Visits</p>
+          {(() => {
+            // Group individual visit records by DM
+            const byDmVisits = visitRecords.reduce<Record<string, VisitRecord[]>>((acc, v) => {
+              if (!acc[v.dm_name]) acc[v.dm_name] = []
+              acc[v.dm_name].push(v)
+              return acc
+            }, {})
+            if (Object.keys(byDmVisits).length === 0) {
+              return <p className="text-gray-600 text-sm text-center py-4">No visits found.</p>
+            }
+            return Object.entries(byDmVisits).map(([dmName, dmVisits]) => (
               <div key={dmName} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
                   <span className="font-semibold text-white text-sm">{dmName}</span>
-                  <span className="text-xs text-gray-400">{total} visit{total !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-gray-400">{dmVisits.length} visit{dmVisits.length !== 1 ? 's' : ''}</span>
                 </div>
-                {stores.map(s => (
-                  <div key={s.store_address} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-800/50 last:border-0">
-                    <span className="text-sm text-gray-300">{s.store_address}</span>
-                    <span className="text-sm font-semibold text-violet-400">{s.count}</span>
-                  </div>
-                ))}
+                {dmVisits.map(v => {
+                  const date = new Date(v.submitted_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })
+                  const time = new Date(v.submitted_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })
+                  return (
+                    <button key={v.id} type="button" onClick={() => setSelectedVisit(v)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 border-b border-gray-800/50 last:border-0 hover:bg-gray-800/50 transition-colors text-left">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-sm text-gray-300 truncate">{v.store_address}</span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${
+                          v.visit_type === 'quick_coaching' ? 'bg-emerald-900/40 text-emerald-400'
+                          : v.visit_type === 'quick' ? 'bg-amber-900/40 text-amber-400'
+                          : 'bg-violet-900/40 text-violet-400'
+                        }`}>
+                          {v.visit_type === 'quick_coaching' ? 'w/ Coaching' : v.visit_type === 'quick' ? 'Quick' : 'Full'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className="text-xs text-gray-600">{date} {time}</span>
+                        <svg className="w-3 h-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                        </svg>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             ))
-          )}
+          })()}
+
+          {/* Coaching Checklists */}
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mt-2">DM Coaching Sessions</p>
+          {(() => {
+            const byDm = coachingRows.reduce<Record<string, { stores: Record<string, typeof coachingRows> }>>((acc, r) => {
+              if (!acc[r.dm_name]) acc[r.dm_name] = { stores: {} }
+              if (!acc[r.dm_name].stores[r.store_address]) acc[r.dm_name].stores[r.store_address] = []
+              acc[r.dm_name].stores[r.store_address].push(r)
+              return acc
+            }, {})
+            if (Object.keys(byDm).length === 0) {
+              return <p className="text-gray-600 text-sm text-center py-4">No coaching sessions found.</p>
+            }
+            return Object.entries(byDm).map(([dmName, { stores }]) => {
+              const totalSessions = Object.values(stores).reduce((s, rows) => s + rows.length, 0)
+              return (
+                <div key={dmName} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                    <span className="font-semibold text-white text-sm">{dmName}</span>
+                    <span className="text-xs text-gray-400">{totalSessions} session{totalSessions !== 1 ? 's' : ''}</span>
+                  </div>
+                  {Object.entries(stores).map(([storeAddress, sessions]) => (
+                    <div key={storeAddress} className="border-b border-gray-800/50 last:border-0">
+                      <div className="flex items-center justify-between px-4 py-2 bg-gray-900/60">
+                        <span className="text-sm text-gray-300">{storeAddress}</span>
+                        <span className="text-xs text-violet-400 font-semibold">{sessions.length} session{sessions.length !== 1 ? 's' : ''}</span>
+                      </div>
+                      {sessions.map((s, i) => (
+                        <button key={i} type="button" onClick={() => setSelectedCoaching(s)}
+                          className="w-full flex items-center justify-between px-5 py-2 border-t border-gray-800/30 hover:bg-gray-800/50 transition-colors text-left">
+                          <span className="text-xs text-gray-300">{s.employee_name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">{new Date(s.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>
+                            <svg className="w-3 h-3 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                            </svg>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )
+            })
+          })()}
         </div>
         )
       })()}
@@ -1508,6 +2215,302 @@ export default function DmVisitPage() {
           </div>
         </div>
       )}
+      {/* ── VISIT DETAIL MODAL ── */}
+      {selectedVisit && (() => {
+        const v = selectedVisit
+        const submittedAt = new Date(v.submitted_at).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' })
+        const typeLabel = v.visit_type === 'quick_coaching' ? 'Quick Visit w/ Coaching' : v.visit_type === 'quick' ? 'Quick Visit' : 'Full Visit'
+        const section = (title: string, content: string | null | undefined) => content?.trim() ? `<div class="vd-section"><p class="vd-label">${title}</p><p class="vd-val">${content}</p></div>` : ''
+        const isQuick = v.visit_type === 'quick' || v.visit_type === 'quick_coaching'
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 px-0 sm:px-4" onClick={() => setSelectedVisit(null)}>
+            <div className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-white">{typeLabel}</p>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                      v.visit_type === 'quick_coaching' ? 'bg-emerald-900/40 text-emerald-400'
+                      : v.visit_type === 'quick' ? 'bg-amber-900/40 text-amber-400'
+                      : 'bg-violet-900/40 text-violet-400'
+                    }`}>{v.visit_type === 'quick_coaching' ? 'w/ Coaching' : v.visit_type === 'quick' ? 'Quick' : 'Full'}</span>
+                  </div>
+                  <p className="text-xs text-gray-400">{v.store_address} · {submittedAt}</p>
+                </div>
+                <button onClick={() => setSelectedVisit(null)} className="text-gray-500 hover:text-white transition-colors p-1">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="divide-y divide-gray-800">
+                {/* Visit Info */}
+                <div className="px-4 py-3 space-y-2">
+                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Visit Details</p>
+                  <p className="text-sm text-gray-400">DM: <span className="text-white">{v.dm_name}</span></p>
+                  {v.assigned_rdm && <p className="text-sm text-gray-400">RDM: <span className="text-white">{v.assigned_rdm}</span></p>}
+                  {v.employees_working && <p className="text-sm text-gray-400">Employees Working: <span className="text-gray-300">{v.employees_working}</span></p>}
+                  {!isQuick && v.reason_for_visit && <p className="text-sm text-gray-400">Reason: <span className="text-gray-300">{v.reason_for_visit}</span></p>}
+                  {!isQuick && v.scorecard_grade && <p className="text-sm text-gray-400">Scorecard Grade: <span className="text-white font-semibold">{v.scorecard_grade}</span></p>}
+                </div>
+
+                {/* Quick Visit Fields */}
+                {isQuick && v.intentionality && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Intentionality</p>
+                    <p className="text-sm text-gray-300">{v.intentionality}</p>
+                  </div>
+                )}
+                {isQuick && v.quick_interaction_notes && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Customer Interaction Notes</p>
+                    <p className="text-sm text-gray-300">{v.quick_interaction_notes}</p>
+                  </div>
+                )}
+                {isQuick && v.quick_takeaways && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Key Takeaways & Commitments</p>
+                    <p className="text-sm text-gray-300">{v.quick_takeaways}</p>
+                  </div>
+                )}
+                {isQuick && v.quick_impact && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">DM Visit Impact Made</p>
+                    <p className="text-sm text-gray-300">{v.quick_impact}</p>
+                  </div>
+                )}
+
+                {/* Coaching Data (for quick_coaching visits) */}
+                {v.visit_type === 'quick_coaching' && v.coaching_employee_name && (() => {
+                  const yn = (val: boolean | null) => val ? <span className="font-semibold text-green-400">Yes</span> : <span className="font-semibold text-red-400">No</span>
+                  const pf = (val: string | null) => val === 'Pass' ? <span className="font-semibold text-green-400">Pass</span> : val === 'Fail' ? <span className="font-semibold text-red-400">Fail</span> : <span className="text-gray-600">—</span>
+                  return (
+                    <>
+                      <div className="px-4 py-2 bg-violet-600/10 border-y border-violet-500/20">
+                        <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">DM Coaching — {v.coaching_employee_name}</p>
+                      </div>
+
+                      <div className="px-4 py-3">
+                        <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">1. Observe</p>
+                        <div className="space-y-1">
+                          <p className="text-sm text-gray-400">Greeted customer within 5 seconds? {yn(v.coaching_obs_greeted_customer)}</p>
+                          <p className="text-sm text-gray-400">Offered MIM? {yn(v.coaching_obs_offered_mim)}</p>
+                          <p className="text-sm text-gray-400">Offered HSI? {yn(v.coaching_obs_offered_hsi)}</p>
+                          <p className="text-sm text-gray-400">Pitched accessories? {yn(v.coaching_obs_pitched_accessories)}</p>
+                          <p className="text-sm text-gray-400">Asked open ended questions? {yn(v.coaching_obs_open_ended_questions)}</p>
+                          <p className="text-sm text-gray-400">Educated on the survey? {yn(v.coaching_obs_educated_survey)}</p>
+                          {v.coaching_obs_primary_issue && <p className="text-sm text-gray-400 mt-1">Primary Issue: <span className="text-white font-semibold">{v.coaching_obs_primary_issue}</span></p>}
+                        </div>
+                      </div>
+
+                      {(v.coaching_rp_score || v.coaching_rp_demonstrated_mim || v.coaching_rp_demonstrated_hsi) && (
+                        <div className="px-4 py-3">
+                          <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">2. Role Play</p>
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-300">{v.coaching_rp_demonstrated_mim ? '✅' : '☐'} Demonstrated MIM Script</p>
+                            <p className="text-sm text-gray-300">{v.coaching_rp_demonstrated_hsi ? '✅' : '☐'} Demonstrated HSI Presentation</p>
+                            {v.coaching_rp_score && <p className="text-sm text-gray-400 mt-1">Score: <span className={`font-semibold ${v.coaching_rp_score === 'Solid' ? 'text-green-400' : v.coaching_rp_score === 'Poor' ? 'text-red-400' : 'text-amber-400'}`}>{v.coaching_rp_score}</span></p>}
+                            {v.coaching_rp_notes && <p className="text-sm text-gray-400 mt-1">Notes: <span className="text-gray-300">{v.coaching_rp_notes}</span></p>}
+                          </div>
+                        </div>
+                      )}
+
+                      {(v.coaching_kc_mim_knowledge || v.coaching_kc_hsi_knowledge || v.coaching_kc_objection_handling) && (
+                        <div className="px-4 py-3">
+                          <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">3. Knowledge Check</p>
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-400">MIM Knowledge: {pf(v.coaching_kc_mim_knowledge)}</p>
+                            <p className="text-sm text-gray-400">HSI Knowledge: {pf(v.coaching_kc_hsi_knowledge)}</p>
+                            <p className="text-sm text-gray-400">Objection Handling: {pf(v.coaching_kc_objection_handling)}</p>
+                            {v.coaching_kc_gap_notes && <p className="text-sm text-gray-400 mt-1">Gap / Notes: <span className="text-gray-300">{v.coaching_kc_gap_notes}</span></p>}
+                          </div>
+                        </div>
+                      )}
+
+                      {v.coaching_commitments_gained && (
+                        <div className="px-4 py-3">
+                          <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">4. Commitments Gained</p>
+                          <p className="text-sm text-gray-300">{v.coaching_commitments_gained}</p>
+                        </div>
+                      )}
+
+                      {v.coaching_fu_follow_up_date && (
+                        <div className="px-4 py-3">
+                          <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">5. Follow-Up</p>
+                          <p className="text-sm text-gray-400">Follow-Up Date: <span className="text-white font-semibold">{v.coaching_fu_follow_up_date}</span></p>
+                        </div>
+                      )}
+                    </>
+                  )
+                })()}
+
+                {/* Full Visit Fields */}
+                {!isQuick && (v.pre_visit_1 || v.pre_visit_2 || v.pre_visit_3) && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Pre-Visit Planning</p>
+                    <div className="space-y-2">
+                      {v.pre_visit_1 && <div><p className="text-xs text-gray-500">Store Metrics</p><p className="text-sm text-gray-300">{v.pre_visit_1}</p></div>}
+                      {v.pre_visit_2 && <div><p className="text-xs text-gray-500">Development Areas</p><p className="text-sm text-gray-300">{v.pre_visit_2}</p></div>}
+                      {v.pre_visit_3 && <div><p className="text-xs text-gray-500">Primary Objective</p><p className="text-sm text-gray-300">{v.pre_visit_3}</p></div>}
+                    </div>
+                  </div>
+                )}
+                {!isQuick && (v.scorecard_1 || v.scorecard_2 || v.scorecard_3) && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Scorecard Review</p>
+                    <div className="space-y-2">
+                      {v.scorecard_1 && <div><p className="text-xs text-gray-500">Strengths</p><p className="text-sm text-gray-300">{v.scorecard_1}</p></div>}
+                      {v.scorecard_2 && <div><p className="text-xs text-gray-500">Areas of Focus</p><p className="text-sm text-gray-300">{v.scorecard_2}</p></div>}
+                      {v.scorecard_3 && <div><p className="text-xs text-gray-500">Progress</p><p className="text-sm text-gray-300">{v.scorecard_3}</p></div>}
+                    </div>
+                  </div>
+                )}
+                {!isQuick && v.live_interaction_observed !== null && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Sales Interaction</p>
+                    <p className="text-sm text-gray-400">Live Interaction Observed: <span className={`font-semibold ${v.live_interaction_observed ? 'text-green-400' : 'text-red-400'}`}>{v.live_interaction_observed ? 'Yes' : 'No'}</span></p>
+                  </div>
+                )}
+                {!isQuick && v.coaching_1 && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Coaching</p>
+                    {v.coaching_1 && <div className="mb-2"><p className="text-xs text-gray-500">Skills Coached</p><p className="text-sm text-gray-300">{v.coaching_1}</p></div>}
+                    {v.coaching_3 && <div><p className="text-xs text-gray-500">Follow-Up Plan</p><p className="text-sm text-gray-300">{v.coaching_3}</p></div>}
+                  </div>
+                )}
+                {!isQuick && (v.impact_1 || v.impact_2) && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Impact & Commitments</p>
+                    <div className="space-y-2">
+                      {v.impact_1 && <div><p className="text-xs text-gray-500">Visit Impact</p><p className="text-sm text-gray-300">{v.impact_1}</p></div>}
+                      {v.impact_2 && <div><p className="text-xs text-gray-500">Employee Commitments</p><p className="text-sm text-gray-300">{v.impact_2}</p></div>}
+                      {v.impact_3 && <div><p className="text-xs text-gray-500">Follow-Up Date</p><p className="text-sm text-gray-300">{v.impact_3}</p></div>}
+                      {v.impact_4 && <div><p className="text-xs text-gray-500">Next Visit Date</p><p className="text-sm text-gray-300">{v.impact_4}</p></div>}
+                    </div>
+                  </div>
+                )}
+                {(v.additional_comments || v.ops_notes) && (
+                  <div className="px-4 py-3">
+                    {v.additional_comments && <div className="mb-2"><p className="text-xs text-gray-500">Additional Comments</p><p className="text-sm text-gray-300">{v.additional_comments}</p></div>}
+                    {v.ops_notes && <div><p className="text-xs text-gray-500">Operational Notes</p><p className="text-sm text-gray-300">{v.ops_notes}</p></div>}
+                  </div>
+                )}
+
+                {/* Photos */}
+                {v.photo_urls && v.photo_urls.length > 0 && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">Photos</p>
+                    <div className="flex flex-wrap gap-2">
+                      {v.photo_urls.map((url: string, i: number) => (
+                        <a key={i} href={url} target="_blank" rel="noopener noreferrer"
+                          className="block w-24 h-24 rounded-lg overflow-hidden border border-gray-700 hover:border-violet-500 transition-colors">
+                          <img src={url} alt={`Visit photo ${i + 1}`} className="w-full h-full object-cover" />
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="px-4 py-3">
+                  <p className="text-xs text-gray-600">Submitted by {v.dm_name}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ── COACHING DETAIL MODAL ── */}
+      {selectedCoaching && (() => {
+        const c = selectedCoaching
+        const check = (v: boolean) => v ? '✅' : '☐'
+        const passFail = (v: string | null) => v === 'Pass' ? <span className="text-green-400 font-semibold">Pass</span> : v === 'Fail' ? <span className="text-red-400 font-semibold">Fail</span> : <span className="text-gray-600">—</span>
+        const submittedAt = new Date(c.submitted_at).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' })
+        return (
+          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 px-0 sm:px-4" onClick={() => setSelectedCoaching(null)}>
+            <div className="bg-gray-900 border border-gray-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-white">{c.employee_name}</p>
+                  <p className="text-xs text-gray-400">{c.store_address} · {submittedAt}</p>
+                </div>
+                <button onClick={() => setSelectedCoaching(null)} className="text-gray-500 hover:text-white transition-colors p-1">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="divide-y divide-gray-800">
+                {/* Section 1: Observe */}
+                <div className="px-4 py-3">
+                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">1. Observe</p>
+                  <div className="space-y-1.5">
+                    {[
+                      [c.obs_greeted_customer, 'Greeted customer within 5 seconds?'],
+                      [c.obs_offered_mim, 'Offered MIM?'],
+                      [c.obs_offered_hsi, 'Offered HSI?'],
+                      [c.obs_pitched_accessories, 'Pitched accessories?'],
+                      [c.obs_open_ended_questions, 'Asked open ended questions?'],
+                      [c.obs_educated_survey, 'Educated on the survey?'],
+                    ].map(([val, label], i) => (
+                      <p key={i} className="text-sm text-gray-400">{label as string} <span className={`font-semibold ${(val as boolean) ? 'text-green-400' : 'text-red-400'}`}>{(val as boolean) ? 'Yes' : 'No'}</span></p>
+                    ))}
+                    {c.obs_primary_issue && (
+                      <p className="text-sm text-gray-400 mt-1">Primary Issue: <span className="text-white font-semibold">{c.obs_primary_issue}</span></p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 2: Role Play */}
+                <div className="px-4 py-3">
+                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">2. Role Play</p>
+                  <div className="space-y-1.5">
+                    <p className="text-sm text-gray-300">{check(c.rp_demonstrated_mim)} Demonstrated MIM Script</p>
+                    <p className="text-sm text-gray-300">{check(c.rp_demonstrated_hsi)} Demonstrated HSI Presentation</p>
+                    {c.rp_score && <p className="text-sm text-gray-400 mt-1">Score: <span className={`font-semibold ${c.rp_score === 'Solid' ? 'text-green-400' : c.rp_score === 'Poor' ? 'text-red-400' : 'text-amber-400'}`}>{c.rp_score}</span></p>}
+                    {c.rp_notes && <p className="text-sm text-gray-400 mt-1">Notes: <span className="text-gray-300">{c.rp_notes}</span></p>}
+                  </div>
+                </div>
+
+                {/* Section 3: Knowledge Check */}
+                <div className="px-4 py-3">
+                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">3. Knowledge Check</p>
+                  <div className="space-y-1.5">
+                    <p className="text-sm text-gray-400">MIM Knowledge: {passFail(c.kc_mim_knowledge)}</p>
+                    <p className="text-sm text-gray-400">HSI Knowledge: {passFail(c.kc_hsi_knowledge)}</p>
+                    <p className="text-sm text-gray-400">Objection Handling: {passFail(c.kc_objection_handling)}</p>
+                    {c.kc_gap_notes && <p className="text-sm text-gray-400 mt-1">Gap / Notes: <span className="text-gray-300">{c.kc_gap_notes}</span></p>}
+                  </div>
+                </div>
+
+                {/* Section 4: Commitments Gained */}
+                {c.commitments_gained && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">4. Commitments Gained</p>
+                    <p className="text-sm text-gray-300">{c.commitments_gained}</p>
+                  </div>
+                )}
+
+                {/* Section 5: Follow-Up */}
+                {c.fu_follow_up_date && (
+                  <div className="px-4 py-3">
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-2">5. Follow-Up</p>
+                    <p className="text-sm text-gray-400">Follow-Up Date: <span className="text-white font-semibold">{c.fu_follow_up_date}</span></p>
+                  </div>
+                )}
+
+                <div className="px-4 py-3">
+                  <p className="text-xs text-gray-600">Submitted by {c.dm_name}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }

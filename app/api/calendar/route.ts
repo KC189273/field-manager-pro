@@ -35,6 +35,8 @@ async function ensureTables() {
       ADD COLUMN IF NOT EXISTS recurrence_id     UUID,
       ADD COLUMN IF NOT EXISTS task_id           UUID
   `).catch(() => {})
+  await query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS exception_date TEXT`).catch(() => {})
+  await query(`ALTER TABLE calendar_events ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
 
   // Migrate existing events: assign to their creator (Kyle's events go to Kyle, owner's to owner)
   await query(`
@@ -118,6 +120,8 @@ interface CalEventRow {
   created_by: string | null
   created_by_name: string | null
   created_at: string
+  exception_date: string | null
+  is_cancelled: boolean
   attendees?: AttendeeRow[]
   attachments?: AttachmentRow[]
 }
@@ -176,7 +180,7 @@ function firstOccurrenceOnOrAfter(origStart: Date, firstDay: Date, recurrence: s
   return cursor
 }
 
-function expandRecurring(ev: CalEventRow, firstDay: string, lastDay: string): CalEventRow[] {
+function expandRecurring(ev: CalEventRow, firstDay: string, lastDay: string, excludeDates: Set<string> = new Set()): CalEventRow[] {
   if (ev.recurrence === 'none') return [ev]
 
   const first = new Date(firstDay + 'T00:00:00Z')
@@ -192,10 +196,11 @@ function expandRecurring(ev: CalEventRow, firstDay: string, lastDay: string): Ca
   let guard = 0
   while (cursor <= last && guard++ < 100) {
     const instEnd = new Date(cursor.getTime() + durationMs)
-    if (instEnd >= first) {
+    const dateStr = cursor.toISOString().split('T')[0]
+    if (instEnd >= first && !excludeDates.has(dateStr)) {
       result.push({
         ...ev,
-        start_date: cursor.toISOString().split('T')[0],
+        start_date: dateStr,
         end_date:   instEnd.toISOString().split('T')[0],
       })
     }
@@ -256,7 +261,8 @@ export async function GET(req: NextRequest) {
       end_date::text,   end_time::text,
       notes, all_day, location, recurrence, recurrence_id::text,
       task_id::text, calendar_owner_id::text,
-      created_by::text, created_by_name, created_at::text
+      created_by::text, created_by_name, created_at::text,
+      exception_date, is_cancelled
     FROM calendar_events
     WHERE calendar_owner_id = $1
       AND (
@@ -277,7 +283,8 @@ export async function GET(req: NextRequest) {
       e.end_date::text,   e.end_time::text,
       e.notes, e.all_day, e.location, e.recurrence, e.recurrence_id::text,
       e.task_id::text, e.calendar_owner_id::text,
-      e.created_by::text, e.created_by_name, e.created_at::text
+      e.created_by::text, e.created_by_name, e.created_at::text,
+      e.exception_date, e.is_cancelled
     FROM calendar_events e
     JOIN calendar_event_attendees a ON a.event_id = e.id
     WHERE a.user_id = $1
@@ -301,16 +308,41 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const allSeeds = [...rawEvents, ...invitedEvents]
+  // Separate own events into templates, exceptions, and standalones
+  const ownTemplates  = rawEvents.filter(e => e.recurrence !== 'none')
+  const ownExceptions = rawEvents.filter(e => e.exception_date != null)
+  const ownStandalones = rawEvents.filter(e => e.recurrence === 'none' && e.exception_date == null)
+
+  // Build exclusion map: recurrence_id → set of exception dates (skip these in series expansion)
+  const exclusionMap: Record<string, Set<string>> = {}
+  for (const exc of ownExceptions) {
+    if (exc.recurrence_id && exc.exception_date) {
+      exclusionMap[exc.recurrence_id] ??= new Set()
+      exclusionMap[exc.recurrence_id].add(exc.exception_date)
+    }
+  }
 
   // Expand recurring events
   const expanded: CalEventRow[] = []
-  for (const ev of allSeeds) {
+
+  // Own templates: expand with exception exclusions
+  for (const ev of ownTemplates) {
+    const excDates = exclusionMap[ev.recurrence_id ?? ''] ?? new Set()
+    expanded.push(...expandRecurring(ev, firstDay, lastDay, excDates))
+  }
+
+  // Invited events: expand without exception handling
+  for (const ev of invitedEvents) {
     expanded.push(...expandRecurring(ev, firstDay, lastDay))
   }
 
+  // Own standalones and non-cancelled exception overrides
+  for (const ev of [...ownStandalones, ...ownExceptions.filter(e => !e.is_cancelled)]) {
+    expanded.push(ev)
+  }
+
   // Batch-fetch attendees for all event IDs (main + declined)
-  const allSeedIds = [...new Set([...allSeeds, ...declinedEvents].map(e => e.id))]
+  const allSeedIds = [...new Set([...rawEvents, ...invitedEvents, ...declinedEvents].map(e => e.id))]
   let attendeeMap: Record<string, AttendeeRow[]> = {}
   let attachmentMap: Record<string, AttachmentRow[]> = {}
 
@@ -487,6 +519,7 @@ export async function PATCH(req: NextRequest) {
   const {
     id, title, category, startDate, startTime, endDate, endTime,
     allDay, location, notes, recurrence, attendeeIds, reminderMinutes,
+    editScope, instanceDate,
   } = await req.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
@@ -505,6 +538,78 @@ export async function PATCH(req: NextRequest) {
 
   if (startDate && endDate && endDate < startDate) {
     return NextResponse.json({ error: 'End date must be on or after start date' }, { status: 400 })
+  }
+
+  // ── Edit this instance only ───────────────────────────────────────────────
+  if (editScope === 'this' && instanceDate) {
+    const seriesRow = await queryOne<{
+      recurrence_id: string | null; recurrence: string
+      title: string; category: string; start_date: string; end_date: string
+      start_time: string | null; end_time: string | null; all_day: boolean
+      location: string | null; notes: string | null; calendar_owner_id: string
+    }>(`SELECT recurrence_id::text, recurrence, title, category,
+               start_date::text, end_date::text, start_time::text, end_time::text,
+               all_day, location, notes, calendar_owner_id::text
+        FROM calendar_events WHERE id = $1`, [id])
+
+    if (seriesRow && seriesRow.recurrence !== 'none' && seriesRow.recurrence_id) {
+      // Preserve original event duration for the exception row
+      const durationMs = Math.max(0,
+        new Date(seriesRow.end_date + 'T12:00:00Z').getTime() - new Date(seriesRow.start_date + 'T12:00:00Z').getTime()
+      )
+      const instStart = new Date(instanceDate + 'T12:00:00Z')
+      const defaultEndDate = new Date(instStart.getTime() + durationMs).toISOString().split('T')[0]
+      const exceptionEndDate = endDate ?? defaultEndDate
+
+      // Check if an exception row already exists for this date
+      const existingExc = await queryOne<{ id: string }>(
+        `SELECT id FROM calendar_events WHERE recurrence_id = $1 AND exception_date = $2`,
+        [seriesRow.recurrence_id, instanceDate]
+      )
+
+      if (existingExc) {
+        await query(`
+          UPDATE calendar_events SET
+            title      = COALESCE($1, title),
+            category   = COALESCE($2, category),
+            start_date = COALESCE($3, start_date),
+            start_time = CASE WHEN $4::text IS NOT NULL THEN $4::time ELSE start_time END,
+            end_date   = COALESCE($5, end_date),
+            end_time   = CASE WHEN $6::text IS NOT NULL THEN $6::time ELSE end_time END,
+            all_day    = COALESCE($7, all_day),
+            location   = COALESCE($8, location),
+            notes      = COALESCE($9, notes),
+            is_cancelled = FALSE,
+            updated_at = NOW()
+          WHERE id = $10
+        `, [title?.trim() ?? null, category ?? null, startDate ?? null, startTime ?? null,
+            exceptionEndDate, endTime ?? null, allDay ?? null,
+            location?.trim() ?? null, notes?.trim() ?? null, existingExc.id])
+      } else {
+        await query(`
+          INSERT INTO calendar_events
+            (title, category, start_date, start_time, end_date, end_time,
+             all_day, location, notes, recurrence, recurrence_id,
+             calendar_owner_id, created_by, created_by_name, exception_date)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'none',$10,$11,$12,$13,$14)
+        `, [
+          title?.trim() ?? seriesRow.title,
+          category ?? seriesRow.category,
+          startDate ?? instanceDate,
+          startTime !== undefined ? (startTime || null) : seriesRow.start_time,
+          exceptionEndDate,
+          endTime !== undefined ? (endTime || null) : seriesRow.end_time,
+          allDay !== undefined ? allDay : seriesRow.all_day,
+          location !== undefined ? (location?.trim() || null) : seriesRow.location,
+          notes !== undefined ? (notes?.trim() || null) : seriesRow.notes,
+          seriesRow.recurrence_id,
+          seriesRow.calendar_owner_id,
+          session.id, session.fullName,
+          instanceDate,
+        ])
+      }
+      return NextResponse.json({ ok: true })
+    }
   }
 
   const validRecurrences = ['none', 'daily', 'weekly', 'biweekly', 'monthly']
@@ -604,11 +709,17 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { id } = await req.json()
+  const { id, deleteScope, instanceDate } = await req.json()
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  const existing = await queryOne<{ calendar_owner_id: string; created_by: string }>(
-    `SELECT calendar_owner_id::text, created_by::text FROM calendar_events WHERE id = $1`, [id]
+  const existing = await queryOne<{
+    calendar_owner_id: string; created_by: string
+    recurrence_id: string | null; recurrence: string
+    title: string; category: string; start_date: string; end_date: string
+  }>(
+    `SELECT calendar_owner_id::text, created_by::text, recurrence_id::text, recurrence,
+            title, category, start_date::text, end_date::text
+     FROM calendar_events WHERE id = $1`, [id]
   )
   if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
@@ -617,6 +728,37 @@ export async function DELETE(req: NextRequest) {
   const isElevated        = CAN_VIEW_TEAM.includes(session.role)
   if (!isOwnerOfCalendar && !isCreator && !isElevated) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  // ── Delete this instance only ─────────────────────────────────────────────
+  if (deleteScope === 'this' && instanceDate && existing.recurrence !== 'none' && existing.recurrence_id) {
+    const durationMs = Math.max(0,
+      new Date(existing.end_date + 'T12:00:00Z').getTime() - new Date(existing.start_date + 'T12:00:00Z').getTime()
+    )
+    const exceptionEndDate = new Date(new Date(instanceDate + 'T12:00:00Z').getTime() + durationMs).toISOString().split('T')[0]
+
+    const existingExc = await queryOne<{ id: string }>(
+      `SELECT id FROM calendar_events WHERE recurrence_id = $1 AND exception_date = $2`,
+      [existing.recurrence_id, instanceDate]
+    )
+
+    if (existingExc) {
+      await query(`UPDATE calendar_events SET is_cancelled = TRUE WHERE id = $1`, [existingExc.id])
+    } else {
+      await query(`
+        INSERT INTO calendar_events
+          (title, category, start_date, end_date, all_day, recurrence, recurrence_id,
+           calendar_owner_id, created_by, created_by_name, exception_date, is_cancelled)
+        VALUES ($1,$2,$3,$4,FALSE,'none',$5,$6,$7,$8,$9,TRUE)
+      `, [existing.title, existing.category, instanceDate, exceptionEndDate,
+          existing.recurrence_id, existing.calendar_owner_id, session.id, session.fullName, instanceDate])
+    }
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── Delete all: clean up exception rows first, then delete the series ─────
+  if (existing.recurrence_id && existing.recurrence !== 'none') {
+    await query(`DELETE FROM calendar_events WHERE recurrence_id = $1 AND exception_date IS NOT NULL`, [existing.recurrence_id])
   }
 
   // Cascade deletes attendees, reminders, attachments via FK ON DELETE CASCADE

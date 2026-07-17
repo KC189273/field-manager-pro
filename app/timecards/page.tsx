@@ -153,6 +153,11 @@ function TimecardsPage() {
   const [activeView, setActiveView] = useState<'all' | 'individual'>('individual')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
 
+  // OT Watch List
+  const [otWatch, setOtWatch] = useState<Array<{ id: string; full_name: string; is_floater: boolean; worked_hours: number; scheduled_remaining: number; projected_hours: number }>>([])
+  const [otWeekLabel, setOtWeekLabel] = useState('')
+  const [showOtWatch, setShowOtWatch] = useState(false)
+
   // Team view data
   const [teamShifts, setTeamShifts] = useState<Shift[]>([])
   const [teamLoading, setTeamLoading] = useState(false)
@@ -292,6 +297,15 @@ function TimecardsPage() {
       setDlTo(toLocalDateStr(sun))
     })
   }, [searchParams])
+
+  // Load OT Watch List
+  useEffect(() => {
+    if (!session || !canManage(session.role)) return
+    fetch('/api/ot-watch').then(r => r.json()).then(d => {
+      setOtWatch(d.watchList ?? [])
+      setOtWeekLabel(d.weekLabel ?? '')
+    }).catch(() => {})
+  }, [session])
 
   useEffect(() => {
     if (activeView === 'all' && session && canManage(session.role)) {
@@ -628,6 +642,62 @@ function TimecardsPage() {
           </div>
         )}
 
+        {/* OT Watch List */}
+        {isMgr && otWatch.length > 0 && (
+          <div className="mb-4">
+            <button onClick={() => setShowOtWatch(!showOtWatch)}
+              className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-colors ${
+                otWatch.some(e => e.projected_hours >= 50) ? 'bg-red-900/20 border-red-700/40' :
+                otWatch.some(e => e.projected_hours >= 45) ? 'bg-amber-900/20 border-amber-700/40' :
+                'bg-gray-900 border-gray-800'
+              }`}>
+              <div className="flex items-center gap-2">
+                <span className="text-sm">
+                  {otWatch.some(e => e.projected_hours >= 50) ? '🔴' : otWatch.some(e => e.projected_hours >= 45) ? '🟡' : '⚠️'}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-white text-left">OT Watch — {otWeekLabel}</p>
+                  <p className="text-xs text-gray-500">{otWatch.length} employee{otWatch.length !== 1 ? 's' : ''} trending 35+ hours</p>
+                </div>
+              </div>
+              <svg className={`w-4 h-4 text-gray-500 transition-transform ${showOtWatch ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showOtWatch && (
+              <div className="mt-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                {otWatch.map(emp => {
+                  const level = emp.projected_hours >= 50 ? 'critical' : emp.projected_hours >= 45 ? 'warning' : 'watch'
+                  return (
+                    <div key={emp.id} className={`px-4 py-3 border-b border-gray-800/50 last:border-0 ${
+                      level === 'critical' ? 'bg-red-900/10' : level === 'warning' ? 'bg-amber-900/10' : ''
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-sm text-white font-medium">{emp.full_name}</span>
+                          {emp.is_floater && <span className="ml-1.5 text-[10px] bg-sky-900/40 text-sky-400 px-1.5 py-0.5 rounded-full font-semibold">Floater</span>}
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-bold ${
+                            level === 'critical' ? 'text-red-400' : level === 'warning' ? 'text-amber-400' : 'text-gray-300'
+                          }`}>{emp.projected_hours.toFixed(1)}h</p>
+                          <p className="text-[10px] text-gray-600">projected</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1">
+                        <span className="text-xs text-gray-500">{emp.worked_hours.toFixed(1)}h worked</span>
+                        <span className="text-xs text-gray-500">+{emp.scheduled_remaining.toFixed(1)}h scheduled</span>
+                        {level === 'critical' && <span className="text-[10px] font-bold text-red-400 bg-red-900/40 px-1.5 py-0.5 rounded">OWNER APPROVAL</span>}
+                        {level === 'warning' && <span className="text-[10px] font-bold text-amber-400 bg-amber-900/40 px-1.5 py-0.5 rounded">SD APPROVAL</span>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Week navigation */}
         <div className="flex items-center justify-between mb-4 bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5">
           <button onClick={() => setWeekOffset(w => w - 1)} className="text-gray-400 hover:text-white transition-colors p-1">
@@ -858,8 +928,8 @@ function TimecardsPage() {
                                     <span className="text-sm font-medium text-white">
                                       {shift.clock_out_at ? fmtTime(shift.clock_out_at) : <span className="text-yellow-400">Still clocked in</span>}
                                     </span>
-                                    {!shift.clock_out_at && shift.store_name && (
-                                      <span className="text-xs text-gray-400">@ {shift.store_name}</span>
+                                    {shift.store_name && (
+                                      <span className="text-xs text-gray-500">@ {shift.store_name}</span>
                                     )}
                                     <span className="text-xs text-gray-500">{fmtDecimalHours(shiftDuration(shift, now))}</span>
                                     {Number(shift.break_seconds) > 0 && (
@@ -1132,6 +1202,12 @@ function TimecardsPage() {
                         {detailShifts.length > 1 && (
                           <p className="text-[10px] text-gray-500 uppercase tracking-wider font-semibold mb-2">Shift {idx + 1}</p>
                         )}
+                        {shift.store_name && (
+                          <div className="flex justify-between items-center text-sm mb-3">
+                            <span className="text-gray-400">Store</span>
+                            <span className="text-white font-medium">{shift.store_name}</span>
+                          </div>
+                        )}
                         <div className="flex justify-between items-center text-sm mb-3">
                           <span className="text-gray-400">Clock In</span>
                           <span className="text-white font-medium">{fmtTime(shift.clock_in_at)}</span>
@@ -1139,7 +1215,7 @@ function TimecardsPage() {
                         <div className="flex justify-between items-center text-sm mb-3">
                           <span className="text-gray-400">Clock Out</span>
                           <span className={shift.clock_out_at ? 'text-white font-medium' : 'text-yellow-400 font-medium'}>
-                            {shift.clock_out_at ? fmtTime(shift.clock_out_at) : `Still clocked in${shift.store_name ? ` @ ${shift.store_name}` : ''}`}
+                            {shift.clock_out_at ? fmtTime(shift.clock_out_at) : 'Still clocked in'}
                           </span>
                         </div>
                         <div className="border-t border-gray-700/60 my-2" />

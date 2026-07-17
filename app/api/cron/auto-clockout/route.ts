@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
+import { sendDmEodRecap } from '@/lib/dm-eod-recap'
+
+export const maxDuration = 60
 
 export async function GET() {
   // Compute 9:00 PM CST as an explicit timestamp
@@ -19,12 +22,18 @@ export async function GET() {
     shift_id: string
     user_id: string
     user_name: string
+    user_email: string
+    user_role: string
+    org_id: string | null
     manager_id: string | null
   }>(`
     SELECT
       s.id AS shift_id,
       s.user_id,
       u.full_name AS user_name,
+      u.email AS user_email,
+      u.role AS user_role,
+      u.org_id,
       u.manager_id
     FROM shifts s
     JOIN users u ON u.id = s.user_id
@@ -93,5 +102,19 @@ export async function GET() {
     ).catch(() => {})
   }
 
-  return NextResponse.json({ ok: true, clocked_out: activeShifts.length })
+  // Generate EOD recaps for DMs who were auto-clocked out
+  const dmShifts = activeShifts.filter(s => s.user_role === 'manager' && s.org_id)
+  let recapsSent = 0
+  for (const dm of dmShifts) {
+    await sendDmEodRecap({
+      dmId: dm.user_id,
+      dmName: dm.user_name,
+      dmEmail: dm.user_email,
+      orgId: dm.org_id!,
+      shiftId: dm.shift_id,
+    })
+    recapsSent++
+  }
+
+  return NextResponse.json({ ok: true, clocked_out: activeShifts.length, recaps_sent: recapsSent })
 }

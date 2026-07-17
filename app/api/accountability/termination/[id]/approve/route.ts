@@ -46,14 +46,15 @@ export async function POST(
     sendPushToUser(termReq.requested_by, 'Termination Request Rejected',
       `The termination request for ${termReq.employee_name} has been rejected by ${session.fullName}.`,
       'accountability'
-    ).catch(() => {})
+    ).catch(e => console.error('Termination async error:', e))
     return NextResponse.json({ ok: true, action: 'rejected' })
   }
 
   // Approve: mark terminated, send email
   const terminationDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  const orgName = 'The Organization'
+  const orgRow = await queryOne<{ name: string }>(`SELECT name FROM organizations WHERE id = $1`, [termReq.org_id])
+  const orgName = orgRow?.name ?? 'The Organization'
 
   // Get DM name (requested_by)
   const dmUser = await queryOne<{ full_name: string }>(
@@ -85,7 +86,7 @@ export async function POST(
   // Mark user as terminated and deactivate so they stop appearing in scheduling,
   // task assignment, and other active-employee contexts.
   await query(
-    `UPDATE users SET is_terminated = TRUE, terminated_at = NOW(), is_active = FALSE WHERE id = $1`,
+    `UPDATE users SET is_terminated = TRUE, terminated_at = NOW(), is_active = FALSE, is_hidden = TRUE WHERE id = $1`,
     [termReq.employee_id]
   )
 
@@ -104,38 +105,36 @@ export async function POST(
     termReq.employee_email,
     `Notice of Employment Termination — ${orgName}`,
     buildTerminationEmailHtml(emailParams)
-  ).catch(() => {})
+  ).catch(e => console.error('Termination async error:', e))
 
-  // CC: DM, ops managers, SD, owner
-  const ccRecipients = await query<{ id: string; email: string; full_name: string; role: string }>(
-    `SELECT id, email, full_name, role FROM users
-     WHERE org_id = $1 AND is_active = TRUE
-       AND role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`,
+  // CC: DM, ops managers, SD, owner — respecting notification preferences
+  const ccRecipients = await query<{ id: string; email: string; full_name: string; role: string; email_ok: boolean; push_ok: boolean }>(
+    `SELECT u.id, u.email, u.full_name, u.role,
+       (COALESCE(np.termination_docs, TRUE) AND COALESCE(np.email_enabled, TRUE)) as email_ok,
+       (COALESCE(np.termination_docs, TRUE) AND COALESCE(np.push_enabled, TRUE)) as push_ok
+     FROM users u
+     LEFT JOIN notification_preferences np ON np.user_id = u.id
+     WHERE u.org_id = $1 AND u.is_active = TRUE
+       AND u.role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`,
     [termReq.org_id]
   )
 
   for (const person of ccRecipients) {
-    sendEmail(
-      person.email,
-      `[MANAGEMENT COPY] Termination Notice — ${termReq.employee_name} | ${orgName}`,
-      buildTerminationEmailHtml({ ...emailParams, isCopy: true, copyFor: person.full_name })
-    ).catch(() => {})
+    if (person.email_ok) {
+      sendEmail(
+        person.email,
+        `[MANAGEMENT COPY] Termination Notice — ${termReq.employee_name} | ${orgName}`,
+        buildTerminationEmailHtml({ ...emailParams, isCopy: true, copyFor: person.full_name })
+      ).catch(e => console.error('Termination async error:', e))
+    }
 
-    // Ops managers get an actionable alert to remove the employee from external systems
-    if (person.role === 'ops_manager') {
-      sendPushToUser(
-        person.id,
-        'Action Required: Employee Terminated',
-        `${termReq.employee_name} has been terminated. Please remove them from all external systems immediately.`,
-        'accountability'
-      ).catch(() => {})
-    } else {
+    if (person.push_ok) {
       sendPushToUser(
         person.id,
         'Termination Processed',
         `${termReq.employee_name} has been terminated. The formal notice has been sent.`,
         'accountability'
-      ).catch(() => {})
+      ).catch(e => console.error('Termination async error:', e))
     }
   }
 

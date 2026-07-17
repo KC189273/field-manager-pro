@@ -126,6 +126,17 @@ export default function ShiftSwapsPage() {
   const [modalError, setModalError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Create swap state
+  const [showCreate, setShowCreate] = useState(false)
+  const [myShifts, setMyShifts] = useState<Array<{ id: string; shift_date: string; start_time: string; end_time: string; store_address: string | null }>>([])
+  const [selectedMyShift, setSelectedMyShift] = useState<string | null>(null)
+  const [availableTargets, setAvailableTargets] = useState<Array<{ id: string; shift_date: string; start_time: string; end_time: string; employee_name: string; store_address: string | null }>>([])
+  const [selectedTargetShift, setSelectedTargetShift] = useState<string | null>(null)
+  const [swapNote, setSwapNote] = useState('')
+  const [createError, setCreateError] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [loadingShifts, setLoadingShifts] = useState(false)
+
   // Hours impact for DM review (fetched lazily per swap)
   const [hoursMap, setHoursMap] = useState<Record<string, { requester: HoursImpact; target: HoursImpact }>>({})
 
@@ -198,6 +209,74 @@ export default function ShiftSwapsPage() {
     }
   }
 
+  async function openCreateSwap() {
+    setShowCreate(true)
+    setSelectedMyShift(null)
+    setSelectedTargetShift(null)
+    setAvailableTargets([])
+    setSwapNote('')
+    setCreateError('')
+    setLoadingShifts(true)
+    try {
+      const res = await fetch('/api/shift-swaps?myShifts=true')
+      if (res.ok) {
+        const data = await res.json()
+        setMyShifts(data.myShifts ?? [])
+      }
+    } catch {
+      setCreateError('Failed to load your shifts.')
+    } finally {
+      setLoadingShifts(false)
+    }
+  }
+
+  async function selectMyShift(shiftId: string) {
+    setSelectedMyShift(shiftId)
+    setSelectedTargetShift(null)
+    setAvailableTargets([])
+    setCreateError('')
+    try {
+      const res = await fetch(`/api/shift-swaps?availableFor=${shiftId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setAvailableTargets(data.targets ?? [])
+        if ((data.targets ?? []).length === 0) {
+          setCreateError('No coworkers are scheduled at your store this week to swap with.')
+        }
+      }
+    } catch {
+      setCreateError('Failed to load available shifts.')
+    }
+  }
+
+  async function submitSwapRequest() {
+    if (!selectedMyShift || !selectedTargetShift) return
+    setCreating(true)
+    setCreateError('')
+    try {
+      const res = await fetch('/api/shift-swaps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          requesterShiftId: selectedMyShift,
+          targetShiftId: selectedTargetShift,
+          note: swapNote.trim() || null,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setCreateError(d.error ?? 'Failed to create swap request.')
+        return
+      }
+      setShowCreate(false)
+      await loadSwaps()
+    } catch {
+      setCreateError('Network error. Please try again.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const isManager = session.role === 'manager' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
@@ -220,7 +299,102 @@ export default function ShiftSwapsPage() {
       <NavBar role={session.role} fullName={session.fullName} />
 
       <div className="px-4 pt-6 max-w-lg mx-auto">
-        <h1 className="text-xl font-bold text-white mb-6">Shift Swaps</h1>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-xl font-bold text-white">Shift Swaps</h1>
+          {session.role === 'employee' && (
+            <button onClick={openCreateSwap}
+              className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+              <span className="text-base leading-none">+</span>
+              <span>Request Swap</span>
+            </button>
+          )}
+        </div>
+
+        {/* Create Swap Flow */}
+        {showCreate && (
+          <div className="bg-gray-900 border border-violet-500/30 rounded-2xl p-4 mb-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-white">Request a Shift Swap</p>
+              <button onClick={() => setShowCreate(false)} className="text-gray-500 hover:text-white">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {loadingShifts ? (
+              <p className="text-sm text-gray-500 text-center py-4">Loading your shifts...</p>
+            ) : myShifts.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-4">You have no upcoming published shifts to swap.</p>
+            ) : (
+              <>
+                {/* Step 1: Pick your shift */}
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">1. Select your shift to give up</p>
+                  <div className="space-y-2">
+                    {myShifts.map(shift => (
+                      <button key={shift.id} type="button" onClick={() => selectMyShift(shift.id)}
+                        className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+                          selectedMyShift === shift.id
+                            ? 'bg-violet-600/20 border-violet-500'
+                            : 'bg-gray-800 border-gray-700 hover:border-gray-600'
+                        }`}>
+                        <p className="text-sm font-semibold text-white">{fmtDate(shift.shift_date)}</p>
+                        <p className="text-xs text-gray-400">{fmtTime(shift.start_time)} – {fmtTime(shift.end_time)}</p>
+                        {shift.store_address && <p className="text-xs text-gray-500 mt-0.5 truncate">{shift.store_address}</p>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Step 2: Pick target shift */}
+                {selectedMyShift && (
+                  <div>
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">2. Select shift to swap with</p>
+                    {availableTargets.length === 0 && !createError ? (
+                      <p className="text-sm text-gray-500 text-center py-4">Loading available shifts...</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {availableTargets.map(target => (
+                          <button key={target.id} type="button" onClick={() => setSelectedTargetShift(target.id)}
+                            className={`w-full text-left px-4 py-3 rounded-xl border transition-colors ${
+                              selectedTargetShift === target.id
+                                ? 'bg-violet-600/20 border-violet-500'
+                                : 'bg-gray-800 border-gray-700 hover:border-gray-600'
+                            }`}>
+                            <p className="text-sm font-semibold text-white">{target.employee_name}</p>
+                            <p className="text-xs text-gray-400">{fmtDate(target.shift_date)} · {fmtTime(target.start_time)} – {fmtTime(target.end_time)}</p>
+                            {target.store_address && <p className="text-xs text-gray-500 mt-0.5 truncate">{target.store_address}</p>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Step 3: Note + Submit */}
+                {selectedTargetShift && (
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-2">3. Add a note (optional)</p>
+                      <input type="text" value={swapNote} onChange={e => setSwapNote(e.target.value)}
+                        placeholder="e.g. I have a doctor's appointment that day"
+                        className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                    </div>
+                    <button onClick={submitSwapRequest} disabled={creating}
+                      className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                      {creating ? 'Submitting...' : 'Submit Swap Request'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+
+            {createError && (
+              <p className="text-sm text-red-400 text-center">{createError}</p>
+            )}
+          </div>
+        )}
 
         {loading ? (
           <div className="text-center text-gray-500 py-12">Loading…</div>

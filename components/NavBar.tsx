@@ -14,7 +14,7 @@ interface Notification {
 }
 
 interface NavBarProps {
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
   fullName: string
 }
 
@@ -80,7 +80,18 @@ const PAGE_TITLES: Record<string, string> = {
   '/calendar':         'Calendar',
   '/resources':        'Resources',
   '/service-analysis': 'Service Analysis',
+  '/commissions':      'Commissions Estimator',
   '/settings':         'Settings',
+  '/dm-schedule':      'DM Schedule',
+  '/book':             'Book Appointment',
+  '/my-appointments':  'My Appointments',
+  '/my-customers':     'My Customers',
+  '/barber-dashboard': 'My Appointments',
+  '/shop-setup':       'Shop Setup',
+  '/customer-signup':  'Sign Up',
+  '/download':         'Download App',
+  '/super-admin':      'Super Admin',
+  '/db-health':        'App Health',
   '/config':           'Config',
   '/schedule':         'Schedule',
 }

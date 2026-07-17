@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 export const dynamic = 'force-dynamic'
 
@@ -84,14 +85,27 @@ export async function GET() {
            r.contact_name, r.contact_role, r.contact_phone, r.contact_email,
            r.created_by::text,
            u.full_name AS created_by_name,
-           r.sort_order, r.is_pinned, r.created_at::text
+           r.sort_order, r.is_pinned, r.created_at::text,
+           cu.avatar_key AS contact_avatar_key
     FROM resources r
     LEFT JOIN users u ON u.id = r.created_by
+    LEFT JOIN users cu ON r.type = 'contact' AND LOWER(cu.email) = LOWER(r.contact_email) AND cu.is_active = TRUE
     WHERE r.is_visible = TRUE${orgWhereClause}
     ORDER BY r.sort_order ASC, r.created_at DESC
   `, params)
 
-  return NextResponse.json({ resources })
+  // Resolve contact avatar URLs
+  const resourcesWithAvatars = await Promise.all(
+    (resources as Record<string, unknown>[]).map(async r => {
+      let contact_avatar_url: string | null = null
+      if (r.contact_avatar_key) {
+        try { contact_avatar_url = await getReceiptViewUrl(r.contact_avatar_key as string) } catch { /* non-fatal */ }
+      }
+      return { ...r, contact_avatar_url }
+    })
+  )
+
+  return NextResponse.json({ resources: resourcesWithAvatars })
 }
 
 // POST /api/resources

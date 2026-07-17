@@ -36,7 +36,7 @@ export async function GET(
             inventory_photo_2_key, pos_photo_key, aframe_photo_key,
             sales_floor_photo_key, cash_drawer_photo_key,
             reconciliation_photo_key, reconciliation_photo_2_key,
-            org_id, comment
+            org_id, comment, voice_lines, mim, home_internet
      FROM checklist_submissions WHERE id = $1`,
     [id]
   )

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   let markAsGap = isGap ?? false
   const last = await queryOne<{ lat: number; lng: number; recorded_at: string }>(
     `SELECT lat, lng, recorded_at FROM gps_breadcrumbs
-     WHERE shift_id = $1 AND is_gap = false AND lat IS NOT NULL AND lng IS NOT NULL
+     WHERE shift_id = $1 AND is_gap = false AND lat IS NOT NULL
      ORDER BY recorded_at DESC LIMIT 1`,
     [shift.id]
   )

@@ -30,7 +30,10 @@ export async function GET() {
 
   if (managers.length === 0) return NextResponse.json({ ok: true, created: 0 })
 
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
   let created = 0
+  const remindedByOrg: Record<string, string[]> = {}
+
   for (const manager of managers) {
     const existing = await query(
       `SELECT id FROM tasks WHERE assignee_id = $1 AND week_start = $2 AND title = $3`,
@@ -45,9 +48,13 @@ export async function GET() {
     )
     created++
 
+    if (manager.org_id) {
+      remindedByOrg[manager.org_id] = remindedByOrg[manager.org_id] ?? []
+      remindedByOrg[manager.org_id].push(manager.full_name)
+    }
+
     sendPushToUser(manager.id, 'New Task', TITLE, 'task_assigned').catch(() => {})
 
-    const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
     sendEmail(
       manager.email,
       `Weekly task: ${TITLE}`,
@@ -66,6 +73,35 @@ export async function GET() {
         </div>
       `
     ).catch(() => {})
+  }
+
+  // Notify SDs per org of which DMs were assigned the task
+  for (const [orgId, dmNames] of Object.entries(remindedByOrg)) {
+    const sds = await query<{ email: string; full_name: string }>(
+      `SELECT email, full_name FROM users WHERE org_id = $1 AND role = 'sales_director' AND is_active = TRUE`,
+      [orgId]
+    )
+    const dmList = dmNames.map(n => `<li style="font-size:14px;color:#374151;padding:4px 0;">${n}</li>`).join('')
+    for (const sd of sds) {
+      sendEmail(
+        sd.email,
+        `FYI: Roster check task assigned to ${dmNames.length} DM${dmNames.length !== 1 ? 's' : ''} today`,
+        `
+          <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+              <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+              <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Roster Check — SD Summary</p>
+            </div>
+            <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+              <p style="font-size:15px;color:#1c1c1e;margin:0 0 12px;">Hi <strong>${sd.full_name}</strong>,</p>
+              <p style="font-size:14px;color:#555;margin:0 0 16px;">The following DMs were assigned the <strong>${TITLE}</strong> task today:</p>
+              <ul style="margin:0 0 20px;padding-left:20px;">${dmList}</ul>
+              <a href="${appUrl}/tasks" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Tasks</a>
+            </div>
+          </div>
+        `
+      ).catch(() => {})
+    }
   }
 
   return NextResponse.json({ ok: true, created, total: managers.length })

@@ -32,7 +32,11 @@ export async function GET() {
   for (const r of overdueOrders) {
     if (r.org_id) {
       const recipients = await query<{ id: string }>(
-        `SELECT id FROM users WHERE org_id = $1 AND role IN ('sales_director', 'owner', 'developer') AND is_active = TRUE`,
+        `SELECT u.id FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+         WHERE u.org_id = $1 AND u.role IN ('sales_director', 'owner', 'developer') AND u.is_active = TRUE
+           AND COALESCE(np.supply_requests, TRUE) = TRUE
+           AND COALESCE(np.push_enabled, TRUE) = TRUE`,
         [r.org_id]
       )
       if (recipients.length > 0) {
@@ -73,7 +77,11 @@ export async function GET() {
   for (const r of overdueReceipts) {
     if (r.org_id) {
       const recipients = await query<{ id: string }>(
-        `SELECT id FROM users WHERE org_id = $1 AND role IN ('sales_director', 'owner', 'developer') AND is_active = TRUE`,
+        `SELECT u.id FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+         WHERE u.org_id = $1 AND u.role IN ('sales_director', 'owner', 'developer') AND u.is_active = TRUE
+           AND COALESCE(np.supply_requests, TRUE) = TRUE
+           AND COALESCE(np.push_enabled, TRUE) = TRUE`,
         [r.org_id]
       )
       if (recipients.length > 0) {

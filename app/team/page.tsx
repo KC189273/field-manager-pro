@@ -20,6 +20,7 @@ interface User {
   is_active: boolean
   is_floater: boolean
   is_ops_collab: boolean
+  is_hidden: boolean
   manager_id: string | null
   approval_status: string | null
   created_by: string | null
@@ -39,7 +40,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false }
+const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false, isHidden: false }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -74,6 +75,7 @@ export default function TeamPage() {
   const [roleFilter, setRoleFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list')
+  const [showTerminated, setShowTerminated] = useState(false)
   const [treeSelected, setTreeSelected] = useState<User | null>(null)
   const [showCreatePw, setShowCreatePw] = useState(false)
   const [showTempPw, setShowTempPw] = useState(false)
@@ -87,10 +89,13 @@ export default function TeamPage() {
   const employees = users.filter(u => u.role === 'employee')
 
   const pendingUsers = users.filter(u => u.approval_status === 'pending')
-  const activeUsers = users.filter(u => u.approval_status !== 'pending')
-  const activeMgrs = activeUsers.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
-  const activeEmps = activeUsers.filter(u => u.role === 'employee')
+  const visibleUsers = showTerminated
+    ? users.filter(u => u.approval_status !== 'pending')
+    : users.filter(u => u.approval_status !== 'pending' && !u.is_hidden && u.is_active !== false)
+  const activeMgrs = visibleUsers.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
+  const activeEmps = visibleUsers.filter(u => u.role === 'employee')
   const allUsersOrdered = [...activeMgrs, ...activeEmps]
+  const terminatedCount = users.filter(u => u.is_hidden && u.is_active === false).length
   const presentRoles = Array.from(new Set(allUsersOrdered.map(u => u.role)))
   const searchFiltered = searchQuery.trim()
     ? allUsersOrdered.filter(u =>
@@ -101,7 +106,7 @@ export default function TeamPage() {
   const filteredUsers = roleFilter === 'all' ? searchFiltered : searchFiltered.filter(u => u.role === roleFilter)
 
   async function loadUsers() {
-    const res = await fetch('/api/team/users')
+    const res = await fetch('/api/team/users?withPeers=true')
     if (res.ok) {
       const data = await res.json()
       setUsers(data.users)
@@ -151,7 +156,7 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false })
+    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
     setShowCreate(false)
     setShowTempPw(false)
   }
@@ -195,6 +200,7 @@ export default function TeamPage() {
     if (editForm.payType !== (editUser.pay_type ?? 'hourly')) body.payType = editForm.payType
     if (editUser.role === 'employee' && editForm.isFloater !== (editUser.is_floater ?? false)) body.isFloater = editForm.isFloater
     if (editUser.role === 'manager' && editForm.isOpsCollab !== (editUser.is_ops_collab ?? false)) body.isOpsCollab = editForm.isOpsCollab
+    if (isDev && editForm.isHidden !== (editUser.is_hidden ?? false)) body.isHidden = editForm.isHidden
 
     const res = await fetch('/api/team/users', {
       method: 'PATCH',
@@ -610,7 +616,31 @@ export default function TeamPage() {
                     )}
                   </div>
                 )}
-                {canManageAll && editForm.role !== 'developer' && editForm.role !== 'owner' && managers.length > 0 && (
+                {isDev && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">Hidden Profile</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(p => ({ ...p, isHidden: !p.isHidden }))}
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-colors ${
+                        editForm.isHidden
+                          ? 'bg-red-600/15 border-red-500'
+                          : 'bg-gray-800 border-gray-700'
+                      }`}
+                    >
+                      <div className={`w-10 h-5 rounded-full relative flex-shrink-0 transition-colors ${editForm.isHidden ? 'bg-red-500' : 'bg-gray-600'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editForm.isHidden ? 'left-5' : 'left-0.5'}`} />
+                      </div>
+                      <span className={`text-sm font-medium ${editForm.isHidden ? 'text-red-400' : 'text-gray-400'}`}>
+                        {editForm.isHidden ? 'Hidden — invisible to all other users' : 'Visible'}
+                      </span>
+                    </button>
+                    {editForm.isHidden && (
+                      <p className="text-xs text-red-400/70 mt-1">This user can still log in but won&apos;t appear in any listings, schedules, dropdowns, maps, or reports.</p>
+                    )}
+                  </div>
+                )}
+                {(canManageAll || session?.role === 'manager') && editForm.role !== 'developer' && editForm.role !== 'owner' && managers.length > 0 && (
                   <div>
                     <label className="block text-xs text-gray-500 mb-1">Assigned Manager</label>
                     <select value={editForm.managerId}
@@ -779,6 +809,18 @@ export default function TeamPage() {
                 className="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 text-white text-sm placeholder-gray-600 focus:outline-none focus:border-violet-600"
               />
             </div>
+
+            {/* Show Terminated toggle */}
+            {terminatedCount > 0 && (
+              <div className="mb-3">
+                <button onClick={() => setShowTerminated(!showTerminated)}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                    showTerminated ? 'bg-red-900/30 text-red-400 border border-red-700/40' : 'bg-gray-800 text-gray-500 hover:text-gray-300'
+                  }`}>
+                  {showTerminated ? `Showing ${terminatedCount} terminated` : `Show ${terminatedCount} terminated`}
+                </button>
+              </div>
+            )}
 
             <div className="flex items-center justify-between mb-4 gap-2">
               {viewMode === 'list' ? (
@@ -1271,6 +1313,9 @@ function NodeDetailSheet({
               )}
               {!user.is_active && (
                 <span className="text-xs bg-gray-700 text-gray-400 px-2 py-0.5 rounded-full ml-1.5">Inactive</span>
+              )}
+              {user.is_hidden && (
+                <span className="text-xs bg-red-900/40 text-red-400 px-2 py-0.5 rounded-full ml-1.5 font-semibold">Hidden</span>
               )}
             </div>
           </div>

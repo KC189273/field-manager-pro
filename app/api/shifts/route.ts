@@ -122,8 +122,8 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const employee = await query<{ id: string; full_name: string; email: string }>(
-    `SELECT id, full_name, email FROM users WHERE id = $1`, [userId]
+  const employee = await query<{ id: string; full_name: string; email: string; org_id: string | null }>(
+    `SELECT id, full_name, email, org_id FROM users WHERE id = $1`, [userId]
   )
   if (!employee[0]) return NextResponse.json({ error: 'User not found' }, { status: 404 })
 
@@ -143,6 +143,26 @@ export async function POST(req: NextRequest) {
     `FMP: Your time entry was adjusted — ${date}`,
     manualTimeEntryHtml(employee[0].full_name, date, clockInStr, clockOutStr, note, session.fullName)
   )
+
+  // CC ops managers, SDs, and owners (respecting notification preferences)
+  if (employee[0].org_id) {
+    const mgmt = await query<{ email: string; full_name: string }>(
+      `SELECT u.email, u.full_name FROM users u
+       LEFT JOIN notification_preferences np ON np.user_id = u.id
+       WHERE u.org_id = $1 AND u.is_active = TRUE
+         AND u.role IN ('ops_manager', 'sales_director', 'owner', 'developer') AND u.id != $2
+         AND COALESCE(np.clock_events, TRUE) = TRUE
+         AND COALESCE(np.email_enabled, TRUE) = TRUE`,
+      [employee[0].org_id, session.id]
+    )
+    for (const m of mgmt) {
+      sendEmail(
+        m.email,
+        `[MGMT] Time entry added — ${employee[0].full_name} (${date})`,
+        manualTimeEntryHtml(employee[0].full_name, date, clockInStr, clockOutStr, note, session.fullName)
+      ).catch(() => {})
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }
@@ -188,8 +208,8 @@ export async function PATCH(req: NextRequest) {
   )
   if (!shift[0]) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
 
-  const employee = await query<{ full_name: string; email: string }>(
-    `SELECT full_name, email FROM users WHERE id = $1`, [shift[0].user_id]
+  const employee = await query<{ full_name: string; email: string; org_id: string | null }>(
+    `SELECT full_name, email, org_id FROM users WHERE id = $1`, [shift[0].user_id]
   )
   if (employee[0]) {
     const date = clockIn ? new Date(clockIn).toLocaleDateString('en-US', { timeZone: 'America/Chicago' }) : 'Unknown'
@@ -200,6 +220,26 @@ export async function PATCH(req: NextRequest) {
       `FMP: Your time entry was adjusted — ${date}`,
       manualTimeEntryHtml(employee[0].full_name, date, inStr, outStr, note, session.fullName)
     )
+
+    // CC ops managers, SDs, and owners (respecting notification preferences)
+    if (employee[0].org_id) {
+      const mgmt = await query<{ email: string; full_name: string }>(
+        `SELECT u.email, u.full_name FROM users u
+         LEFT JOIN notification_preferences np ON np.user_id = u.id
+         WHERE u.org_id = $1 AND u.is_active = TRUE
+           AND u.role IN ('ops_manager', 'sales_director', 'owner', 'developer') AND u.id != $2
+           AND COALESCE(np.clock_events, TRUE) = TRUE
+           AND COALESCE(np.email_enabled, TRUE) = TRUE`,
+        [employee[0].org_id, session.id]
+      )
+      for (const m of mgmt) {
+        sendEmail(
+          m.email,
+          `[MGMT] Time correction — ${employee[0].full_name} (${date})`,
+          manualTimeEntryHtml(employee[0].full_name, date, inStr, outStr, note, session.fullName)
+        ).catch(() => {})
+      }
+    }
   }
 
   return NextResponse.json({ ok: true })

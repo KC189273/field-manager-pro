@@ -39,6 +39,29 @@ function getLastClosedPeriod(): { start: string; end: string } | null {
   return { start: start.toISOString().split('T')[0], end: end.toISOString().split('T')[0] }
 }
 
+function getWeeklyRanges(count = 4): { start: string; end: string; isCurrent: boolean }[] {
+  const now = new Date()
+  const cstNow = new Date(now.toLocaleString('en-US', { timeZone: CST }))
+  const dayOfWeek = cstNow.getDay()
+  const monday = new Date(cstNow)
+  monday.setDate(cstNow.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1))
+  monday.setHours(0, 0, 0, 0)
+
+  const weeks = []
+  for (let i = 0; i < count; i++) {
+    const weekStart = new Date(monday)
+    weekStart.setDate(monday.getDate() - i * 7)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekStart.getDate() + 6)
+    weeks.push({
+      start: weekStart.toISOString().split('T')[0],
+      end: weekEnd.toISOString().split('T')[0],
+      isCurrent: i === 0,
+    })
+  }
+  return weeks
+}
+
 async function getOrgId(session: { role: string; id: string; org_id?: string | null }): Promise<string | null> {
   // For developer, respect the fmp-dev-org cookie set by the org switcher
   if (session.role === 'developer') {
@@ -201,6 +224,12 @@ export async function GET(_req: NextRequest) {
   }[] = []
 
   let hasEmployees = false
+  let weeklyHours: {
+    start: string
+    end: string
+    isCurrent: boolean
+    employees: { user_id: string; full_name: string; regular_hours: number; ot_hours: number; total_hours: number }[]
+  }[] = []
 
   if (session.role === 'manager') {
     const empCheck = await queryOne<{ count: string }>(
@@ -218,6 +247,49 @@ export async function GET(_req: NextRequest) {
           user_id, full_name, regular_hours, ot_hours, total_hours,
         }))
     }
+
+    // Weekly hours for DMs — current week + 3 previous
+    if (hasEmployees) {
+      const weeks = getWeeklyRanges(4)
+      const rangeStart = weeks[weeks.length - 1].start
+      const rangeEnd = weeks[0].end
+
+      const weeklyData = await query<{
+        user_id: string; full_name: string; week_start: string; total_hours: number
+      }>(`
+        SELECT
+          s.user_id,
+          u.full_name,
+          DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date::text AS week_start,
+          ROUND(SUM(
+            EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) / 3600.0
+            - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0
+              FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
+          )::numeric, 2)::float AS total_hours
+        FROM shifts s
+        JOIN users u ON u.id = s.user_id
+        WHERE (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
+          AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
+          AND u.manager_id = $4
+          AND u.role = 'employee'
+          AND u.is_active = TRUE
+        GROUP BY s.user_id, u.full_name, week_start
+        ORDER BY week_start DESC, u.full_name
+      `, [rangeStart, rangeEnd, CST, session.id])
+
+      weeklyHours = weeks.map(week => ({
+        ...week,
+        employees: weeklyData
+          .filter(d => d.week_start === week.start)
+          .map(d => ({
+            user_id: d.user_id,
+            full_name: d.full_name,
+            total_hours: Math.round(d.total_hours * 100) / 100,
+            regular_hours: Math.round(Math.min(d.total_hours, 40) * 100) / 100,
+            ot_hours: Math.round(Math.max(d.total_hours - 40, 0) * 100) / 100,
+          })),
+      }))
+    }
   }
 
   const enrichedPeriods = periods.map(p => ({
@@ -230,6 +302,7 @@ export async function GET(_req: NextRequest) {
   return NextResponse.json({
     periods: enrichedPeriods,
     myEmployeeHours,
+    weeklyHours,
     hasEmployees,
     role: session.role,
     userId: session.id,

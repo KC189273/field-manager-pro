@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
 
 const STORAGE_KEY = 'fmp_pinned_tabs_v2'
 const ROLE_CACHE_KEY = 'fmp_role_cache'
@@ -13,8 +13,12 @@ const MAX_PINS = 4
 const NO_NAV_PREFIXES = [
   '/login', '/forgot-password', '/reset-password', '/change-password',
   '/privacy', '/terms', '/delete-account', '/get-started', '/ack',
+  '/customer-signup', '/download',
 ]
 
+const BARBERSHOP_ROLES: Role[] = ['customer', 'barber', 'shop_owner']
+function isBarbershop(role: Role) { return BARBERSHOP_ROLES.includes(role) }
+function isRetail(role: Role) { return !isBarbershop(role) }
 function canViewTeam(role: Role) {
   return ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 }
@@ -33,32 +37,46 @@ interface Feature {
 }
 
 const ALL_FEATURES: Feature[] = [
-  { href: '/dashboard',       label: 'Dashboard',        short: 'Home',      Icon: HomeIcon,           show: () => true },
-  { href: '/clock',           label: 'Clock In/Out',     short: 'Clock',     Icon: ClockIcon,          show: () => true },
-  { href: '/chat',            label: 'Messages',         short: 'Chat',      Icon: ChatIcon,           show: r => r !== 'employee' },
-  { href: '/my-schedule',     label: 'My Schedule',      short: 'Schedule',  Icon: ScheduleIcon,       show: () => true },
-  { href: '/staff-schedule',  label: 'Store Schedule',   short: 'Shifts',    Icon: StaffSchedIcon,     show: r => r !== 'employee' },
-  { href: '/tasks',           label: 'Tasks',            short: 'Tasks',     Icon: TasksIcon,          show: () => true },
-  { href: '/checklist',       label: 'Checklist',        short: 'Checklist', Icon: ChecklistIcon,      show: () => true },
-  { href: '/map',             label: 'Live Map',         short: 'Map',       Icon: MapIcon,            show: canViewTeam },
+  // ── Retail / workforce features ──
+  { href: '/dashboard',       label: 'Dashboard',        short: 'Home',      Icon: HomeIcon,           show: isRetail },
+  { href: '/clock',           label: 'Clock In/Out',     short: 'Clock',     Icon: ClockIcon,          show: isRetail },
+  { href: '/chat',            label: 'Messages',         short: 'Chat',      Icon: ChatIcon,           show: r => isRetail(r) && r !== 'employee' },
+  { href: '/my-schedule',     label: 'My Schedule',      short: 'Schedule',  Icon: ScheduleIcon,       show: isRetail },
+  { href: '/staff-schedule',  label: 'Store Schedule',   short: 'Shifts',    Icon: StaffSchedIcon,     show: r => isRetail(r) && r !== 'employee' },
+  { href: '/tasks',           label: 'Tasks',            short: 'Tasks',     Icon: TasksIcon,          show: isRetail },
+  { href: '/checklist',       label: 'Checklist',        short: 'Checklist', Icon: ChecklistIcon,      show: isRetail },
+  { href: '/map',             label: 'Live Map',         short: 'Map',       Icon: MapIcon,            show: r => r === 'sales_director' || r === 'owner' || r === 'developer' },
   { href: '/team',            label: 'Team',             short: 'Team',      Icon: TeamIcon,           show: canViewTeam },
   { href: '/payroll',         label: 'Payroll',          short: 'Payroll',   Icon: PayrollIcon,        show: canViewTeam },
   { href: '/flags',           label: 'Flags',            short: 'Flags',     Icon: FlagIcon,           show: canViewTeam },
-  { href: '/timecards',       label: 'Timecards',        short: 'Timecards', Icon: TimecardIcon,       show: () => true },
-  { href: '/time-history',    label: 'Time History',     short: 'History',   Icon: HistoryIcon,        show: () => true },
-  { href: '/time-off',        label: 'Time Off',         short: 'Time Off',  Icon: TimeOffIcon,        show: () => true },
-  { href: '/shift-swaps',     label: 'Shift Swaps',      short: 'Swaps',     Icon: SwapIcon,           show: () => true },
-  { href: '/expenses',        label: 'Expenses',         short: 'Expenses',  Icon: ExpenseIcon,        show: r => r !== 'employee' },
-  { href: '/facilities',      label: 'Facilities',       short: 'Facilities',Icon: FacilitiesIcon,     show: () => true },
-  { href: '/supply-requests', label: 'Supplies',         short: 'Supplies',  Icon: SupplyIcon,         show: () => true },
-  { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: () => true },
-  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: () => true },
+  { href: '/timecards',       label: 'Timecards',        short: 'Timecards', Icon: TimecardIcon,       show: isRetail },
+  { href: '/time-history',    label: 'Time History',     short: 'History',   Icon: HistoryIcon,        show: isRetail },
+  { href: '/time-off',        label: 'Time Off',         short: 'Time Off',  Icon: TimeOffIcon,        show: isRetail },
+  { href: '/shift-swaps',     label: 'Shift Swaps',      short: 'Swaps',     Icon: SwapIcon,           show: isRetail },
+  { href: '/expenses',        label: 'Expenses',         short: 'Expenses',  Icon: ExpenseIcon,        show: r => isRetail(r) && r !== 'employee' },
+  { href: '/facilities',      label: 'Facilities',       short: 'Facilities',Icon: FacilitiesIcon,     show: isRetail },
+  { href: '/supply-requests', label: 'Supplies',         short: 'Supplies',  Icon: SupplyIcon,         show: isRetail },
+  { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: isRetail },
+  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: isRetail },
   { href: '/dm-visit',        label: 'DM Store Visit',   short: 'DM Visit',  Icon: StoreIcon,          show: canViewTeam },
+  { href: '/dm-schedule',     label: 'DM Schedule',      short: 'DM Sched',  Icon: ScheduleIcon,       show: r => r === 'manager' || r === 'sales_director' || r === 'owner' || r === 'developer' },
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: isOpsPlus },
-  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => r !== 'employee' },
-  { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: () => true },
-  { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: () => true },
-  { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: () => true },
+  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => isRetail(r) && r !== 'employee' },
+  { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isRetail },
+  { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isRetail },
+  { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: isRetail },
+  { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: isRetail },
+  { href: '/db-health',       label: 'App Health',        short: 'Health',    Icon: GearIcon,           show: r => r === 'developer' || r === 'ops_manager' || r === 'sales_director' || r === 'owner' },
+
+  // ── Barbershop features ──
+  { href: '/book',             label: 'Book',             short: 'Book',      Icon: CalendarIcon,       show: r => r === 'customer' },
+  { href: '/my-appointments', label: 'My Appointments',  short: 'Appts',     Icon: CalendarIcon,       show: r => r === 'customer' },
+  { href: '/barber-dashboard', label: 'Appointments',     short: 'Appts',     Icon: CalendarIcon,       show: r => r === 'barber' || r === 'shop_owner' },
+  { href: '/my-customers',    label: 'My Customers',     short: 'Clients',   Icon: TeamIcon,           show: r => r === 'barber' || r === 'shop_owner' },
+  { href: '/shop-setup',      label: 'Shop Setup',       short: 'Setup',     Icon: GearIcon,           show: r => r === 'shop_owner' },
+
+  // ── Admin ──
+  { href: '/super-admin',     label: 'Super Admin',      short: 'Admin',     Icon: GearIcon,           show: r => r === 'developer' },
   { href: '/config',          label: 'Config',           short: 'Config',    Icon: GearIcon,           show: r => r === 'developer' },
 ]
 
@@ -70,6 +88,9 @@ const DEFAULT_PINNED_TABS: Record<Role, string[]> = {
   owner:          ['/dashboard', '/clock', '/payroll', '/team'],
   sales_director: ['/dashboard', '/clock', '/map', '/team'],
   developer:      ['/dashboard', '/clock', '/tasks', '/config'],
+  customer:       ['/book', '/my-appointments'],
+  barber:         ['/barber-dashboard', '/my-customers'],
+  shop_owner:     ['/barber-dashboard', '/my-customers', '/shop-setup'],
 }
 
 export default function BottomNav() {

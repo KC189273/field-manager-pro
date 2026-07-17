@@ -74,6 +74,7 @@ export default function TimeOffPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [myRequests, setMyRequests] = useState<MyRequest[]>([])
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
+  const [teamApproved, setTeamApproved] = useState<(PendingApproval & { approver_name?: string })[]>([])
   const [loading, setLoading] = useState(true)
 
   // Request modal
@@ -109,6 +110,7 @@ export default function TimeOffPage() {
       const d = await res.json()
       setMyRequests(d.myRequests ?? [])
       setPendingApprovals(d.pendingApprovals ?? [])
+      setTeamApproved(d.teamApproved ?? [])
     }
     setLoading(false)
   }, [])
@@ -303,6 +305,37 @@ export default function TimeOffPage() {
                         >
                           Deny
                         </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Team Approved PTO */}
+            {teamApproved.length > 0 && (
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">
+                  Team Approved Time Off — {teamApproved.length}
+                </p>
+                <div className="space-y-2">
+                  {teamApproved.map(ta => (
+                    <div key={ta.id} className="bg-gray-900 border border-green-900/50 rounded-2xl p-4">
+                      <div className="flex items-center gap-2.5">
+                        {ta.user_avatar_url
+                          ? <img src={ta.user_avatar_url} alt={ta.user_name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                          : <div className="w-8 h-8 rounded-full bg-violet-800 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">{ta.user_name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                        }
+                        <div className="min-w-0 flex-1">
+                          <p className="text-white font-semibold text-sm">{ta.user_name}</p>
+                          <p className="text-green-400 text-sm font-medium mt-0.5">{fmtDateRange(ta.start_date, ta.end_date, ta.partial_day, ta.partial_start_time, ta.partial_end_time)}</p>
+                          {ta.reason && <p className="text-gray-400 text-xs mt-1 italic">&quot;{ta.reason}&quot;</p>}
+                          {ta.approver_name && <p className="text-gray-600 text-[10px] mt-1">Approved by {ta.approver_name}</p>}
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold px-3 py-1 rounded-full border bg-green-900/40 text-green-400 border-green-800/40 shrink-0">
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                          Approved
+                        </span>
                       </div>
                     </div>
                   ))}

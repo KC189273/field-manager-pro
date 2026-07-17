@@ -114,8 +114,12 @@ export async function GET(req: NextRequest) {
   `, [start, end])
 
   let sent = 0
+  const remindedByOrg: Record<string, string[]> = {}
 
   for (const dm of dms) {
+    remindedByOrg[dm.org_id] = remindedByOrg[dm.org_id] ?? []
+    remindedByOrg[dm.org_id].push(dm.full_name)
+
     // Send reminder email
     sendEmail(
       dm.email,
@@ -162,6 +166,35 @@ export async function GET(req: NextRequest) {
         dm.id,
         dueDate,
       ])
+    }
+  }
+
+  // Notify SDs per org of which DMs were reminded
+  for (const [orgId, dmNames] of Object.entries(remindedByOrg)) {
+    const sds = await query<{ email: string; full_name: string }>(
+      `SELECT email, full_name FROM users WHERE org_id = $1 AND role = 'sales_director' AND is_active = TRUE`,
+      [orgId]
+    )
+    const dmList = dmNames.map(n => `<li style="font-size:14px;color:#374151;padding:4px 0;">${n}</li>`).join('')
+    for (const sd of sds) {
+      sendEmail(
+        sd.email,
+        `FYI: Timecard reminders sent to ${dmNames.length} DM${dmNames.length !== 1 ? 's' : ''} for ${periodLabel}`,
+        `
+          <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+              <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+              <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Payroll Reminder — SD Summary</p>
+            </div>
+            <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+              <p style="font-size:15px;color:#1c1c1e;margin:0 0 12px;">Hi <strong>${sd.full_name}</strong>,</p>
+              <p style="font-size:14px;color:#555;margin:0 0 16px;">The following DMs were sent a timecard submission reminder for the pay period <strong>${periodLabel}</strong>:</p>
+              <ul style="margin:0 0 20px;padding-left:20px;">${dmList}</ul>
+              <a href="${APP_URL}/payroll" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">View Payroll</a>
+            </div>
+          </div>
+        `
+      ).catch(() => {})
     }
   }
 

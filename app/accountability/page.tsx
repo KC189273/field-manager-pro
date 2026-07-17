@@ -1325,13 +1325,14 @@ export default function AccountabilityPage() {
     if (filterSubject) params.set('subjectId', filterSubject)
     if (filterAuthor)  params.set('authorId', filterAuthor)
     fetch(`/api/accountability?${params}`)
-      .then(r => r.json())
+      .then(r => { if (!r.ok) console.error('Accountability API error:', r.status); return r.json() })
       .then(d => {
         setDocs(d.docs ?? [])
         setPendingApproval(d.pendingApproval ?? [])
         setSubjects(d.subjects ?? [])
         setAuthors(d.authors ?? [])
       })
+      .catch(err => console.error('Accountability fetch failed:', err))
       .finally(() => setLoading(false))
   }, [session, dateFrom, dateTo, filterSubject, filterAuthor])
 

@@ -5,14 +5,29 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { computeStops, matchStopsToStores, type StoreLocation } from '@/lib/gps'
 import { getReceiptViewUrl } from '@/lib/s3'
 
+// Short-lived cache to prevent 16 identical queries when multiple users poll simultaneously
+let liveCache: { data: unknown; orgId: string | null; expiresAt: number } | null = null
+const CACHE_TTL_MS = 10_000 // 10 seconds
+
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'developer'
   const isDM = session.role === 'manager'
 
+  // Restrict map access to SD, owner, developer only
+  if (!canViewAll && !isDM) {
+    return NextResponse.json({ employees: [], breadcrumbs: [], stops: [], stores: [] })
+  }
+
   const orgFilter = await getOrgFilter(session)
+
+  // Return cached result for org-wide viewers if fresh
+  if (canViewAll && liveCache && liveCache.orgId === (orgFilter.orgId ?? null) && liveCache.expiresAt > Date.now()) {
+    return NextResponse.json(liveCache.data)
+  }
+
   const params: unknown[] = []
   let userFilter = ''
 
@@ -47,20 +62,18 @@ export async function GET() {
       u.avatar_key,
       u.role AS user_role,
       s.clock_in_at::text,
-      COALESCE(
-        (SELECT b.lat FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
-        s.clock_in_lat
-      ) AS lat,
-      COALESCE(
-        (SELECT b.lng FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lng IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
-        s.clock_in_lng
-      ) AS lng,
-      COALESCE(
-        (SELECT b.recorded_at::text FROM gps_breadcrumbs b WHERE b.shift_id = s.id AND b.lat IS NOT NULL AND b.is_gap = false ORDER BY b.recorded_at DESC LIMIT 1),
-        s.clock_in_at::text
-      ) AS last_seen_at
+      COALESCE(last_pos.lat, s.clock_in_lat) AS lat,
+      COALESCE(last_pos.lng, s.clock_in_lng) AS lng,
+      COALESCE(last_pos.recorded_at, s.clock_in_at::text) AS last_seen_at
     FROM shifts s
     JOIN users u ON u.id = s.user_id
+    LEFT JOIN LATERAL (
+      SELECT b.lat, b.lng, b.recorded_at::text
+      FROM gps_breadcrumbs b
+      WHERE b.shift_id = s.id AND b.is_gap = false AND b.lat IS NOT NULL
+      ORDER BY b.recorded_at DESC
+      LIMIT 1
+    ) last_pos ON TRUE
     WHERE s.clock_out_at IS NULL
       AND u.role != 'developer'
       AND u.is_active = TRUE
@@ -107,5 +120,12 @@ export async function GET() {
 
   const stops = matchStopsToStores(rawStops, stores)
 
-  return NextResponse.json({ employees, breadcrumbs, stops, stores })
+  const result = { employees, breadcrumbs, stops, stores }
+
+  // Cache org-wide results for canViewAll users (ops, owner, SD, dev all see the same data)
+  if (canViewAll && orgFilter.orgId) {
+    liveCache = { data: result, orgId: orgFilter.orgId, expiresAt: Date.now() + CACHE_TTL_MS }
+  }
+
+  return NextResponse.json(result)
 }

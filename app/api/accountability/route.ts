@@ -117,6 +117,8 @@ async function ensureTable() {
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_approved_at TIMESTAMPTZ`).catch(() => {})
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS conversation_escalated_at TIMESTAMPTZ`).catch(() => {})
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS transferred_to UUID`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS transferred_to_name TEXT`).catch(() => {})
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -461,6 +463,66 @@ export async function GET(req: NextRequest) {
 
   try { await ensureTable() } catch { /* already exists */ }
 
+  const orgFilter = await getOrgFilter(session)
+
+  // Always load subjects + authors first so the form is usable even if docs fail
+  type UserRow = { id: string; full_name: string; role: string }
+  let subjects: UserRow[] = []
+  try {
+    if (session.role === 'developer') {
+      subjects = await query<UserRow>(
+        `SELECT id, full_name, role FROM users
+         WHERE is_active = TRUE AND role NOT IN ('developer')
+         ORDER BY full_name`, []
+      )
+    } else if (session.role === 'owner') {
+      if (orgFilter.filterByOrg && orgFilter.orgId) {
+        subjects = await query<UserRow>(
+          `SELECT id, full_name, role FROM users
+           WHERE org_id = $1 AND is_active = TRUE AND id != $2
+             AND role NOT IN ('developer')
+           ORDER BY full_name`,
+          [orgFilter.orgId, session.id]
+        )
+      }
+    } else if (session.role === 'sales_director') {
+      subjects = await query<UserRow>(
+        `SELECT id, full_name, role FROM users
+         WHERE manager_id = $1 AND role = 'manager' AND is_active = TRUE ORDER BY full_name`,
+        [session.id]
+      )
+    } else if (session.role === 'manager') {
+      subjects = await query<UserRow>(
+        `SELECT id, full_name, role FROM users
+         WHERE manager_id = $1 AND is_active = TRUE ORDER BY full_name`,
+        [session.id]
+      )
+    } else if (orgFilter.filterByOrg && orgFilter.orgId) {
+      subjects = await query<UserRow>(
+        `SELECT id, full_name, role FROM users
+         WHERE org_id = $1 AND is_active = TRUE AND role IN ('employee','manager','ops_manager')
+         ORDER BY full_name`,
+        [orgFilter.orgId]
+      )
+    }
+  } catch (err) {
+    console.error('Accountability: failed to load subjects:', err)
+  }
+
+  let authors: UserRow[] = []
+  try {
+    if (session.role !== 'manager' && orgFilter.filterByOrg && orgFilter.orgId) {
+      authors = await query<UserRow>(
+        `SELECT id, full_name, role FROM users
+         WHERE org_id = $1 AND is_active = TRUE AND role IN ('manager','sales_director')
+         ORDER BY full_name`,
+        [orgFilter.orgId]
+      )
+    }
+  } catch (err) {
+    console.error('Accountability: failed to load authors:', err)
+  }
+
   const { searchParams } = new URL(req.url)
   const dateFrom  = searchParams.get('dateFrom')
   const dateTo    = searchParams.get('dateTo')
@@ -468,8 +530,11 @@ export async function GET(req: NextRequest) {
   const authorId  = searchParams.get('authorId')
   const status    = searchParams.get('status')
   const level     = searchParams.get('level')
-  const orgFilter = await getOrgFilter(session)
 
+  let docsWithAvatars: Record<string, unknown>[] = []
+  let pendingApproval: unknown[] = []
+
+  try {
   const params: unknown[] = []
   const where: string[] = []
 
@@ -479,10 +544,10 @@ export async function GET(req: NextRequest) {
     where.push(`d.org_id = $${params.length}`)
   }
 
-  // DMs only see their own submitted docs
+  // DMs see their own docs + docs transferred to them
   if (session.role === 'manager') {
     params.push(session.id)
-    where.push(`d.author_id = $${params.length}`)
+    where.push(`(d.author_id = $${params.length} OR d.transferred_to = $${params.length})`)
   }
 
   if (dateFrom) { params.push(dateFrom); where.push(`d.created_at >= $${params.length}`) }
@@ -518,15 +583,17 @@ export async function GET(req: NextRequest) {
      LIMIT 200`,
     params
   )
-  const docsWithAvatars = await Promise.all(
-    (docs as Record<string, unknown>[]).map(async d => ({
-      ...d,
-      subject_avatar_url: d.subject_avatar_key ? await getReceiptViewUrl(d.subject_avatar_key as string) : null,
-    }))
+  docsWithAvatars = await Promise.all(
+    (docs as Record<string, unknown>[]).map(async d => {
+      let subject_avatar_url: string | null = null
+      if (d.subject_avatar_key) {
+        try { subject_avatar_url = await getReceiptViewUrl(d.subject_avatar_key as string) } catch { /* non-fatal */ }
+      }
+      return { ...d, subject_avatar_url }
+    })
   )
 
   // Pending approval queue — docs awaiting this SD or owner's action
-  let pendingApproval: typeof docs = []
   if (session.role === 'sales_director' || session.role === 'owner' || session.role === 'developer') {
     const pendingParams: unknown[] = []
     const pendingWhere: string[] = [`d.status = 'pending_approval'`]
@@ -554,65 +621,17 @@ export async function GET(req: NextRequest) {
       pendingParams
     )
     pendingApproval = await Promise.all(
-      (pendingApproval as Record<string, unknown>[]).map(async d => ({
-        ...d,
-        subject_avatar_url: d.subject_avatar_key ? await getReceiptViewUrl(d.subject_avatar_key as string) : null,
-      }))
+      (pendingApproval as Record<string, unknown>[]).map(async d => {
+        let subject_avatar_url: string | null = null
+        if (d.subject_avatar_key) {
+          try { subject_avatar_url = await getReceiptViewUrl(d.subject_avatar_key as string) } catch { /* non-fatal */ }
+        }
+        return { ...d, subject_avatar_url }
+      })
     ) as unknown as typeof pendingApproval
   }
-
-  // Subjects list for filter dropdowns (direct reports for DM, broader for higher roles)
-  let subjects: Array<{ id: string; full_name: string; role: string }> = []
-  if (session.role === 'developer') {
-    // Developer sees all active non-developer users for testing
-    subjects = await query(
-      `SELECT id, full_name, role FROM users
-       WHERE is_active = TRUE AND role NOT IN ('developer')
-       ORDER BY full_name`,
-      []
-    )
-  } else if (session.role === 'owner') {
-    // Owner can write up anyone in the org except themselves
-    if (orgFilter.filterByOrg && orgFilter.orgId) {
-      subjects = await query(
-        `SELECT id, full_name, role FROM users
-         WHERE org_id = $1 AND is_active = TRUE AND id != $2
-           AND role NOT IN ('developer')
-         ORDER BY full_name`,
-        [orgFilter.orgId, session.id]
-      )
-    }
-  } else if (session.role === 'sales_director') {
-    // SD can only write up DMs who report directly to them
-    subjects = await query(
-      `SELECT id, full_name, role FROM users
-       WHERE manager_id = $1 AND role = 'manager' AND is_active = TRUE ORDER BY full_name`,
-      [session.id]
-    )
-  } else if (session.role === 'manager') {
-    subjects = await query(
-      `SELECT id, full_name, role FROM users
-       WHERE manager_id = $1 AND is_active = TRUE ORDER BY full_name`,
-      [session.id]
-    )
-  } else if (orgFilter.filterByOrg && orgFilter.orgId) {
-    subjects = await query(
-      `SELECT id, full_name, role FROM users
-       WHERE org_id = $1 AND is_active = TRUE AND role IN ('employee','manager','ops_manager')
-       ORDER BY full_name`,
-      [orgFilter.orgId]
-    )
-  }
-
-  // Authors list for higher-role filter
-  let authors: Array<{ id: string; full_name: string; role: string }> = []
-  if (session.role !== 'manager' && orgFilter.filterByOrg && orgFilter.orgId) {
-    authors = await query(
-      `SELECT id, full_name, role FROM users
-       WHERE org_id = $1 AND is_active = TRUE AND role IN ('manager','sales_director')
-       ORDER BY full_name`,
-      [orgFilter.orgId]
-    )
+  } catch (err) {
+    console.error('Accountability GET docs/pending error:', err)
   }
 
   return NextResponse.json({ docs: docsWithAvatars, pendingApproval, subjects, authors })
@@ -684,6 +703,9 @@ export async function POST(req: NextRequest) {
   const initialStatus = (autoApprove || level === 'verbal') ? 'approved' : 'pending_approval'
   const ackToken = (autoApprove || level === 'verbal') ? generateAckToken() : null
 
+  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+  const authorEmail = freshAuthor?.email ?? session.email
+
   let refNumber = await generateRefNumber(orgId)
   let doc: { id: string; created_at: string }
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -700,7 +722,7 @@ export async function POST(req: NextRequest) {
         [
           refNumber, orgId,
           subject.id, subject.full_name, subject.role, subject.email,
-          session.id, session.fullName, session.role, session.email,
+          session.id, session.fullName, session.role, authorEmail,
           level, title.trim(), incidentDate, notes.trim(), expectations.trim(),
           initialStatus,
           sd?.id ?? null, sd?.name ?? null, sd?.email ?? null,
@@ -765,7 +787,7 @@ export async function POST(req: NextRequest) {
       const docFull = {
         id: doc.id, ref_number: refNumber, level, title, incident_date: incidentDate,
         subject_id: subject.id, subject_name: subject.full_name, subject_role: subject.role, subject_email: subject.email,
-        author_id: session.id, author_name: session.fullName, author_role: session.role, author_email: session.email,
+        author_id: session.id, author_name: session.fullName, author_role: session.role, author_email: authorEmail,
         notes, expectations, sd_id: sd?.id ?? null, sd_name: sd?.name ?? null, sd_email: sd?.email ?? null,
         ack_token: ackToken!, created_at: doc.created_at,
       }

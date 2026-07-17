@@ -545,12 +545,20 @@ export async function GET(req: NextRequest) {
     </div>
   `
 
-  // Send to owners (per org, just their org) + developer (all)
+  // Send to owners (per org, just their org) + developer (all) — respecting notification preferences
   const owners = await query<{ email: string; org_id: string | null }>(`
-    SELECT email, org_id FROM users WHERE role IN ('owner','sales_director') AND is_active = TRUE
+    SELECT u.email, u.org_id FROM users u
+    LEFT JOIN notification_preferences np ON np.user_id = u.id
+    WHERE u.role IN ('owner','sales_director','ops_manager') AND u.is_active = TRUE
+      AND COALESCE(np.payroll_report, TRUE) = TRUE
+      AND COALESCE(np.email_enabled, TRUE) = TRUE
   `)
   const developers = await query<{ email: string }>(`
-    SELECT email FROM users WHERE role = 'developer' AND is_active = TRUE
+    SELECT u.email FROM users u
+    LEFT JOIN notification_preferences np ON np.user_id = u.id
+    WHERE u.role = 'developer' AND u.is_active = TRUE
+      AND COALESCE(np.payroll_report, TRUE) = TRUE
+      AND COALESCE(np.email_enabled, TRUE) = TRUE
   `)
 
   const sent: string[] = []

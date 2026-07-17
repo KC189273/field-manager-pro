@@ -210,9 +210,13 @@ export async function GET(req: NextRequest) {
     outstanding
   )
 
-  // Collect recipients: managers + ops_managers + owners + developer if enabled
+  // Collect recipients: managers + ops_managers + owners + developer — respecting notification preferences
   const recipients = await query<{ email: string }>(
-    `SELECT email FROM users WHERE role IN ('manager','ops_manager','owner','sales_director') AND is_active = TRUE`
+    `SELECT u.email FROM users u
+     LEFT JOIN notification_preferences np ON np.user_id = u.id
+     WHERE u.role IN ('manager','ops_manager','owner','sales_director') AND u.is_active = TRUE
+       AND COALESCE(np.weekly_report, TRUE) = TRUE
+       AND COALESCE(np.email_enabled, TRUE) = TRUE`
   )
 
   const devConfig = await queryOne<{ value: string }>(
@@ -220,7 +224,11 @@ export async function GET(req: NextRequest) {
   )
   if (devConfig?.value !== 'false') {
     const devs = await query<{ email: string }>(
-      `SELECT email FROM users WHERE role = 'developer' AND is_active = TRUE`
+      `SELECT u.email FROM users u
+       LEFT JOIN notification_preferences np ON np.user_id = u.id
+       WHERE u.role = 'developer' AND u.is_active = TRUE
+         AND COALESCE(np.weekly_report, TRUE) = TRUE
+         AND COALESCE(np.email_enabled, TRUE) = TRUE`
     )
     recipients.push(...devs)
   }

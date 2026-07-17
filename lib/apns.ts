@@ -13,6 +13,15 @@ import http2 from 'http2'
 import { SignJWT, importPKCS8 } from 'jose'
 import { query, queryOne } from '@/lib/db'
 
+// Push notification types that should NOT also trigger a companion email
+const EMAIL_EXCLUDED_TYPES = new Set([
+  'chat_message',
+  'clock_in_reminder',
+  'clock_out_reminder',
+  'auto_clock_out',
+  'calendar_rsvp',
+])
+
 // ── FCM ──────────────────────────────────────────────────────────────────────
 
 let fcmAccessToken: { value: string; expiresAt: number } | null = null
@@ -299,9 +308,51 @@ export async function sendPushToUser(
       `INSERT INTO notifications (user_id, title, body, type) VALUES ($1, $2, $3, $4)`,
       [userId, title, body, notificationType ?? null]
     ).catch(() => {})
+
+    // Companion email for DMs and ops managers — fire-and-forget
+    if (!notificationType || !EMAIL_EXCLUDED_TYPES.has(notificationType)) {
+      sendPushCompanionEmail(userId, title, body).catch(() => {})
+    }
   } catch (e) {
     console.error('sendPushToUser error:', e)
   }
+}
+
+/**
+ * Send a companion email alongside a push notification.
+ * Only sends to managers and ops_managers with email enabled.
+ * Uses dynamic import so the Resend SDK is only loaded when actually needed.
+ */
+async function sendPushCompanionEmail(userId: string, title: string, body: string): Promise<void> {
+  // Single query: check role + email + email prefs in one shot to minimize DB calls
+  const user = await queryOne<{ email: string; role: string; email_enabled: boolean | null }>(
+    `SELECT u.email, u.role, np.email_enabled
+     FROM users u
+     LEFT JOIN notification_preferences np ON np.user_id = u.id
+     WHERE u.id = $1 AND u.is_active = TRUE
+       AND u.role IN ('manager', 'ops_manager')`,
+    [userId]
+  )
+  if (!user) return // not a DM/ops, or inactive — skip entirely
+  if (user.email_enabled === false) return // email explicitly disabled
+
+  const html = `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:16px 20px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:18px;">Field Manager Pro</h1>
+      </div>
+      <div style="background:white;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:20px;">
+        <h2 style="color:#111827;margin:0 0 8px;font-size:16px;">${title}</h2>
+        <p style="color:#374151;margin:0;font-size:14px;line-height:1.5;">${body}</p>
+        <p style="font-size:12px;color:#9ca3af;margin:16px 0 0;">
+          Sent from <a href="https://fieldmanagerpro.app" style="color:#7c3aed;">fieldmanagerpro.app</a>
+        </p>
+      </div>
+    </div>`
+
+  // Dynamic import — only loads Resend SDK when we actually need to send
+  const { sendEmail } = await import('@/lib/notifications')
+  await sendEmail(user.email, title, html)
 }
 
 /**

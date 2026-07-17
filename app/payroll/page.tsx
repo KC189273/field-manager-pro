@@ -49,9 +49,22 @@ interface EmployeeHours {
   total_hours: number
 }
 
+interface WeeklyHours {
+  start: string
+  end: string
+  isCurrent: boolean
+  employees: EmployeeHours[]
+}
+
 function fmtPeriod(start: string, end: string): string {
   const s = new Date(start + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   const e = new Date(end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  return `${s} – ${e}`
+}
+
+function fmtWeek(start: string, end: string): string {
+  const s = new Date(start + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const e = new Date(end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   return `${s} – ${e}`
 }
 
@@ -69,12 +82,14 @@ export default function PayrollPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [periods, setPeriods] = useState<Period[]>([])
   const [myHours, setMyHours] = useState<EmployeeHours[]>([])
+  const [weeklyHours, setWeeklyHours] = useState<WeeklyHours[]>([])
   const [orgName, setOrgName] = useState<string>('')
   const [payrollLaunchDate, setPayrollLaunchDate] = useState<string | null>(null)
   const [hasEmployees, setHasEmployees] = useState(false)
   const [loading, setLoading] = useState(true)
   const [approving, setApproving] = useState<string | null>(null)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
+  const [expandedWeek, setExpandedWeek] = useState<string | null>(null)
 
   const [from, setFrom] = useState(() => {
     const d = new Date()
@@ -98,9 +113,13 @@ export default function PayrollPage() {
       const data = await payRes.json()
       setPeriods(data.periods ?? [])
       setMyHours(data.myEmployeeHours ?? [])
+      setWeeklyHours(data.weeklyHours ?? [])
       setHasEmployees(data.hasEmployees ?? false)
       setOrgName(data.orgName ?? '')
       setPayrollLaunchDate(data.payrollLaunchDate ?? null)
+      // Auto-expand current week
+      const current = (data.weeklyHours ?? []).find((w: WeeklyHours) => w.isCurrent)
+      if (current && !expandedWeek) setExpandedWeek(current.start)
     }
     setLoading(false)
   }
@@ -123,7 +142,7 @@ export default function PayrollPage() {
       if (res.ok) {
         if (type === 'dm') showMsg('Timecards locked and submitted. SD has been notified.')
         else if (type === 'sr_approve') showMsg('Timecard approved.')
-        else if (type === 'final') showMsg('Payroll submitted. Owners have been notified.')
+        else if (type === 'final') showMsg('Payroll submitted to owner. Owner has been notified.')
         else if (type === 'owner_override') showMsg('Override applied. Payroll marked as approved.')
         await load()
       } else {
@@ -229,102 +248,190 @@ export default function PayrollPage() {
           <>
             {/* ── DM VIEW ── */}
             {role === 'manager' && (
-              <div className="space-y-4">
-                <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold">Pay Period Timecards</p>
+              <div className="space-y-6">
 
-                {!hasEmployees ? (
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                    <p className="text-gray-400 text-sm">No employees are assigned to you yet. Payroll submission will be available once employees are assigned.</p>
-                  </div>
-                ) : periods.length === 0 ? (
-                  <p className="text-gray-600 text-sm">No payroll periods found.</p>
-                ) : periods.map((period, idx) => {
-                  const myApproval = period.dmApprovals.find(a => a.dm_id === session.id)
-                  const isClosed = new Date(period.period_end + 'T23:59:59Z') < new Date()
+                {/* Weekly Timecards */}
+                {hasEmployees && weeklyHours.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Weekly Timecards</p>
+                    <div className="space-y-2">
+                      {weeklyHours.map(week => {
+                        const isExpanded = expandedWeek === week.start
+                        const totalHours = week.employees.reduce((s, e) => s + e.total_hours, 0)
+                        return (
+                          <div key={week.start} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                            <button
+                              onClick={() => setExpandedWeek(isExpanded ? null : week.start)}
+                              className="w-full flex items-center justify-between px-5 py-4 text-left"
+                            >
+                              <div className="flex items-center gap-3">
+                                <div>
+                                  <p className="font-semibold text-white text-sm">{fmtWeek(week.start, week.end)}</p>
+                                  <p className="text-xs text-gray-500 mt-0.5">
+                                    {week.employees.length} employee{week.employees.length !== 1 ? 's' : ''} · {totalHours.toFixed(1)}h total
+                                  </p>
+                                </div>
+                                {week.isCurrent && (
+                                  <span className="text-[10px] bg-cyan-900/30 border border-cyan-800/40 text-cyan-400 px-2 py-0.5 rounded-full font-semibold">
+                                    Live
+                                  </span>
+                                )}
+                              </div>
+                              <svg className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
 
-                  return (
-                    <div key={period.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                      <div className="flex items-start justify-between mb-4">
-                        <div>
-                          <p className="font-semibold text-white">{fmtPeriod(period.period_start, period.period_end)}</p>
-                          <p className="text-xs text-gray-500 mt-0.5">
-                            {myApproval ? 'Locked' : 'Open for submission'}
-                          </p>
-                        </div>
-                        <StatusBadge status={period.status} myApproval={!!myApproval} />
-                      </div>
-
-                      {/* Employee hours table — show for last closed period */}
-                      {isClosed && myHours.length > 0 && (
-                        <div className="mb-4">
-                          <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Your Team's Hours</p>
-                          <div className="bg-gray-800/60 rounded-xl overflow-hidden">
-                            <table className="w-full text-sm">
-                              <thead>
-                                <tr className="border-b border-gray-700">
-                                  <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Employee</th>
-                                  <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Reg</th>
-                                  <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">OT</th>
-                                  <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Total</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {myHours.map(emp => (
-                                  <tr key={emp.user_id} className="border-b border-gray-700/50 last:border-0">
-                                    <td className="px-3 py-2 text-gray-200">
-                                      <div className="flex items-center gap-2">
-                                        {emp.avatar_url
-                                          ? <img src={emp.avatar_url} alt={emp.full_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
-                                          : <div className="w-6 h-6 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{emp.full_name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}</div>
-                                        }
-                                        {emp.full_name}
-                                      </div>
-                                    </td>
-                                    <td className="px-3 py-2 text-right text-gray-300">{emp.regular_hours.toFixed(2)}</td>
-                                    <td className={`px-3 py-2 text-right font-medium ${emp.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
-                                      {emp.ot_hours.toFixed(2)}
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-semibold text-white">{emp.total_hours.toFixed(2)}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
+                            {isExpanded && (
+                              <div className="px-5 pb-4">
+                                {week.employees.length === 0 ? (
+                                  <p className="text-gray-600 text-sm">No hours recorded this week.</p>
+                                ) : (
+                                  <div className="bg-gray-800/60 rounded-xl overflow-hidden">
+                                    <table className="w-full text-sm">
+                                      <thead>
+                                        <tr className="border-b border-gray-700">
+                                          <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Employee</th>
+                                          <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Reg</th>
+                                          <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">OT</th>
+                                          <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {week.employees.map(emp => (
+                                          <tr key={emp.user_id} className="border-b border-gray-700/50 last:border-0">
+                                            <td className="px-3 py-2 text-gray-200">{emp.full_name}</td>
+                                            <td className="px-3 py-2 text-right text-gray-300">{emp.regular_hours.toFixed(2)}</td>
+                                            <td className={`px-3 py-2 text-right font-medium ${emp.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                                              {emp.ot_hours.toFixed(2)}
+                                            </td>
+                                            <td className="px-3 py-2 text-right font-semibold text-white">{emp.total_hours.toFixed(2)}</td>
+                                          </tr>
+                                        ))}
+                                        <tr className="border-t border-gray-600">
+                                          <td className="px-3 py-2 text-gray-400 font-semibold text-xs uppercase">Total</td>
+                                          <td className="px-3 py-2 text-right text-gray-300 font-semibold">
+                                            {week.employees.reduce((s, e) => s + e.regular_hours, 0).toFixed(2)}
+                                          </td>
+                                          <td className={`px-3 py-2 text-right font-semibold ${week.employees.some(e => e.ot_hours > 0) ? 'text-amber-400' : 'text-gray-500'}`}>
+                                            {week.employees.reduce((s, e) => s + e.ot_hours, 0).toFixed(2)}
+                                          </td>
+                                          <td className="px-3 py-2 text-right font-bold text-white">
+                                            {totalHours.toFixed(2)}
+                                          </td>
+                                        </tr>
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      )}
-
-                      {isClosed && myHours.length === 0 && !myApproval && (
-                        <p className="text-gray-600 text-sm mb-4">No employee hours found for this period.</p>
-                      )}
-
-                      {!myApproval && isClosed ? (
-                        <div className="space-y-3">
-                          <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">
-                            <p className="text-amber-300 text-xs font-medium">
-                              ⚠ Once submitted, timecards for this period are permanently locked and cannot be edited.
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => approve(period.id, 'dm')}
-                            disabled={approving === period.id + 'dm'}
-                            className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-                          >
-                            {approving === period.id + 'dm' ? 'Submitting…' : 'Lock & Submit Timecards'}
-                          </button>
-                        </div>
-                      ) : !myApproval && !isClosed ? (
-                        <p className="text-xs text-gray-500 italic">Period not yet closed — available for submission after {new Date(period.period_end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
-                      ) : (
-                        <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
-                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                          Submitted and locked · {fmtDatetime(myApproval!.approved_at)}
-                        </div>
-                      )}
+                        )
+                      })}
                     </div>
-                  )
-                })}
+                  </div>
+                )}
+
+                {/* Biweekly Pay Periods */}
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Pay Period Submission</p>
+                  <div className="space-y-4">
+                    {!hasEmployees ? (
+                      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+                        <p className="text-gray-400 text-sm">No employees are assigned to you yet. Payroll submission will be available once employees are assigned.</p>
+                      </div>
+                    ) : periods.length === 0 ? (
+                      <p className="text-gray-600 text-sm">No payroll periods found.</p>
+                    ) : periods.map(period => {
+                      const myApproval = period.dmApprovals.find(a => a.dm_id === session.id)
+                      const isClosed = new Date(period.period_end + 'T23:59:59Z') < new Date()
+
+                      return (
+                        <div key={period.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
+                          <div className="flex items-start justify-between mb-4">
+                            <div>
+                              <p className="font-semibold text-white">{fmtPeriod(period.period_start, period.period_end)}</p>
+                              <p className="text-xs text-gray-500 mt-0.5">
+                                {myApproval ? 'Locked' : 'Open for submission'}
+                              </p>
+                            </div>
+                            <StatusBadge status={period.status} myApproval={!!myApproval} />
+                          </div>
+
+                          {/* Employee hours table — show for last closed period */}
+                          {isClosed && myHours.length > 0 && (
+                            <div className="mb-4">
+                              <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Period Hours Summary</p>
+                              <div className="bg-gray-800/60 rounded-xl overflow-hidden">
+                                <table className="w-full text-sm">
+                                  <thead>
+                                    <tr className="border-b border-gray-700">
+                                      <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Employee</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Reg</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">OT</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {myHours.map(emp => (
+                                      <tr key={emp.user_id} className="border-b border-gray-700/50 last:border-0">
+                                        <td className="px-3 py-2 text-gray-200">
+                                          <div className="flex items-center gap-2">
+                                            {emp.avatar_url
+                                              ? <img src={emp.avatar_url} alt={emp.full_name} className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                                              : <div className="w-6 h-6 rounded-full bg-violet-800 flex items-center justify-center text-[8px] font-bold text-white flex-shrink-0">{emp.full_name.split(' ').map((n: string)=>n[0]).join('').slice(0,2).toUpperCase()}</div>
+                                            }
+                                            {emp.full_name}
+                                          </div>
+                                        </td>
+                                        <td className="px-3 py-2 text-right text-gray-300">{emp.regular_hours.toFixed(2)}</td>
+                                        <td className={`px-3 py-2 text-right font-medium ${emp.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                                          {emp.ot_hours.toFixed(2)}
+                                        </td>
+                                        <td className="px-3 py-2 text-right font-semibold text-white">{emp.total_hours.toFixed(2)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {isClosed && myHours.length === 0 && !myApproval && (
+                            <p className="text-gray-600 text-sm mb-4">No employee hours found for this period.</p>
+                          )}
+
+                          {!myApproval && isClosed ? (
+                            <div className="space-y-3">
+                              <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">
+                                <p className="text-amber-300 text-xs font-medium">
+                                  Review your team's hours above, then lock and submit. Once submitted, timecards are permanently locked.
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => approve(period.id, 'dm')}
+                                disabled={approving === period.id + 'dm'}
+                                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
+                              >
+                                {approving === period.id + 'dm' ? 'Submitting…' : 'Lock & Submit Timecards'}
+                              </button>
+                            </div>
+                          ) : !myApproval && !isClosed ? (
+                            <p className="text-xs text-gray-500 italic">Period closes {new Date(period.period_end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — submit your timecards after close.</p>
+                          ) : (
+                            <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                              Submitted and locked · {fmtDatetime(myApproval!.approved_at)}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
               </div>
             )}
 
@@ -338,7 +445,7 @@ export default function PayrollPage() {
                     <div>
                       <p className="text-red-400 text-sm font-semibold">Owner Override</p>
                       <p className="text-red-400/70 text-xs mt-1">
-                        This will bypass all DM and SR approval steps and immediately mark the period as approved.
+                        This will bypass all DM and SD approval steps and immediately mark the period as approved.
                       </p>
                     </div>
                     <button
@@ -379,21 +486,28 @@ export default function PayrollPage() {
                         canSr={canSrApprove(role)}
                       />
 
-                      {/* Final submit button */}
+                      {/* Submit to Owner button */}
                       {canSrApprove(role) &&
                         currentPeriod.status !== 'approved' &&
                         currentPeriod.totalDMs > 0 &&
                         currentPeriod.dmApprovals.length >= currentPeriod.totalDMs &&
                         currentPeriod.srApprovals.filter(a => a.approved_at).length >= currentPeriod.totalDMs && (
-                          <button
-                            onClick={() => approve(currentPeriod.id, 'final')}
-                            disabled={approving === currentPeriod.id + 'final'}
-                            className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
-                          >
-                            {approving === currentPeriod.id + 'final'
-                              ? 'Submitting…'
-                              : `Approve and Submit${orgName ? ` ${orgName}` : ''} Payroll`}
-                          </button>
+                          <div className="space-y-2">
+                            <div className="bg-green-900/20 border border-green-800/40 rounded-xl px-4 py-3">
+                              <p className="text-green-300 text-xs font-medium">
+                                All DMs submitted and approved. Ready to submit to owner for final processing.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => approve(currentPeriod.id, 'final')}
+                              disabled={approving === currentPeriod.id + 'final'}
+                              className="w-full py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-bold text-sm transition-colors"
+                            >
+                              {approving === currentPeriod.id + 'final'
+                                ? 'Submitting…'
+                                : `Submit to Owner — ${orgName || 'Payroll'}`}
+                            </button>
+                          </div>
                         )}
 
                       {currentPeriod.status === 'approved' && currentPeriod.final_submitted_at && (
@@ -401,7 +515,7 @@ export default function PayrollPage() {
                           <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                           </svg>
-                          Approved &amp; submitted · {fmtDatetime(currentPeriod.final_submitted_at)}
+                          Submitted to owner · {fmtDatetime(currentPeriod.final_submitted_at)}
                           {currentPeriod.final_submitter_name && ` by ${currentPeriod.final_submitter_name}`}
                         </div>
                       )}
@@ -427,7 +541,7 @@ export default function PayrollPage() {
                           </div>
                           {period.final_submitter_name && period.final_submitted_at && (
                             <p className="text-xs text-gray-500 mt-2">
-                              Finalized by {period.final_submitter_name} · {fmtDatetime(period.final_submitted_at)}
+                              Submitted to owner by {period.final_submitter_name} · {fmtDatetime(period.final_submitted_at)}
                             </p>
                           )}
                         </div>
@@ -502,7 +616,6 @@ function DmReviewList({ period, session, downloadedDms, approving, onDownload, o
   const [downloading, setDownloading] = useState<string | null>(null)
 
   // Build a full list: submitted DMs from dmApprovals, all else as pending
-  // We show submitted DMs first, then any gap up to totalDMs as "pending"
   const submittedDmIds = new Set(period.dmApprovals.map(a => a.dm_id))
 
   return (
@@ -534,7 +647,7 @@ function DmReviewList({ period, session, downloadedDms, approving, onDownload, o
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
                 onClick={handleDownload}
                 disabled={downloading === dm.dm_id}
@@ -545,6 +658,19 @@ function DmReviewList({ period, session, downloadedDms, approving, onDownload, o
                 </svg>
                 {downloading === dm.dm_id ? 'Downloading…' : isDownloaded ? '✓ Downloaded' : 'Download Timecard'}
               </button>
+
+              {/* Edit Timecards link */}
+              {canSr && !isApproved && (
+                <a
+                  href={`/timecards?managerId=${dm.dm_id}&from=${period.period_start}&to=${period.period_end}`}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-xs font-medium transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Edit Timecards
+                </a>
+              )}
 
               {canSr && isDownloaded && !isApproved && (
                 <button

@@ -8,9 +8,9 @@ const pool = new Pool({
   // Queries that use Promise.all() still run in parallel up to this limit.
   // For higher concurrency, switch DATABASE_URL to Neon's pooler endpoint
   // (-pooler.neon.tech) which supports thousands of connections via PgBouncer.
-  max: 2,
-  connectionTimeoutMillis: 8000,
-  idleTimeoutMillis: 10000,
+  max: 3,
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
 })
 
 export async function query<T = Record<string, unknown>>(

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
-import { getReceiptViewUrl } from '@/lib/s3'
+import { getEmailPhotoUrl } from '@/lib/s3'
 import { sendEmail } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
@@ -47,6 +47,9 @@ async function ensureTable() {
   await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS aframe_photo_key TEXT`)
   await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS reconciliation_photo_key TEXT`)
   await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS reconciliation_photo_2_key TEXT`)
+  await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS voice_lines TEXT`)
+  await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS mim TEXT`)
+  await query(`ALTER TABLE checklist_submissions ADD COLUMN IF NOT EXISTS home_internet TEXT`)
 }
 
 function buildEmailHtml(params: {
@@ -58,6 +61,9 @@ function buildEmailHtml(params: {
   photoUrl?: string | null
   salesFloorPhotoUrl?: string | null
   cashDrawerPhotoUrl?: string | null
+  voiceLines?: string | null
+  mim?: string | null
+  homeInternet?: string | null
   comment?: string | null
 }): string {
   const { storeAddress, typeLabel, submittedByName, submittedAt, items, photoUrl, salesFloorPhotoUrl, cashDrawerPhotoUrl } = params
@@ -117,6 +123,7 @@ function buildEmailHtml(params: {
 
         ${photoHtml}
         ${closingPhotosHtml}
+        ${(params.voiceLines || params.mim || params.homeInternet) ? `<div style="margin-top:20px;"><p style="font-weight:600;color:#374151;margin:0 0 8px;font-size:14px;">End of Day Numbers</p><table style="width:100%;border-collapse:collapse;">${params.voiceLines ? `<tr><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:13px;width:180px;">Voice Lines</td><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:14px;font-weight:600;">${params.voiceLines}</td></tr>` : ''}${params.mim ? `<tr><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:13px;">MIM (Magenta In Metro)</td><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:14px;font-weight:600;">${params.mim}</td></tr>` : ''}${params.homeInternet ? `<tr><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#6b7280;font-size:13px;">Home Internet</td><td style="padding:5px 12px;border-bottom:1px solid #f3f4f6;color:#111827;font-size:14px;font-weight:600;">${params.homeInternet}</td></tr>` : ''}</table></div>` : ''}
         ${params.comment ? `<div style="margin-top:20px;padding:14px 16px;background:#f9fafb;border-left:4px solid #7c3aed;border-radius:6px;"><p style="font-size:12px;font-weight:600;color:#6b7280;margin:0 0 4px;text-transform:uppercase;letter-spacing:.05em;">Comment</p><p style="font-size:14px;color:#374151;margin:0;">${params.comment}</p></div>` : ''}
 
         <p style="font-size:12px;color:#9ca3af;margin:20px 0 0;">
@@ -134,7 +141,7 @@ export async function POST(req: NextRequest) {
   try { await ensureTable() } catch { /* already exists */ }
 
   const body = await req.json()
-  const { checklistType, storeId, items, photoKey, inventoryPhoto2Key, posPhotoKey, aframePhotoKey, salesFloorPhotoKey, cashDrawerPhotoKey, reconciliationPhotoKey, reconciliationPhoto2Key, comment } = body
+  const { checklistType, storeId, items, photoKey, inventoryPhoto2Key, posPhotoKey, aframePhotoKey, salesFloorPhotoKey, cashDrawerPhotoKey, reconciliationPhotoKey, reconciliationPhoto2Key, voiceLines, mim, homeInternet, comment } = body
 
   if (!checklistType || !storeId || !Array.isArray(items)) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -170,7 +177,8 @@ export async function POST(req: NextRequest) {
     if (!dmRows.length) return NextResponse.json({ error: 'No DM assigned to your account' }, { status: 400 })
     dm = dmRows[0]
   } else if (session.role === 'manager') {
-    dm = { id: session.id, full_name: session.fullName, email: session.email }
+    const freshEmail = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+    dm = { id: session.id, full_name: session.fullName, email: freshEmail[0]?.email ?? session.email }
   } else {
     // ops_manager / owner / developer — use the store's assigned DM
     const dmRows = await query<{ id: string; full_name: string; email: string }>(
@@ -190,13 +198,13 @@ export async function POST(req: NextRequest) {
   let salesFloorPhotoUrl: string | null = null
   let cashDrawerPhotoUrl: string | null = null
   if (photoKey) {
-    try { photoUrl = await getReceiptViewUrl(photoKey) } catch { /* non-fatal */ }
+    try { photoUrl = await getEmailPhotoUrl(photoKey) } catch { /* non-fatal */ }
   }
   if (salesFloorPhotoKey) {
-    try { salesFloorPhotoUrl = await getReceiptViewUrl(salesFloorPhotoKey) } catch { /* non-fatal */ }
+    try { salesFloorPhotoUrl = await getEmailPhotoUrl(salesFloorPhotoKey) } catch { /* non-fatal */ }
   }
   if (cashDrawerPhotoKey) {
-    try { cashDrawerPhotoUrl = await getReceiptViewUrl(cashDrawerPhotoKey) } catch { /* non-fatal */ }
+    try { cashDrawerPhotoUrl = await getEmailPhotoUrl(cashDrawerPhotoKey) } catch { /* non-fatal */ }
   }
 
   // Insert submission — store S3 keys so URLs can be regenerated on demand
@@ -208,8 +216,8 @@ export async function POST(req: NextRequest) {
        inventory_photo_2_key, pos_photo_key, aframe_photo_key,
        sales_floor_photo_key, cash_drawer_photo_key,
        reconciliation_photo_key, reconciliation_photo_2_key,
-       items_completed, comment)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       items_completed, comment, voice_lines, mim, home_internet)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
      RETURNING id, submitted_at`,
     [
       session.org_id ?? null,
@@ -232,6 +240,9 @@ export async function POST(req: NextRequest) {
       reconciliationPhoto2Key ?? null,
       JSON.stringify(items),
       comment?.trim() || null,
+      voiceLines?.trim() || null,
+      mim?.trim() || null,
+      homeInternet?.trim() || null,
     ]
   )
 
@@ -258,6 +269,9 @@ export async function POST(req: NextRequest) {
         photoUrl: checklistType === 'opening' ? photoUrl : null,
         salesFloorPhotoUrl: checklistType === 'closing' ? salesFloorPhotoUrl : null,
         cashDrawerPhotoUrl: checklistType === 'closing' ? cashDrawerPhotoUrl : null,
+        voiceLines: checklistType === 'closing' ? (voiceLines?.trim() || null) : null,
+        mim: checklistType === 'closing' ? (mim?.trim() || null) : null,
+        homeInternet: checklistType === 'closing' ? (homeInternet?.trim() || null) : null,
         comment: comment?.trim() || null,
       })
     )
@@ -268,7 +282,7 @@ export async function POST(req: NextRequest) {
     `${typeLabel} Checklist Submitted`,
     `${store.address} — submitted by ${session.fullName}`,
     'checklist_submitted'
-  ).catch(() => {})
+  ).catch(e => console.error('Checklist push error:', e))
 
   return NextResponse.json({ ok: true, id: submission.id })
 }

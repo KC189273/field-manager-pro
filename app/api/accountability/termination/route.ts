@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
+import { sendEmail } from '@/lib/notifications'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 
 let ensured = false
@@ -169,6 +170,40 @@ export async function POST(req: NextRequest) {
       'Termination Request Submitted',
       `${session.fullName} has submitted a termination request for ${employee.full_name}. Awaiting SD approval.`,
       'accountability'
+    ).catch(() => {})
+  }
+
+  // Email all management so they don't miss it if push is not seen
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const management = await query<{ email: string; full_name: string }>(
+    `SELECT email, full_name FROM users
+     WHERE org_id = $1 AND is_active = TRUE
+       AND role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')
+       AND id != $2`,
+    [employee.org_id, session.id]
+  )
+  const emailHtml = `
+    <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+      <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Termination Request — Pending Approval</p>
+      </div>
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;font-weight:700;color:#991b1b;margin:0 0 16px;">A termination request has been submitted and requires Sales Director approval.</p>
+        <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
+          <tr><td style="padding:8px 0;font-size:13px;color:#6b7280;width:140px;">Employee</td><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">${employee.full_name}</td></tr>
+          <tr><td style="padding:8px 0;font-size:13px;color:#6b7280;">Submitted By</td><td style="padding:8px 0;font-size:14px;color:#374151;">${session.fullName}</td></tr>
+          <tr><td style="padding:8px 0;font-size:13px;color:#6b7280;vertical-align:top;">Reasons</td><td style="padding:8px 0;font-size:14px;color:#374151;">${reasons.trim()}</td></tr>
+        </table>
+        <a href="${appUrl}/accountability?tab=terminations" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;">Review Request</a>
+      </div>
+    </div>
+  `
+  for (const person of management) {
+    sendEmail(
+      person.email,
+      `Termination Request: ${employee.full_name} — Pending Approval`,
+      emailHtml
     ).catch(() => {})
   }
 

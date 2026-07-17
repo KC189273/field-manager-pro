@@ -3,7 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, taskCompletedHtml } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
-import { getReceiptViewUrl } from '@/lib/s3'
+import { getEmailPhotoUrl } from '@/lib/s3'
 
 const canAlwaysComplete = (role: string) => isOwner(role as never) || role === 'developer'
 
@@ -47,17 +47,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'A photo is required to complete this task.' }, { status: 400 })
   }
 
-  await query(
-    `INSERT INTO task_completions (task_id, completed_by, note, photo_key, photo_keys)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (task_id) DO UPDATE
-       SET completed_by = EXCLUDED.completed_by,
-           completed_at = NOW(),
-           note = EXCLUDED.note,
-           photo_key = EXCLUDED.photo_key,
-           photo_keys = EXCLUDED.photo_keys`,
-    [taskId, session.id, note || null, photoKey || null, photoKeys?.length ? photoKeys : []]
-  )
+  try {
+    await query(
+      `INSERT INTO task_completions (task_id, completed_by, note, photo_key, photo_keys)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (task_id) DO UPDATE
+         SET completed_by = EXCLUDED.completed_by,
+             completed_at = NOW(),
+             note = EXCLUDED.note,
+             photo_key = EXCLUDED.photo_key,
+             photo_keys = EXCLUDED.photo_keys`,
+      [taskId, session.id, note || null, photoKey || null, photoKeys?.length ? photoKeys : []]
+    )
+  } catch (err) {
+    console.error('Task completion DB error:', err, { taskId, userId: session.id, role: session.role })
+    return NextResponse.json({ error: 'Database error completing task.' }, { status: 500 })
+  }
 
   // Complete all sibling group tasks
   if (task?.group_task_id) {
@@ -92,7 +97,7 @@ export async function POST(req: NextRequest) {
       isEmailEnabled(task.created_by).then(async enabled => {
         if (!enabled) return
         const allKeys = [...(photoKeys ?? []), ...(photoKey && !photoKeys?.includes(photoKey) ? [photoKey] : [])].filter(Boolean) as string[]
-        const photoUrls = await Promise.all(allKeys.map(key => getReceiptViewUrl(key).catch(() => null)))
+        const photoUrls = await Promise.all(allKeys.map(key => getEmailPhotoUrl(key).catch(() => null)))
         const validUrls = photoUrls.filter(Boolean) as string[]
         return sendEmail(
           creator!.email,

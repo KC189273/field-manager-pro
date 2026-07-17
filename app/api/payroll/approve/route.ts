@@ -230,14 +230,14 @@ export async function POST(req: NextRequest) {
     for (const owner of owners) {
       sendEmail(
         owner.email,
-        `Payroll Approved – ${periodLabel}`,
+        `Payroll Submitted for Approval – ${periodLabel}`,
         emailBlock(
-          'Payroll has been approved and submitted',
-          'Payroll Approved',
+          'Payroll has been reviewed and submitted to you',
+          'Payroll Ready for Processing',
           `<p style="font-size:14px;color:#555;margin:0 0 8px;">Hi ${owner.full_name},</p>
-           <p style="font-size:14px;color:#555;margin:0 0 8px;">Payroll for <strong>${periodLabel}</strong> has been finalized and submitted by <strong>${session.fullName}</strong>.</p>
+           <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>${session.fullName}</strong> has reviewed and approved all DM timecards for <strong>${periodLabel}</strong> and submitted them to you for final processing.</p>
            <p style="font-size:14px;color:#555;margin:0;">You can download the ADP-ready payroll CSV from Field Manager Pro.</p>`,
-          'Download Payroll CSV',
+          'Review & Download Payroll',
           `${APP_URL}/payroll`
         )
       ).catch(() => {})

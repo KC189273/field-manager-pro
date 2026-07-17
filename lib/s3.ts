@@ -27,6 +27,12 @@ export async function getReceiptViewUrl(key: string): Promise<string> {
   return getSignedUrl(s3, cmd, { expiresIn: 3600 })
 }
 
+/** 7-day presigned URL — use this when embedding photos in emails */
+export async function getEmailPhotoUrl(key: string): Promise<string> {
+  const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key })
+  return getSignedUrl(s3, cmd, { expiresIn: 604800 })
+}
+
 /** Download an S3 object and return its contents as a Buffer. Returns null on failure. */
 export async function getS3ObjectBuffer(key: string): Promise<Buffer | null> {
   try {

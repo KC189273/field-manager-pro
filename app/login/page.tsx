@@ -47,6 +47,12 @@ export default function LoginPage() {
       }
       if (data.mustChangePassword) {
         window.location.href = '/change-password'
+      } else if (data.role === 'customer') {
+        window.location.href = '/book'
+      } else if (data.role === 'barber') {
+        window.location.href = '/barber-dashboard'
+      } else if (data.role === 'shop_owner') {
+        window.location.href = '/barber-dashboard'
       } else {
         window.location.href = '/dashboard'
       }
@@ -129,6 +135,13 @@ export default function LoginPage() {
         >
           Get started for your business →
         </button>
+
+        <a
+          href="/customer-signup"
+          className="block mt-2 w-full text-center bg-gray-900 border border-blue-700 hover:border-blue-500 text-blue-400 hover:text-blue-300 font-semibold rounded-xl py-3 text-sm transition-colors cursor-pointer"
+        >
+          I&apos;m a customer — book an appointment →
+        </a>
       </div>
     </div>
   )

@@ -8,16 +8,16 @@ export async function POST() {
   const session = await getSession()
   if (!session) return NextResponse.json({ ok: false }, { status: 401 })
 
-  // Re-read current role and org from DB in case an admin changed them
-  const user = await queryOne<{ role: string; org_id: string | null }>(
-    `SELECT role, org_id FROM users WHERE id = $1 AND is_active = TRUE`,
+  // Re-read current role, org, email, and name from DB in case an admin changed them
+  const user = await queryOne<{ role: string; org_id: string | null; email: string; full_name: string }>(
+    `SELECT role, org_id, email, full_name FROM users WHERE id = $1 AND is_active = TRUE`,
     [session.id]
   )
 
   // If user was deactivated, invalidate their session
   if (!user) return NextResponse.json({ ok: false }, { status: 401 })
 
-  const updated = { ...session, role: user.role as typeof session.role, org_id: user.org_id }
+  const updated = { ...session, role: user.role as typeof session.role, org_id: user.org_id, email: user.email, fullName: user.full_name }
   const token = await createSession(updated)
   await setSessionCookie(token)
 

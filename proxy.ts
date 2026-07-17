@@ -11,11 +11,17 @@ const PUBLIC_PATHS = [
   '/terms',
   '/delete-account',
   '/ack/',
+  '/customer-signup',
+  '/download',
+  '/respond',
   '/api/auth/login',
   '/api/auth/forgot-password',
   '/api/auth/reset-password',
   '/api/get-started',
   '/api/ack/',
+  '/api/barbershop/lookup',
+  '/api/barbershop/respond',
+  '/api/barbershop/availability',
   '/service-analysis.pdf',
 ]
 
@@ -49,8 +55,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Redirect root to dashboard
+  // Redirect root based on role
   if (pathname === '/') {
+    if (session.role === 'customer') return NextResponse.redirect(new URL('/book', request.url))
+    if (session.role === 'barber' || session.role === 'shop_owner') return NextResponse.redirect(new URL('/barber-dashboard', request.url))
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

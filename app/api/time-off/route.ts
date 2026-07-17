@@ -70,13 +70,32 @@ export async function GET() {
     ORDER BY tor.created_at ASC
   `, [session.id])
 
-  const pendingApprovalsWithAvatars = await Promise.all(
-    (pendingApprovals as Record<string, unknown>[]).map(async p => ({
+  // Approved time-off for employees who currently report to this manager
+  // This ensures new DMs see approved PTO even if it was approved by the previous DM
+  const isManager = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const teamApproved = isManager ? await query(`
+    SELECT tor.id, tor.start_date::text, tor.end_date::text, tor.reason,
+           tor.status, tor.notes, tor.created_at::text,
+           tor.partial_day, tor.partial_start_time::text, tor.partial_end_time::text,
+           u.full_name AS user_name, u.id AS user_id, u.avatar_key AS user_avatar_key,
+           a.full_name AS approver_name
+    FROM time_off_requests tor
+    JOIN users u ON u.id = tor.user_id
+    JOIN users a ON a.id = tor.approver_id
+    WHERE u.manager_id = $1 AND tor.status = 'approved' AND tor.end_date >= CURRENT_DATE
+    ORDER BY tor.start_date ASC
+  `, [session.id]) : []
+
+  const addAvatars = async (rows: Record<string, unknown>[]) =>
+    Promise.all(rows.map(async p => ({
       ...p,
       user_avatar_url: p.user_avatar_key ? await getReceiptViewUrl(p.user_avatar_key as string) : null,
-    }))
-  )
-  return NextResponse.json({ myRequests, pendingApprovals: pendingApprovalsWithAvatars })
+    })))
+
+  const pendingApprovalsWithAvatars = await addAvatars(pendingApprovals as Record<string, unknown>[])
+  const teamApprovedWithAvatars = await addAvatars(teamApproved as Record<string, unknown>[])
+
+  return NextResponse.json({ myRequests, pendingApprovals: pendingApprovalsWithAvatars, teamApproved: teamApprovedWithAvatars })
 }
 
 // POST /api/time-off — submit a new request
@@ -95,6 +114,29 @@ export async function POST(req: NextRequest) {
   }
   if (partialDay && (!partialStartTime || !partialEndTime)) {
     return NextResponse.json({ error: 'Start time and end time are required for partial day requests' }, { status: 400 })
+  }
+
+  // Block time-off requests if the employee is already scheduled on a published shift
+  // Week starts on Monday: DOW 0=Sun, so Mon = shift_date - ((DOW + 6) % 7)
+  const publishedConflicts = await query<{ shift_date: string }>(
+    `SELECT ss.shift_date::text
+     FROM scheduled_shifts ss
+     WHERE ss.employee_id = $1
+       AND ss.shift_date >= $2
+       AND ss.shift_date <= $3
+       AND EXISTS (
+         SELECT 1 FROM scheduled_shifts_publish ssp
+         WHERE ssp.store_location_id = ss.store_location_id
+           AND ssp.week_start = ss.shift_date - ((EXTRACT(DOW FROM ss.shift_date)::int + 6) % 7)
+       )
+     LIMIT 1`,
+    [session.id, startDate, endDate]
+  ).catch(() => [])
+
+  if (publishedConflicts.length > 0) {
+    return NextResponse.json({
+      error: 'You are already scheduled on one or more of the requested dates. Please use Shift Swaps to find coverage instead.',
+    }, { status: 400 })
   }
 
   // Find approver via manager_id chain

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
-import { getSession, isManager, isOwner } from '@/lib/auth'
+import { getSession, isManager, isOwner, createSession, setSessionCookie } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, welcomeEmailHtml } from '@/lib/notifications'
 import { sendPushToUsers } from '@/lib/apns'
@@ -40,16 +40,22 @@ export async function GET(req: NextRequest) {
   }
 
   try { await ensureApprovalColumn() } catch {}
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
 
   const orgFilter = await getOrgFilter(session)
   const withPeers = new URL(req.url).searchParams.get('withPeers') === 'true'
+  const hiddenFilter = session.role === 'developer' ? '' : ' AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)'
+  const hiddenFilterNoAlias = session.role === 'developer' ? '' : ' AND (is_hidden = FALSE OR is_hidden IS NULL)'
+
+  const userCols = 'u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab, u.is_hidden'
+  const userColsNoAlias = 'id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab, is_hidden'
 
   if (session.role === 'developer') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
-       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
+      `SELECT ${userCols}
+       FROM users u WHERE 1=1${orgClause}${hiddenFilter} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
     return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
@@ -59,8 +65,8 @@ export async function GET(req: NextRequest) {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
-      `SELECT u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab
-       FROM users u WHERE 1=1${orgClause} ORDER BY u.role, u.full_name LIMIT 500`,
+      `SELECT ${userCols}
+       FROM users u WHERE 1=1${orgClause}${hiddenFilter} ORDER BY u.role, u.full_name LIMIT 500`,
       params
     )
     return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
@@ -68,16 +74,16 @@ export async function GET(req: NextRequest) {
 
   // Manager: their employees + peer DMs if withPeers=true + org-wide floaters for scheduling
   const employees = await query(
-    `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
-     FROM users WHERE manager_id = $1 AND role = 'employee' ORDER BY full_name`,
+    `SELECT ${userColsNoAlias}
+     FROM users WHERE manager_id = $1 AND role = 'employee'${hiddenFilterNoAlias} ORDER BY full_name`,
     [session.id]
   )
 
   let peers: Record<string, unknown>[] = []
   if (withPeers && session.org_id) {
     peers = await query(
-      `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
-       FROM users WHERE role = 'manager' AND org_id = $1 AND id != $2 AND is_active = TRUE ORDER BY full_name`,
+      `SELECT ${userColsNoAlias}
+       FROM users WHERE role = 'manager' AND org_id = $1 AND id != $2 AND is_active = TRUE${hiddenFilterNoAlias} ORDER BY full_name`,
       [session.org_id, session.id]
     )
   }
@@ -86,8 +92,8 @@ export async function GET(req: NextRequest) {
   let orgFloaters: Record<string, unknown>[] = []
   if (session.org_id) {
     orgFloaters = await query(
-      `SELECT id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab
-       FROM users WHERE is_floater = TRUE AND role = 'employee' AND is_active = TRUE
+      `SELECT ${userColsNoAlias}
+       FROM users WHERE is_floater = TRUE AND role = 'employee' AND is_active = TRUE${hiddenFilterNoAlias}
          AND org_id = $1 AND (manager_id IS NULL OR manager_id != $2)
        ORDER BY full_name`,
       [session.org_id, session.id]
@@ -199,7 +205,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab } = await req.json()
+  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab, isHidden } = await req.json()
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -250,11 +256,33 @@ export async function PATCH(req: NextRequest) {
   if (payType !== undefined && (payType === 'salary' || payType === 'hourly')) {
     await query(`UPDATE users SET pay_type = $1 WHERE id = $2`, [payType, userId])
   }
+  if (isHidden !== undefined && session.role === 'developer') {
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
+    await query(`UPDATE users SET is_hidden = $1 WHERE id = $2`, [!!isHidden, userId])
+  }
   if (isFloater !== undefined) {
     await query(`UPDATE users SET is_floater = $1 WHERE id = $2`, [!!isFloater, userId])
   }
   if (isOpsCollab !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_manager')) {
     await query(`UPDATE users SET is_ops_collab = $1 WHERE id = $2`, [!!isOpsCollab, userId])
+  }
+
+  // If the updated user is the currently logged-in user, refresh the session
+  // so email/name changes take effect immediately without requiring a logout
+  if (userId === session.id && (email || fullName || role)) {
+    const fresh = await queryOne<{ role: string; org_id: string | null; email: string; full_name: string }>(
+      `SELECT role, org_id, email, full_name FROM users WHERE id = $1`, [session.id]
+    )
+    if (fresh) {
+      const token = await createSession({
+        ...session,
+        role: fresh.role as typeof session.role,
+        org_id: fresh.org_id,
+        email: fresh.email,
+        fullName: fresh.full_name,
+      })
+      await setSessionCookie(token)
+    }
   }
 
   return NextResponse.json({ ok: true })

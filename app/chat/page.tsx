@@ -1664,6 +1664,22 @@ export default function ChatPage() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          <button
+            className="absolute top-6 left-4 text-white/60 hover:text-white"
+            onClick={async e => {
+              e.stopPropagation()
+              const blob = await fetch(lightboxUrl).then(r => r.blob())
+              const a = document.createElement('a')
+              a.href = URL.createObjectURL(blob)
+              a.download = 'photo.jpg'
+              a.click()
+              URL.revokeObjectURL(a.href)
+            }}
+          >
+            <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
         </div>
       )}
 

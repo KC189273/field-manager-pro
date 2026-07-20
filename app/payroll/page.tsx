@@ -27,6 +27,12 @@ interface SrApproval {
   sr_name: string | null
 }
 
+interface DmTimeApproval {
+  dm_id: string
+  approved_by_name: string
+  approved_at: string
+}
+
 interface Period {
   id: string
   period_start: string
@@ -37,6 +43,7 @@ interface Period {
   final_submitter_name: string | null
   dmApprovals: DmApproval[]
   srApprovals: SrApproval[]
+  dmTimeApprovals: DmTimeApproval[]
   totalDMs: number
 }
 
@@ -91,6 +98,9 @@ export default function PayrollPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [expandedWeek, setExpandedWeek] = useState<string | null>(null)
 
+  const [allDms, setAllDms] = useState<{ id: string; full_name: string; employee_count: number }[]>([])
+  const [dmHours, setDmHours] = useState<EmployeeHours[]>([])
+
   const [from, setFrom] = useState(() => {
     const d = new Date()
     d.setDate(d.getDate() - 13)
@@ -117,6 +127,8 @@ export default function PayrollPage() {
       setHasEmployees(data.hasEmployees ?? false)
       setOrgName(data.orgName ?? '')
       setPayrollLaunchDate(data.payrollLaunchDate ?? null)
+      setAllDms(data.allDms ?? [])
+      setDmHours(data.dmHours ?? [])
       // Auto-expand current week
       const current = (data.weeklyHours ?? []).find((w: WeeklyHours) => w.isCurrent)
       if (current && !expandedWeek) setExpandedWeek(current.start)
@@ -201,7 +213,12 @@ export default function PayrollPage() {
   }
 
   const role = session.role
-  const currentPeriod = periods[0] ?? null
+  // Show the most recent closed period that isn't fully approved yet;
+  // once all closed periods are approved, advance to the current open period
+  const now = new Date()
+  const closedPeriods = periods.filter(p => new Date(p.period_end + 'T23:59:59') < now)
+  const unapprovedClosed = closedPeriods.find(p => p.status !== 'approved')
+  const currentPeriod = unapprovedClosed ?? periods[0] ?? null
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24 pt-14">
@@ -523,12 +540,131 @@ export default function PayrollPage() {
                   </div>
                 )}
 
+                {/* DM Approval Status */}
+                {currentPeriod && allDms.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">DM Approval Status</p>
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-700">
+                            <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">DM</th>
+                            <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">Emps</th>
+                            <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allDms.map(dm => {
+                            const dmApproval = currentPeriod.dmApprovals.find(a => a.dm_id === dm.id)
+                            const srApproval = currentPeriod.srApprovals.find(a => a.dm_id === dm.id)
+                            const isApproved = !!srApproval?.approved_at
+                            const isSubmitted = !!dmApproval
+
+                            return (
+                              <tr key={dm.id} className="border-b border-gray-700/50 last:border-0">
+                                <td className="px-4 py-3 text-white font-medium">{dm.full_name}</td>
+                                <td className="px-3 py-3 text-center text-gray-400">{dm.employee_count}</td>
+                                <td className="px-3 py-3 text-center">
+                                  {isApproved ? (
+                                    <span className="inline-flex items-center gap-1 text-[11px] bg-green-900/30 border border-green-800/40 text-green-400 px-2.5 py-1 rounded-full font-semibold">
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Approved
+                                    </span>
+                                  ) : isSubmitted ? (
+                                    <span className="text-[11px] bg-blue-900/30 border border-blue-800/40 text-blue-400 px-2.5 py-1 rounded-full font-semibold">
+                                      Submitted
+                                    </span>
+                                  ) : (
+                                    <span className="text-[11px] bg-amber-900/30 border border-amber-800/40 text-amber-400 px-2.5 py-1 rounded-full font-semibold">
+                                      Not Submitted
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="px-4 py-2.5 bg-gray-800/40 border-t border-gray-700/50">
+                        <p className="text-xs text-gray-500">
+                          {currentPeriod.dmApprovals.length}/{allDms.length} submitted · {currentPeriod.srApprovals.filter(a => a.approved_at).length}/{allDms.length} approved
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* DM Timecards — hourly DMs */}
+                {currentPeriod && dmHours.length > 0 && (
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">DM Timecards</p>
+                    <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-gray-700">
+                            <th className="text-left px-4 py-3 text-xs text-gray-400 font-medium">DM</th>
+                            <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Reg</th>
+                            <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">OT</th>
+                            <th className="text-right px-3 py-3 text-xs text-gray-400 font-medium">Total</th>
+                            <th className="text-center px-3 py-3 text-xs text-gray-400 font-medium">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dmHours.map(dm => {
+                            const timeApproval = currentPeriod.dmTimeApprovals?.find(a => a.dm_id === dm.user_id)
+                            const isApproved = !!timeApproval
+                            const approvingKey = currentPeriod.id + 'dm_time_approve' + dm.user_id
+
+                            return (
+                              <tr key={dm.user_id} className="border-b border-gray-700/50 last:border-0">
+                                <td className="px-4 py-3 text-white font-medium">{dm.full_name}</td>
+                                <td className="px-3 py-3 text-right text-gray-300">{dm.regular_hours.toFixed(2)}</td>
+                                <td className={`px-3 py-3 text-right font-medium ${dm.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
+                                  {dm.ot_hours.toFixed(2)}
+                                </td>
+                                <td className="px-3 py-3 text-right font-semibold text-white">{dm.total_hours.toFixed(2)}</td>
+                                <td className="px-3 py-3 text-center">
+                                  {isApproved ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] bg-green-900/30 border border-green-800/40 text-green-400 px-2 py-0.5 rounded-full font-semibold">
+                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                      </svg>
+                                      Approved
+                                    </span>
+                                  ) : (
+                                    <button
+                                      onClick={() => approve(currentPeriod.id, 'dm_time_approve', dm.user_id)}
+                                      disabled={approving === approvingKey}
+                                      className="text-[11px] bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white px-3 py-1 rounded-full font-semibold transition-colors"
+                                    >
+                                      {approving === approvingKey ? 'Approving…' : 'Approve'}
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                      <div className="px-4 py-2.5 bg-gray-800/40 border-t border-gray-700/50">
+                        <p className="text-xs text-gray-500">
+                          {currentPeriod.dmTimeApprovals?.filter(a => dmHours.some(d => d.user_id === a.dm_id)).length ?? 0}/{dmHours.length} DM timecards approved
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Past periods */}
-                {periods.length > 1 && (
+                {(() => {
+                  const pastPeriods = closedPeriods.filter(p => p.id !== currentPeriod?.id)
+                  return pastPeriods.length > 0 ? (
                   <div>
                     <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-3">Past Periods</p>
                     <div className="space-y-3">
-                      {periods.slice(1).map(period => (
+                      {pastPeriods.map(period => (
                         <div key={period.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                           <div className="flex items-start justify-between">
                             <div>
@@ -548,7 +684,8 @@ export default function PayrollPage() {
                       ))}
                     </div>
                   </div>
-                )}
+                  ) : null
+                })()}
 
                 {/* ADP CSV Download */}
                 {canDownload(role) && (

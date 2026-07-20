@@ -66,7 +66,8 @@ async function getOrgId(session: { role: string; id: string; org_id?: string | n
   // For developer, respect the fmp-dev-org cookie set by the org switcher
   if (session.role === 'developer') {
     const { orgId } = await getOrgFilter(session as Parameters<typeof getOrgFilter>[0])
-    return orgId
+    if (orgId) return orgId
+    // Fall back to developer's own org_id if cookie not set
   }
   if (session.org_id) return session.org_id
   const row = await queryOne<{ org_id: string | null }>('SELECT org_id FROM users WHERE id = $1', [session.id])
@@ -292,10 +293,76 @@ export async function GET(_req: NextRequest) {
     }
   }
 
+  // For SD/owner/developer: list all DMs with their approval status for the current period
+  let allDms: { id: string; full_name: string; employee_count: number }[] = []
+  if (session.role !== 'manager') {
+    allDms = await query<{ id: string; full_name: string; employee_count: number }>(`
+      SELECT u.id, u.full_name,
+        (SELECT COUNT(*)::int FROM users e WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE) AS employee_count
+      FROM users u
+      WHERE u.org_id = $1 AND u.role = 'manager' AND u.is_active = TRUE
+        AND EXISTS (
+          SELECT 1 FROM users e
+          WHERE e.manager_id = u.id AND e.role = 'employee' AND e.is_active = TRUE
+        )
+      ORDER BY u.full_name
+    `, [orgId])
+  }
+
+  // DM hours for SD/owner/developer view
+  let dmHours: { user_id: string; full_name: string; regular_hours: number; ot_hours: number; total_hours: number }[] = []
+  let dmTimeApprovals: { period_id: string; dm_id: string; approved_by_name: string; approved_at: string }[] = []
+  if (session.role !== 'manager' && biWeeklyPeriods.length > 0) {
+    // Get DM hours for the most recent closed period
+    const closedPeriod = biWeeklyPeriods.find(p => new Date(p.end + 'T23:59:59') < new Date())
+    if (closedPeriod) {
+      dmHours = await query<{ user_id: string; full_name: string; regular_hours: number; ot_hours: number; total_hours: number }>(`
+        WITH weekly_hours AS (
+          SELECT
+            s.user_id,
+            u.full_name,
+            DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $4)::date AS week_start,
+            SUM(
+              EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
+              - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
+            ) AS total_hours
+          FROM shifts s
+          JOIN users u ON u.id = s.user_id
+          WHERE s.clock_out_at IS NOT NULL
+            AND (s.clock_in_at AT TIME ZONE $4)::date >= $1::date
+            AND (s.clock_in_at AT TIME ZONE $4)::date <= $2::date
+            AND u.org_id = $3
+            AND u.role = 'manager'
+            AND u.is_active = TRUE
+          GROUP BY s.user_id, u.full_name, week_start
+        )
+        SELECT
+          user_id, full_name,
+          ROUND(SUM(LEAST(total_hours, 40))::numeric, 2)::float AS regular_hours,
+          ROUND(SUM(GREATEST(total_hours - 40, 0))::numeric, 2)::float AS ot_hours,
+          ROUND(SUM(total_hours)::numeric, 2)::float AS total_hours
+        FROM weekly_hours
+        GROUP BY user_id, full_name
+        ORDER BY full_name
+      `, [closedPeriod.start, closedPeriod.end, orgId, CST])
+    }
+
+    // Get DM time approval status for all periods
+    if (periodIds.length > 0) {
+      dmTimeApprovals = await query<{ period_id: string; dm_id: string; approved_by_name: string; approved_at: string }>(`
+        SELECT dta.period_id, dta.dm_id, u.full_name AS approved_by_name, dta.approved_at::text
+        FROM payroll_dm_time_approvals dta
+        JOIN users u ON u.id = dta.approved_by
+        WHERE dta.period_id = ANY($1)
+      `, [periodIds])
+    }
+  }
+
   const enrichedPeriods = periods.map(p => ({
     ...p,
     dmApprovals: dmApprovals.filter(a => a.period_id === p.id),
     srApprovals: srApprovals.filter(a => a.period_id === p.id),
+    dmTimeApprovals: dmTimeApprovals.filter(a => a.period_id === p.id),
     totalDMs,
   }))
 
@@ -308,5 +375,7 @@ export async function GET(_req: NextRequest) {
     userId: session.id,
     orgName,
     payrollLaunchDate,
+    allDms,
+    dmHours,
   })
 }

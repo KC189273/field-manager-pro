@@ -114,8 +114,13 @@ export async function POST(req: NextRequest) {
   const { userId, clockIn, clockOut, note } = await req.json()
   if (!userId || !clockIn || !note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
 
+  // DMs cannot add manual entries for themselves
+  if (session.role === 'manager' && userId === session.id) {
+    return NextResponse.json({ error: 'DMs cannot adjust their own timecards. Please contact your Sales Director to make changes.' }, { status: 403 })
+  }
+
   // Timecard locking check (owners and developers can always add entries)
-  if (!['owner', 'developer'].includes(session.role)) {
+  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
     const clockInDate = new Date(clockIn).toISOString().split('T')[0]
     if (await isTimecardLocked(userId, clockInDate)) {
       return NextResponse.json({ error: 'Timecards for this period are locked — use Payroll Adjustment expense instead' }, { status: 403 })
@@ -189,8 +194,16 @@ export async function PATCH(req: NextRequest) {
   if (!canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   if (!note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
 
-  // Timecard locking check (owners and developers can always correct)
-  if (!['owner', 'developer'].includes(session.role)) {
+  // DMs cannot edit their own shifts — must contact SD
+  if (session.role === 'manager') {
+    const ownShift = await queryOne<{ user_id: string }>('SELECT user_id FROM shifts WHERE id = $1', [shiftId])
+    if (ownShift?.user_id === session.id) {
+      return NextResponse.json({ error: 'DMs cannot adjust their own timecards. Please contact your Sales Director to make changes.' }, { status: 403 })
+    }
+  }
+
+  // Timecard locking check (owners, SD, and developers can always correct)
+  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
     const shiftRecord = await queryOne<{ user_id: string; clock_in_at: string }>('SELECT user_id, clock_in_at FROM shifts WHERE id = $1', [shiftId])
     if (shiftRecord) {
       const shiftDate = new Date(shiftRecord.clock_in_at).toISOString().split('T')[0]
@@ -257,8 +270,11 @@ export async function DELETE(req: NextRequest) {
   )
   if (!shiftRecord) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
 
-  // DMs can only delete shifts for their direct reports
+  // DMs cannot delete their own shifts; can only delete shifts for their direct reports
   if (session.role === 'manager') {
+    if (shiftRecord.user_id === session.id) {
+      return NextResponse.json({ error: 'DMs cannot adjust their own timecards. Please contact your Sales Director to make changes.' }, { status: 403 })
+    }
     const employee = await queryOne<{ manager_id: string | null }>(
       'SELECT manager_id FROM users WHERE id = $1', [shiftRecord.user_id]
     )
@@ -266,7 +282,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   // Timecard locking check (owners and developers bypass)
-  if (!['owner', 'developer'].includes(session.role)) {
+  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
     const shiftDate = new Date(shiftRecord.clock_in_at).toISOString().split('T')[0]
     if (await isTimecardLocked(shiftRecord.user_id, shiftDate)) {
       return NextResponse.json({ error: 'Timecards for this period are locked' }, { status: 403 })

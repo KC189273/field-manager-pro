@@ -235,6 +235,50 @@ export default function ChatPage() {
   const [mutedBy, setMutedBy] = useState<string[]>([])
   const [togglingMute, setTogglingMute] = useState(false)
 
+  // Members management
+  const [showMembers, setShowMembers] = useState(false)
+  const [groupMembers, setGroupMembers] = useState<{ user_id: string; full_name: string; role: string }[]>([])
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [addMemberSearch, setAddMemberSearch] = useState('')
+  const [addingMember, setAddingMember] = useState<string | null>(null)
+  const [removingMember, setRemovingMember] = useState<string | null>(null)
+
+  async function loadGroupMembers(convId: string) {
+    const res = await fetch(`/api/chat/conversations/${convId}/members`)
+    if (res.ok) {
+      const d = await res.json()
+      setGroupMembers(d.members ?? [])
+    }
+  }
+
+  async function addMember(convId: string, userId: string) {
+    setAddingMember(userId)
+    const res = await fetch(`/api/chat/conversations/${convId}/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userIds: [userId] }),
+    })
+    if (res.ok) {
+      await loadGroupMembers(convId)
+      loadConversations()
+    }
+    setAddingMember(null)
+  }
+
+  async function removeMember(convId: string, userId: string) {
+    setRemovingMember(userId)
+    const res = await fetch(`/api/chat/conversations/${convId}/members`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId }),
+    })
+    if (res.ok) {
+      await loadGroupMembers(convId)
+      loadConversations()
+    }
+    setRemovingMember(null)
+  }
+
   // Reply-to
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const pressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1095,6 +1139,24 @@ export default function ChatPage() {
               const prevMsgDate = prevMsg ? new Date(prevMsg.created_at).toDateString() : null
               const showDateHeader = msgDate !== prevMsgDate
 
+              // System messages (member added/removed)
+              if (msg.type === 'system') {
+                return (
+                  <div key={msg.id}>
+                    {showDateHeader && (
+                      <div className="flex items-center gap-3 my-4">
+                        <div className="flex-1 h-px bg-gray-800" />
+                        <span className="text-[11px] text-gray-500 font-medium">{fmtDateHeader(msg.created_at)}</span>
+                        <div className="flex-1 h-px bg-gray-800" />
+                      </div>
+                    )}
+                    <div className="flex justify-center my-2">
+                      <span className="text-[11px] text-gray-500 bg-gray-800/50 px-3 py-1 rounded-full">{msg.body}</span>
+                    </div>
+                  </div>
+                )
+              }
+
               return (
                 <div
                   key={msg.id}
@@ -1688,10 +1750,10 @@ export default function ChatPage() {
         <div
           className="fixed inset-0 z-50 flex flex-col justify-end"
           style={{ background: 'rgba(0,0,0,0.7)' }}
-          onClick={() => setShowInfo(false)}
+          onClick={() => { setShowInfo(false); setShowMembers(false); setShowAddMember(false) }}
         >
           <div
-            className="bg-gray-900 rounded-t-2xl"
+            className="bg-gray-900 rounded-t-2xl max-h-[80vh] overflow-y-auto"
             onClick={e => e.stopPropagation()}
           >
             <div className="flex justify-center pt-3 pb-1">
@@ -1699,13 +1761,14 @@ export default function ChatPage() {
             </div>
             <div className="px-5 py-3 border-b border-gray-800 flex items-center justify-between">
               <p className="text-white font-bold text-base truncate">{convName}</p>
-              <button onClick={() => setShowInfo(false)} className="text-gray-500 hover:text-gray-300 flex-shrink-0">
+              <button onClick={() => { setShowInfo(false); setShowMembers(false); setShowAddMember(false) }} className="text-gray-500 hover:text-gray-300 flex-shrink-0">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             </div>
-            <div className="px-5 py-4">
+            <div className="px-5 py-4 space-y-3">
+              {/* Mute toggle */}
               <button
                 onClick={toggleMute}
                 disabled={togglingMute}
@@ -1737,6 +1800,123 @@ export default function ChatPage() {
                   <div className={`w-5 h-5 bg-white rounded-full mt-0.5 transition-transform ${isMuted ? 'translate-x-0.5' : 'translate-x-5'}`} />
                 </div>
               </button>
+
+              {/* Members section — group chats only */}
+              {activeConv?.type === 'group' && (
+                <button
+                  onClick={() => { setShowMembers(!showMembers); if (!showMembers && activeConv) loadGroupMembers(activeConv.id) }}
+                  className="w-full flex items-center justify-between bg-gray-800 hover:bg-gray-750 rounded-2xl px-4 py-3.5 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-white">Members</p>
+                      <p className="text-xs text-gray-500 mt-0.5">{activeConv.participant_names ? activeConv.participant_names.split(', ').length + 1 : 0} members</p>
+                    </div>
+                  </div>
+                  <svg className={`w-4 h-4 text-gray-500 transition-transform ${showMembers ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+              )}
+
+              {showMembers && activeConv?.type === 'group' && (
+                <div className="bg-gray-800/50 rounded-2xl overflow-hidden">
+                  {/* Add member button */}
+                  <button
+                    onClick={() => { setShowAddMember(!showAddMember); setAddMemberSearch(''); if (!chatUsers.length) fetch('/api/chat/users').then(r => r.json()).then(d => setChatUsers(d.users ?? [])) }}
+                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-700/50 transition-colors border-b border-gray-700/50"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-violet-600 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                      </svg>
+                    </div>
+                    <p className="text-sm font-medium text-violet-400">Add Member</p>
+                  </button>
+
+                  {/* Add member search */}
+                  {showAddMember && (
+                    <div className="border-b border-gray-700/50">
+                      <input
+                        value={addMemberSearch}
+                        onChange={e => setAddMemberSearch(e.target.value)}
+                        placeholder="Search by name…"
+                        autoFocus
+                        className="w-full bg-transparent px-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none"
+                      />
+                      <div className="max-h-48 overflow-y-auto">
+                        {chatUsers
+                          .filter(u => {
+                            const memberIds = new Set(groupMembers.map(m => m.user_id))
+                            return !memberIds.has(u.id) && u.full_name.toLowerCase().includes(addMemberSearch.toLowerCase())
+                          })
+                          .map(u => (
+                            <button
+                              key={u.id}
+                              onClick={() => addMember(activeConv.id, u.id)}
+                              disabled={addingMember === u.id}
+                              className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-gray-700/50 transition-colors"
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${avatarColor(u.full_name)}`}>
+                                  <span className="text-white text-[10px] font-bold">{initials(u.full_name)}</span>
+                                </div>
+                                <div className="text-left">
+                                  <p className="text-sm text-white">{u.full_name}</p>
+                                  <p className="text-[10px] text-gray-500">{roleLabel(u.role)}</p>
+                                </div>
+                              </div>
+                              {addingMember === u.id ? (
+                                <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                <svg className="w-4 h-4 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                                </svg>
+                              )}
+                            </button>
+                          ))}
+                        {chatUsers.filter(u => !new Set(groupMembers.map(m => m.user_id)).has(u.id) && u.full_name.toLowerCase().includes(addMemberSearch.toLowerCase())).length === 0 && (
+                          <p className="text-xs text-gray-600 text-center py-3">No users to add</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Current members list */}
+                  {groupMembers.map(m => (
+                    <div key={m.user_id} className="flex items-center justify-between px-4 py-2.5 border-b border-gray-700/30 last:border-0">
+                      <div className="flex items-center gap-2.5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${avatarColor(m.full_name)}`}>
+                          <span className="text-white text-[10px] font-bold">{initials(m.full_name)}</span>
+                        </div>
+                        <div>
+                          <p className="text-sm text-white font-medium">{m.full_name}</p>
+                          <p className="text-[10px] text-gray-500">{roleLabel(m.role)}</p>
+                        </div>
+                      </div>
+                      {m.user_id !== myId && (
+                        <button
+                          onClick={() => removeMember(activeConv.id, m.user_id)}
+                          disabled={removingMember === m.user_id}
+                          className="text-red-500 hover:text-red-400 p-1 transition-colors"
+                          title="Remove member"
+                        >
+                          {removingMember === m.user_id ? (
+                            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="h-6" />
           </div>

@@ -246,6 +246,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true })
   }
 
+  // ── DM Time Approve: SD approves a DM's personal hours ──
+  if (type === 'dm_time_approve') {
+    const allowed = ['sales_director', 'ops_manager', 'developer', 'owner'].includes(session.role)
+    if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (!dmId) return NextResponse.json({ error: 'dmId required' }, { status: 400 })
+
+    await queryOne(`
+      INSERT INTO payroll_dm_time_approvals (period_id, dm_id, approved_by)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (period_id, dm_id) DO UPDATE
+        SET approved_at = NOW(), approved_by = $3
+    `, [periodId, dmId, session.id])
+
+    return NextResponse.json({ ok: true })
+  }
+
   // ── Owner Override: bypass all steps ──
   if (type === 'owner_override') {
     const allowed = session.role === 'owner' || session.role === 'developer'

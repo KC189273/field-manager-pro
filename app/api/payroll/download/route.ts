@@ -67,6 +67,7 @@ export async function GET(req: NextRequest) {
     first_name: string
     username: string
     org_name: string | null
+    state: string | null
     regular_hours: number
     ot_hours: number
     total_hours: number
@@ -79,6 +80,10 @@ export async function GET(req: NextRequest) {
         u.org_id,
         u.manager_id,
         o.name AS org_name,
+        UPPER(TRIM(REGEXP_REPLACE(
+          COALESCE(dsl.address, dm_dsl.address),
+          '^.* ', ''
+        ))) AS state,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date AS week_start,
         SUM(
           EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
@@ -87,13 +92,19 @@ export async function GET(req: NextRequest) {
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN organizations o ON o.id = u.org_id
+      LEFT JOIN dm_store_locations dsl ON dsl.id = s.store_location_id
+      LEFT JOIN LATERAL (
+        SELECT dsl2.address FROM dm_manager_stores dms2
+        JOIN dm_store_locations dsl2 ON dsl2.id = dms2.store_location_id
+        WHERE dms2.manager_id = CASE WHEN u.role = 'manager' THEN u.id ELSE u.manager_id END LIMIT 1
+      ) dm_dsl ON s.store_location_id IS NULL
       WHERE s.clock_out_at IS NOT NULL
         AND (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
         AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
-        AND u.role = 'employee'
+        AND u.role IN ('employee', 'manager')
         ${orgFilter}
         ${dmFilter}
-      GROUP BY s.user_id, u.full_name, u.username, u.org_id, u.manager_id, o.name, week_start
+      GROUP BY s.user_id, u.full_name, u.username, u.org_id, u.manager_id, o.name, COALESCE(dsl.address, dm_dsl.address), week_start
     )
     SELECT
       user_id,
@@ -101,12 +112,13 @@ export async function GET(req: NextRequest) {
       TRIM(SPLIT_PART(full_name, ' ', 1)) AS first_name,
       username,
       org_name,
+      state,
       ROUND(SUM(LEAST(total_hours, 40))::numeric, 2)::float AS regular_hours,
       ROUND(SUM(GREATEST(total_hours - 40, 0))::numeric, 2)::float AS ot_hours,
       ROUND(SUM(total_hours)::numeric, 2)::float AS total_hours
     FROM weekly_hours
-    GROUP BY user_id, full_name, username, org_name
-    ORDER BY last_name, first_name
+    GROUP BY user_id, full_name, username, org_name, state
+    ORDER BY state, last_name, first_name
   `, [from, to, CST])
 
   if (rows.length === 0) {
@@ -130,6 +142,7 @@ export async function GET(req: NextRequest) {
   // ADP Workforce Now import format — headers must NOT be quoted
   const headers = [
     'Co Code', 'Batch ID', 'File #', 'First Name', 'Last Name',
+    'State',
     'Pay Period Begin Date', 'Pay Period End Date',
     'Reg Hours', 'O/T Hours',
   ]
@@ -142,6 +155,7 @@ export async function GET(req: NextRequest) {
       `"${r.username}"`,               // File # — ADP employee ID / badge number
       `"${r.first_name}"`,
       `"${r.last_name}"`,
+      `"${r.state ?? ''}"`,            // State from store location
       toAdpDate(from),                 // MM/DD/YYYY
       toAdpDate(to),                   // MM/DD/YYYY
       r.regular_hours.toFixed(2),

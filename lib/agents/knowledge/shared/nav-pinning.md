@@ -1,3 +1,14 @@
+---
+sources:
+  - components/BottomNav.tsx
+features:
+  - tab-pinning
+  - more-menu
+permissions:
+  - "max 4 pins"
+  - "saved per device"
+verified: 2026-07-22
+---
 # Navigation Tab Pinning — "How do I customize my bottom tabs?"
 
 ## How to Pin Features to the Tab Bar

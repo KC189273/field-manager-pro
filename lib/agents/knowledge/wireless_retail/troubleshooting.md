@@ -1,3 +1,20 @@
+---
+sources:
+  - app/api/clock/in/route.ts
+  - app/api/clock/out/route.ts
+  - app/api/clock/break/route.ts
+  - app/api/shifts/route.ts
+  - app/api/time-off/route.ts
+  - app/api/shift-swaps/route.ts
+  - app/api/staff-schedule/publish/route.ts
+  - app/api/accountability/route.ts
+  - app/api/auth/login/route.ts
+  - components/BottomNav.tsx
+features:
+  - all-error-messages
+permissions:
+verified: 2026-07-22
+---
 # Troubleshooting — Wireless Retail
 
 ## Clock In / Clock Out

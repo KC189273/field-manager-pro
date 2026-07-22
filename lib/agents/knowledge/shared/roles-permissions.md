@@ -1,3 +1,15 @@
+---
+sources:
+  - lib/auth.ts
+  - components/BottomNav.tsx
+  - proxy.ts
+features:
+  - role-hierarchy
+  - feature-access-by-role
+permissions:
+  - "employee→manager→ops_manager→sales_director→owner→developer"
+verified: 2026-07-22
+---
 # Roles & Permissions
 
 ## Role Hierarchy (Wireless Retail)

@@ -1,3 +1,18 @@
+---
+sources:
+  - app/api/staff-schedule/publish/route.ts
+  - app/api/staff-schedule/copy/route.ts
+  - app/api/staff-schedule/route.ts
+features:
+  - schedule-publish-blocks
+  - schedule-copy-blocks
+  - time-off-schedule-conflict
+permissions:
+  - "unassigned shifts block publish"
+  - "existing shifts block copy"
+  - "approved time-off blocks scheduling"
+verified: 2026-07-22
+---
 # Schedule Publishing — "Why can't I publish / copy the schedule?"
 
 ## Symptom: "Cannot publish: X shifts still need employees assigned"

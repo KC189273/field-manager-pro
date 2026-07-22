@@ -1,3 +1,24 @@
+---
+sources:
+  - app/api/auth/login/route.ts
+  - app/api/auth/change-password/route.ts
+  - app/api/auth/forgot-password/route.ts
+  - app/api/auth/reset-password/route.ts
+  - app/api/team/users/avatar/route.ts
+  - app/settings/page.tsx
+  - app/login/page.tsx
+features:
+  - login
+  - password-change
+  - password-reset
+  - avatar-upload
+  - first-login-redirect
+permissions:
+  - "all roles"
+  - "must_change_password forces redirect"
+  - "reset link expires 1 hour"
+verified: 2026-07-22
+---
 # Account Settings
 
 ## How do I change my password?

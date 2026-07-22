@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/barbershop/services/route.ts
+features:
+  - barber-services
+  - service-pricing
+  - active-inactive-toggle
+permissions:
+  - "barbers edit own"
+  - "shop owners edit any"
+  - "no reorder UI"
+verified: 2026-07-22
+---
 # Services
 
 ## How do I add a service?

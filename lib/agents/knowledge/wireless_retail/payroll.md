@@ -1,3 +1,23 @@
+---
+sources:
+  - app/api/payroll/route.ts
+  - app/api/payroll/approve/route.ts
+  - app/api/payroll/download/route.ts
+  - app/payroll/page.tsx
+features:
+  - payroll-submission
+  - dm-approval
+  - sr-approval
+  - owner-notification
+  - adp-csv-download
+  - dm-timecards
+permissions:
+  - "DMs submit team timecards"
+  - "SD reviews/approves each DM"
+  - "SD can edit after lock"
+  - "owner gets final notification"
+verified: 2026-07-22
+---
 # Payroll
 
 ## How does the payroll cycle work?

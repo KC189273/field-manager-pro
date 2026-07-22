@@ -1,3 +1,20 @@
+---
+sources:
+  - app/api/calendar/route.ts
+  - app/api/resources/route.ts
+  - app/calendar/page.tsx
+  - app/resources/page.tsx
+features:
+  - calendar
+  - recurring-events
+  - rsvp
+  - resources
+  - document-upload
+permissions:
+  - "calendar: manager+ access"
+  - "resources: all read, ops+ manage"
+verified: 2026-07-22
+---
 # Calendar & Resources
 
 ## Calendar

@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/dm-schedule/route.ts
+  - app/dm-schedule/page.tsx
+features:
+  - dm-schedule
+  - auto-save
+  - blur-save
+permissions:
+  - "DMs edit own"
+  - "SD/owner/dev view all"
+verified: 2026-07-22
+---
 # DM Schedule
 
 ## What is the DM Schedule?

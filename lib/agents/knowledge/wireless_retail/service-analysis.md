@@ -1,3 +1,12 @@
+---
+sources:
+  - app/service-analysis/page.tsx
+features:
+  - service-analysis-pdf
+permissions:
+  - "all retail roles"
+verified: 2026-07-22
+---
 # Service Analysis
 
 ## What is Service Analysis?

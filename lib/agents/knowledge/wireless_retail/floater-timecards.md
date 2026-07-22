@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/shifts/route.ts
+  - app/api/ot-watch/route.ts
+  - app/timecards/page.tsx
+features:
+  - floater-timecard-visibility
+  - ot-watch-floater-inclusion
+permissions:
+  - "timecards filtered by manager_id only"
+  - "OT watch includes floaters across all DMs"
+verified: 2026-07-22
+---
 # Floater Timecards — Why Can't I See a Floater's Timecard?
 
 ## The Short Answer

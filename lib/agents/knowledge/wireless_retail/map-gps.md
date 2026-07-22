@@ -1,3 +1,17 @@
+---
+sources:
+  - app/api/map/route.ts
+  - app/api/map/live/route.ts
+  - app/api/gps/breadcrumb/route.ts
+  - app/map/page.tsx
+features:
+  - live-map
+  - gps-breadcrumbs
+  - store-visit-detection
+permissions:
+  - "SD/owner/developer only"
+verified: 2026-07-22
+---
 # Live Map & GPS Tracking
 
 ## What is the Live Map?

@@ -1,3 +1,22 @@
+---
+sources:
+  - app/api/accountability/route.ts
+  - app/api/accountability/[id]/approve/route.ts
+  - app/api/accountability/[id]/reject/route.ts
+  - app/api/accountability/termination/route.ts
+  - app/accountability/page.tsx
+features:
+  - accountability-docs
+  - approval-chain
+  - termination
+  - acknowledgment
+permissions:
+  - "DMs/SD/owner/dev can author"
+  - "ops_manager view only"
+  - "employees receive only"
+  - "DMs can only doc direct reports"
+verified: 2026-07-22
+---
 # Accountability Documents
 
 ## What are accountability docs?

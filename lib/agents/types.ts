@@ -1,6 +1,6 @@
 export type Risk = 'low' | 'high'
 
-export type AgentKey = 'health' | 'onboarding' | 'support' | 'growth'
+export type AgentKey = 'health' | 'onboarding' | 'support' | 'growth' | 'docsync'
 
 export type TriggerType = 'cron' | 'event' | 'handoff' | 'manual'
 

@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/flags/route.ts
+  - app/flags/page.tsx
+  - app/api/clock/in/route.ts
+  - app/api/clock/out/route.ts
+features:
+  - flags
+  - late-clock-in-flag
+  - overtime-flag
+permissions:
+  - "manager+ view"
+  - "employees cannot see"
+  - "auto-created on late/OT"
+verified: 2026-07-22
+---
 # Flags
 
 ## What are flags?

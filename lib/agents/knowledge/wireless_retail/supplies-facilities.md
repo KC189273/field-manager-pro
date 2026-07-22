@@ -1,3 +1,22 @@
+---
+sources:
+  - app/api/supply-requests/route.ts
+  - app/api/facility-tickets/route.ts
+  - app/supply-requests/page.tsx
+  - app/facilities/page.tsx
+features:
+  - supply-requests
+  - facility-tickets
+  - auto-escalation
+  - photo-required-tickets
+permissions:
+  - "all retail roles submit"
+  - "DMs approve own team"
+  - "ops+ approve any"
+  - "facility photo required"
+  - "48h auto-escalation"
+verified: 2026-07-22
+---
 # Supply Requests & Facility Tickets
 
 ## Supply Requests

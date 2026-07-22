@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/clock/break/route.ts
+  - app/clock/page.tsx
+features:
+  - breaks
+  - break-start
+  - break-end
+permissions:
+  - "all retail roles can start/end own breaks"
+  - "managers+ can manually add/edit breaks"
+verified: 2026-07-22
+---
 # Breaks
 
 ## How do I start a break?

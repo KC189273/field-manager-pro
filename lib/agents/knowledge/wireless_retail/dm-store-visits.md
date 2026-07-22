@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/dm-store-visits/route.ts
+  - app/api/dm-store-visits/upload-url/route.ts
+  - app/api/dm-coaching-checklist/route.ts
+  - app/dm-visit/page.tsx
+features:
+  - dm-store-visits
+  - quick-visit
+  - coaching-checklist
+  - visit-photos
+permissions:
+  - "manager+ can submit"
+  - "SD+ view all visits"
+verified: 2026-07-22
+---
 # DM Store Visits
 
 ## What types of visits are there?

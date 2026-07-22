@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/barbershop/appointments/route.ts
+  - app/api/barbershop/services/route.ts
+  - app/api/barbershop/availability/route.ts
+  - app/api/barbershop/shop/route.ts
+  - app/api/barbershop/lookup/route.ts
+  - app/api/barbershop/respond/route.ts
+features:
+  - all-barbershop-errors
+permissions:
+verified: 2026-07-22
+---
 # Troubleshooting — Barbershop
 
 ## Booking Issues

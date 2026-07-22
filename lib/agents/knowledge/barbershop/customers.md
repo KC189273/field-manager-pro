@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/barbershop/customers/route.ts
+  - app/api/barbershop/customers/[id]/notes/route.ts
+  - app/my-customers/page.tsx
+  - app/customer-signup/page.tsx
+features:
+  - customer-management
+  - customer-notes
+  - customer-signup-flow
+permissions:
+  - "barber/shop_owner view"
+  - "customers self-signup only"
+  - "no manual customer creation"
+verified: 2026-07-22
+---
 # Customer Management
 
 ## How do customers sign up?

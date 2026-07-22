@@ -1,3 +1,20 @@
+---
+sources:
+  - app/api/accountability/[id]/route.ts
+  - app/api/accountability/[id]/approve/route.ts
+  - app/api/accountability/[id]/reject/route.ts
+  - app/api/accountability/[id]/conversation-complete/route.ts
+  - app/api/accountability/[id]/force-send/route.ts
+  - app/api/accountability/[id]/remind/route.ts
+features:
+  - accountability-status-transitions
+  - needs-revision
+  - rejection-notes
+permissions:
+  - "only original author can resubmit"
+  - "rejection notes required"
+verified: 2026-07-22
+---
 # Accountability Document States — "Why can't I send / approve this doc?"
 
 ## Symptom: "Document is not pending approval"

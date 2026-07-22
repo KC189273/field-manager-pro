@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/shifts/route.ts
+  - app/timecards/page.tsx
+features:
+  - timecards
+  - time-corrections
+  - edit-history
+  - dm-edit-activity
+permissions:
+  - "employees view own only"
+  - "DMs view/edit team but not own"
+  - "SD+ edit any including locked"
+  - "floaters filtered by manager_id"
+verified: 2026-07-22
+---
 # Timecards
 
 ## How do I view my hours?

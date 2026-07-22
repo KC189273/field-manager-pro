@@ -1,3 +1,26 @@
+---
+sources:
+  - app/api/chat/conversations/route.ts
+  - app/api/chat/conversations/[id]/messages/route.ts
+  - app/api/chat/conversations/[id]/members/route.ts
+  - app/api/chat/pin/route.ts
+  - app/api/chat/react/route.ts
+  - app/chat/page.tsx
+features:
+  - chat
+  - group-chat
+  - direct-messages
+  - reactions
+  - gifs
+  - pinning
+  - member-management
+  - mentions
+permissions:
+  - "manager+ only"
+  - "employees cannot access"
+  - "@mentions push even when muted"
+verified: 2026-07-22
+---
 # Chat / Messages
 
 ## Who can use chat?

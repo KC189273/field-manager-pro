@@ -1,3 +1,22 @@
+---
+sources:
+  - app/api/staff-schedule/route.ts
+  - app/api/staff-schedule/publish/route.ts
+  - app/api/staff-schedule/copy/route.ts
+  - app/api/my-schedule/route.ts
+  - app/staff-schedule/page.tsx
+  - app/my-schedule/page.tsx
+features:
+  - store-schedule
+  - my-schedule
+  - publish
+  - copy-week
+permissions:
+  - "employees see My Schedule only"
+  - "DMs build and publish"
+  - "SD+ view all"
+verified: 2026-07-22
+---
 # Scheduling
 
 ## How do I see my schedule? (Employees)

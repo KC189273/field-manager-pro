@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/shift-swaps/route.ts
+  - app/api/shift-swaps/[id]/route.ts
+  - app/shift-swaps/page.tsx
+features:
+  - shift-swaps
+permissions:
+  - "employee-only creation"
+  - "same-DM constraint"
+  - "DM approves"
+verified: 2026-07-22
+---
 # Shift Swaps
 
 ## How do I request a shift swap?

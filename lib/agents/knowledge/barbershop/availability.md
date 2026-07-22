@@ -1,3 +1,15 @@
+---
+sources:
+  - app/api/barbershop/availability/route.ts
+features:
+  - barber-availability
+  - shop-hours-override
+permissions:
+  - "barbers set own"
+  - "shop owners set any"
+  - "availability intersects with shop hours"
+verified: 2026-07-22
+---
 # Barber Availability
 
 ## How do I set my availability?

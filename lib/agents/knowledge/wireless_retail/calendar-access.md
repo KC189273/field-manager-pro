@@ -1,3 +1,13 @@
+---
+sources:
+  - app/api/calendar/route.ts
+features:
+  - personal-calendar-access
+permissions:
+  - "DMs and SDs have own calendar"
+  - "ops/owner/dev must specify ownerId"
+verified: 2026-07-22
+---
 # Calendar Access — "Your role does not have a personal calendar"
 
 ## Symptom

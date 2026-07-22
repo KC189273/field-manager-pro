@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/checklist/submit/route.ts
+  - app/api/checklist/submissions/route.ts
+  - app/checklist/page.tsx
+features:
+  - opening-checklist
+  - closing-checklist
+  - daily-metrics
+  - checklist-photos
+permissions:
+  - "all retail roles can submit"
+  - "opening requires inventory photo"
+  - "closing requires sales floor + cash drawer photos"
+verified: 2026-07-22
+---
 # Opening & Closing Checklists
 
 ## How do I submit a checklist?

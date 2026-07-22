@@ -1,3 +1,16 @@
+---
+sources:
+  - app/settings/page.tsx
+  - app/api/push/preferences/route.ts
+  - lib/apns.ts
+features:
+  - notification-toggles
+  - push-setup
+permissions:
+  - "25 toggle types"
+  - "role-filtered preferences"
+verified: 2026-07-22
+---
 # Notifications
 
 ## How do I manage my notifications?

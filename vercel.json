@@ -127,6 +127,10 @@
     {
       "path": "/api/agents/run?agent=growth&trigger=cron",
       "schedule": "0 14 * * 1"
+    },
+    {
+      "path": "/api/agents/run?agent=docsync&trigger=cron",
+      "schedule": "0 15 * * 0"
     }
   ]
 }

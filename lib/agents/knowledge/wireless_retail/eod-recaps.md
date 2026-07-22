@@ -1,3 +1,15 @@
+---
+sources:
+  - lib/dm-eod-recap.ts
+  - app/api/clock/out/route.ts
+features:
+  - eod-recaps
+  - gps-store-visit-times
+permissions:
+  - "generated on DM clock-out"
+  - "ops+ can toggle notification preference"
+verified: 2026-07-22
+---
 # AI End-of-Day Recaps
 
 ## What is the EOD Recap?

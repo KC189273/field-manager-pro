@@ -3,6 +3,7 @@ import { healthAgent } from './definitions/health.agent'
 import { onboardingAgent } from './definitions/onboarding.agent'
 import { supportAgent } from './definitions/support.agent'
 import { growthAgent } from './definitions/growth.agent'
+import { docsyncAgent } from './definitions/docsync.agent'
 
 // Agent registry
 const agents: Record<string, Agent> = {
@@ -10,6 +11,7 @@ const agents: Record<string, Agent> = {
   onboarding: onboardingAgent,
   support: supportAgent,
   growth: growthAgent,
+  docsync: docsyncAgent,
 }
 
 export function getAgent(key: AgentKey): Agent | undefined {

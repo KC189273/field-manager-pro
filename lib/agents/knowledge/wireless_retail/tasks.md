@@ -1,3 +1,21 @@
+---
+sources:
+  - app/api/tasks/route.ts
+  - app/api/tasks/complete/route.ts
+  - app/api/tasks/remind/route.ts
+  - app/tasks/page.tsx
+features:
+  - tasks
+  - recurring-tasks
+  - photo-required-tasks
+  - multi-assignee
+  - task-deletion
+permissions:
+  - "DMs+ create/assign/delete"
+  - "employees complete"
+  - "multi-assignee creates separate tasks"
+verified: 2026-07-22
+---
 # Tasks
 
 ## How do I complete a task? (Employees)

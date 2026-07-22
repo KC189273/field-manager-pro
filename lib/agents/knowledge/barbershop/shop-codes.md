@@ -1,3 +1,15 @@
+---
+sources:
+  - app/api/barbershop/shop/route.ts
+  - app/api/barbershop/lookup/route.ts
+features:
+  - shop-code-validation
+  - shop-code-uniqueness
+permissions:
+  - "codes must be 4 chars and unique"
+  - "only shop owners add barbers"
+verified: 2026-07-22
+---
 # Shop Codes — "Shop not found" / "Code already taken"
 
 ## Symptom: "Shop not found. Check your code and try again."

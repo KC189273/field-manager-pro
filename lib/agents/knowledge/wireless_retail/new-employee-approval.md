@@ -1,3 +1,17 @@
+---
+sources:
+  - app/api/team/users/route.ts
+  - app/api/team/users/approve/route.ts
+  - app/api/auth/login/route.ts
+features:
+  - employee-approval-workflow
+  - pending-approval-login-block
+permissions:
+  - "DMs create pending users"
+  - "SD/owner approve"
+  - "pending users cannot log in"
+verified: 2026-07-22
+---
 # New Employee Approval — "Why can't my new employee log in?"
 
 ## Symptom

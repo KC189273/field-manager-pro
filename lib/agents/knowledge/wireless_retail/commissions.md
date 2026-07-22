@@ -1,3 +1,14 @@
+---
+sources:
+  - app/commissions/page.tsx
+  - app/api/commissions/route.ts
+features:
+  - commissions-estimator
+permissions:
+  - "all retail roles"
+  - "hardcoded July 2026 comp plan"
+verified: 2026-07-22
+---
 # Commissions Estimator
 
 ## What is the Commissions Estimator?

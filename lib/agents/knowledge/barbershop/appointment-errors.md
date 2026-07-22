@@ -1,3 +1,15 @@
+---
+sources:
+  - app/api/barbershop/appointments/[id]/route.ts
+  - app/api/barbershop/respond/route.ts
+features:
+  - appointment-race-conditions
+  - proposal-response
+permissions:
+  - "already-updated guard"
+  - "no-proposal guard"
+verified: 2026-07-22
+---
 # Appointment Errors — "This appointment has already been updated" and other issues
 
 ## Symptom: "This appointment has already been updated"

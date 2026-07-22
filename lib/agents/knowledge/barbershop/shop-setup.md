@@ -1,3 +1,17 @@
+---
+sources:
+  - app/api/barbershop/shop/route.ts
+  - app/shop-setup/page.tsx
+features:
+  - shop-setup
+  - shop-info
+  - shop-hours
+  - payment-settings
+  - qr-code
+permissions:
+  - "shop_owner only"
+verified: 2026-07-22
+---
 # Shop Setup
 
 ## Who can access Shop Setup?

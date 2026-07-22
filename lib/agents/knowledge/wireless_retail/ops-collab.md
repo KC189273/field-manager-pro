@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/supply-requests/route.ts
+  - app/api/facility-tickets/route.ts
+  - app/api/merch-orders/route.ts
+  - app/api/team/users/route.ts
+features:
+  - ops-collab-flag
+permissions:
+  - "gives DMs org-wide visibility for supplies/facilities/merch"
+  - "removes submit ability"
+verified: 2026-07-22
+---
 # Ops Collab Flag — "What does 'Ops Collab' mean on my profile?"
 
 ## Symptom

@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/barbershop/barbers/route.ts
+  - app/api/barbershop/shop/route.ts
+features:
+  - barber-profile
+  - display-name
+  - bio
+  - walk-ins
+  - cleanup-minutes
+  - listed-toggle
+permissions:
+  - "barbers edit own"
+  - "shop owners edit any in shop"
+verified: 2026-07-22
+---
 # Barber Profile
 
 ## How do I set up my barber profile?

@@ -1,3 +1,20 @@
+---
+sources:
+  - app/api/clock/out/route.ts
+  - app/api/ot-watch/route.ts
+  - app/api/cron/ot-tracker/route.ts
+features:
+  - overtime-alerts
+  - ot-thresholds
+  - salary-exemption
+  - floater-ot
+permissions:
+  - "40h flag to DM"
+  - "45h projected to SD"
+  - "50h projected to owner"
+  - "salary employees exempt"
+verified: 2026-07-22
+---
 # Overtime Alerts
 
 ## How does overtime tracking work?

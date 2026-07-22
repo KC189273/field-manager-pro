@@ -1,0 +1,78 @@
+name: Doc Sync Check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-doc-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check help docs are in sync with changed source files
+        run: |
+          set -euo pipefail
+
+          # Get files changed in this PR
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD)
+
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No files changed."
+            exit 0
+          fi
+
+          KNOWLEDGE_DIR="lib/agents/knowledge"
+          STALE_DOCS=""
+          CHECKED=0
+
+          # For each knowledge doc, parse its sources from frontmatter
+          for doc in $(find "$KNOWLEDGE_DIR" -name '*.md' 2>/dev/null); do
+            # Extract sources between --- fences
+            SOURCES=$(awk '/^---$/{if(++c==1)next; if(c==2)exit} c==1 && /^  - /{gsub(/^  - /,""); print}' "$doc" | head -50)
+
+            if [ -z "$SOURCES" ]; then
+              continue
+            fi
+
+            DOC_CHANGED=false
+            if echo "$CHANGED_FILES" | grep -qF "$doc"; then
+              DOC_CHANGED=true
+            fi
+
+            SOURCE_CHANGED=false
+            while IFS= read -r src; do
+              if echo "$CHANGED_FILES" | grep -qF "$src"; then
+                SOURCE_CHANGED=true
+                break
+              fi
+            done <<< "$SOURCES"
+
+            if [ "$SOURCE_CHANGED" = true ] && [ "$DOC_CHANGED" = false ]; then
+              STALE_DOCS="$STALE_DOCS\n  ⚠  $doc"
+              CHECKED=$((CHECKED + 1))
+            fi
+          done
+
+          if [ -n "$STALE_DOCS" ]; then
+            echo ""
+            echo "============================================"
+            echo "  DOC SYNC WARNING"
+            echo "============================================"
+            echo ""
+            echo "The following help docs have source files that"
+            echo "changed in this PR, but the docs were NOT updated:"
+            echo -e "$STALE_DOCS"
+            echo ""
+            echo "Each doc lists its source files in frontmatter."
+            echo "If functionality changed, update the doc too."
+            echo "If the doc is still accurate, bump its verified date."
+            echo ""
+            echo "See CLAUDE.md for the help doc sync rule."
+            echo "============================================"
+            exit 1
+          else
+            echo "✓ All help docs are in sync with changed source files."
+          fi

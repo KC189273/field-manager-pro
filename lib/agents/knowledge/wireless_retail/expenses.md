@@ -1,3 +1,19 @@
+---
+sources:
+  - app/api/expenses/route.ts
+  - app/api/expenses/scan/route.ts
+  - app/expenses/page.tsx
+features:
+  - expenses
+  - ai-receipt-scan
+  - expense-approval
+  - denial-note-required
+permissions:
+  - "manager+ submit"
+  - "SD/owner/dev approve"
+  - "denial requires note"
+verified: 2026-07-22
+---
 # Expenses
 
 ## Who can submit expenses?

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { runAgent } from '@/lib/agents/runtime/orchestrator'
 import type { AgentKey, TriggerType } from '@/lib/agents/types'
 
-const VALID_AGENTS: AgentKey[] = ['health', 'onboarding', 'support', 'growth']
+const VALID_AGENTS: AgentKey[] = ['health', 'onboarding', 'support', 'growth', 'docsync']
 
 export async function POST(req: NextRequest) {
   // Auth: cron secret or developer session

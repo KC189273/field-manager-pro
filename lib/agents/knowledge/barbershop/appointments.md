@@ -1,3 +1,23 @@
+---
+sources:
+  - app/api/barbershop/appointments/route.ts
+  - app/api/barbershop/appointments/[id]/route.ts
+  - app/api/cron/appointment-expiry/route.ts
+  - app/api/cron/appointment-reminder/route.ts
+  - app/book/page.tsx
+  - app/barber-dashboard/page.tsx
+features:
+  - appointment-booking
+  - confirm-decline
+  - auto-expiry
+  - reminders
+  - customer-cancellation
+permissions:
+  - "only customers can book"
+  - "24h auto-expiry"
+  - "barbers confirm/decline"
+verified: 2026-07-22
+---
 # Appointments & Booking
 
 ## How do clients book an appointment? (Customer flow)

@@ -1,3 +1,16 @@
+---
+sources:
+  - app/login/page.tsx
+  - app/dashboard/page.tsx
+  - components/BottomNav.tsx
+features:
+  - first-login
+  - app-download
+  - dashboard-overview
+permissions:
+  - "all roles"
+verified: 2026-07-22
+---
 # Getting Started
 
 ## Downloading the App

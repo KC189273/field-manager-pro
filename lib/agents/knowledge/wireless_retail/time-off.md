@@ -1,3 +1,16 @@
+---
+sources:
+  - app/api/time-off/route.ts
+  - app/time-off/page.tsx
+features:
+  - time-off-requests
+  - published-shift-block
+permissions:
+  - "employees request"
+  - "DMs approve"
+  - "blocked if scheduled on published shift"
+verified: 2026-07-22
+---
 # Time Off Requests
 
 ## How do I request time off?

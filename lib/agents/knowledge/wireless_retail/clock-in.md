@@ -1,3 +1,21 @@
+---
+sources:
+  - app/api/clock/in/route.ts
+  - app/api/clock/out/route.ts
+  - app/clock/page.tsx
+  - app/api/clock/my-stores/route.ts
+features:
+  - clock-in
+  - clock-out
+  - gps-tracking
+  - handoff-notes
+  - late-clock-in-flag
+permissions:
+  - "all retail roles can clock in/out"
+  - "employees must select a store"
+  - "late clock-in flag has no grace period"
+verified: 2026-07-22
+---
 # Clock In / Clock Out
 
 ## How do I clock in?

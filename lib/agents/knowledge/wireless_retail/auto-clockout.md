@@ -1,3 +1,13 @@
+---
+sources:
+  - app/api/cron/auto-clockout/route.ts
+features:
+  - auto-clockout
+permissions:
+  - "runs 9 PM CST daily"
+  - "all active shifts auto-ended"
+verified: 2026-07-22
+---
 # Auto Clock-Out — "Why was I automatically clocked out?"
 
 ## Symptom

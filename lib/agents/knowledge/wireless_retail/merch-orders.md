@@ -1,3 +1,15 @@
+---
+sources:
+  - app/api/merch-orders/route.ts
+  - app/merch-orders/page.tsx
+features:
+  - merch-orders
+permissions:
+  - "employees/DMs create"
+  - "ops+ approve"
+  - "notes and ops manager required"
+verified: 2026-07-22
+---
 # Merch Orders
 
 ## How do I place a merch order?

@@ -1,3 +1,18 @@
+---
+sources:
+  - app/api/auth/login/route.ts
+  - app/api/auth/reset-password/route.ts
+  - app/api/auth/change-password/route.ts
+features:
+  - login-failures
+  - rate-limiting
+  - password-requirements
+permissions:
+  - "10 attempts per IP per 15 min"
+  - "change=6 chars, reset=8 chars"
+  - "inactive accounts get same error as wrong password"
+verified: 2026-07-22
+---
 # Login Troubleshooting — "Invalid credentials" / "Too many failed attempts"
 
 ## Symptom: "Invalid credentials"

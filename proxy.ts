@@ -33,8 +33,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // Cron route protected by secret header, not session
-  if (pathname.startsWith('/api/cron')) {
+  // Cron and agent cron routes protected by secret header, not session
+  if (pathname.startsWith('/api/cron') || pathname.startsWith('/api/agents/run') || pathname.startsWith('/api/agents/digest')) {
     return NextResponse.next()
   }
 
@@ -62,8 +62,8 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
-  // Config page — developer only
-  if (pathname.startsWith('/config') && session.role !== 'developer') {
+  // Config and agent admin pages — developer only
+  if ((pathname.startsWith('/config') || pathname.startsWith('/admin/agents')) && session.role !== 'developer') {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 

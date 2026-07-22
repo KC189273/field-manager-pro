@@ -111,6 +111,22 @@
     {
       "path": "/api/cron/payroll-deadline",
       "schedule": "0 17 * * 1"
+    },
+    {
+      "path": "/api/agents/run?agent=health&trigger=cron",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/agents/digest",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/agents/run?agent=onboarding&trigger=cron",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/agents/run?agent=growth&trigger=cron",
+      "schedule": "0 14 * * 1"
     }
   ]
 }

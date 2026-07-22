@@ -456,6 +456,36 @@ export default function PayrollPage() {
             {role !== 'manager' && (
               <div className="space-y-6">
 
+                {/* Approved period banner for owner */}
+                {(() => {
+                  const approvedPeriod = closedPeriods.find(p => p.status === 'approved' && p.final_submitted_at)
+                  if (!approvedPeriod) return null
+                  return (
+                    <div className="bg-green-900/30 border-2 border-green-600/50 rounded-2xl p-5">
+                      <div className="flex items-start gap-3">
+                        <svg className="w-7 h-7 text-green-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <div>
+                          <p className="text-green-300 text-lg font-bold">
+                            Payroll Approved — {fmtPeriod(approvedPeriod.period_start, approvedPeriod.period_end)}
+                          </p>
+                          <p className="text-green-400/80 text-sm mt-1">
+                            All DM timecards have been reviewed and approved
+                            {approvedPeriod.final_submitter_name && <> by <strong>{approvedPeriod.final_submitter_name}</strong></>}.
+                            {' '}Ready to download and submit to ADP.
+                          </p>
+                          {approvedPeriod.final_submitted_at && (
+                            <p className="text-green-500/60 text-xs mt-2">
+                              Submitted {fmtDatetime(approvedPeriod.final_submitted_at)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 {/* Owner override */}
                 {(role === 'owner' || role === 'developer') && currentPeriod && currentPeriod.status !== 'approved' && (
                   <div className="bg-red-950/30 border border-red-800/40 rounded-2xl p-5 space-y-3">

@@ -35,6 +35,17 @@ interface Shift {
   full_name: string
   username: string
   avatar_url?: string | null
+  edits: ShiftEdit[] | null
+}
+
+interface ShiftEdit {
+  old_clock_in: string
+  new_clock_in: string
+  old_clock_out: string | null
+  new_clock_out: string | null
+  note: string | null
+  edited_by: string
+  edited_at: string
 }
 
 interface PayCode {
@@ -188,6 +199,30 @@ function TimecardsPage() {
   const [dlTo, setDlTo] = useState('')
   const [dlSending, setDlSending] = useState(false)
   const [dlSent, setDlSent] = useState(false)
+
+  // DM Edit Activity
+  const [showDmEdits, setShowDmEdits] = useState(false)
+  const [dmEdits, setDmEdits] = useState<{
+    dm_id: string; dm_name: string; edit_count: number;
+    clock_in_changes: number; clock_out_changes: number;
+    manual_entries: number; hours_added: number; hours_removed: number
+  }[]>([])
+  const [dmEditsLoading, setDmEditsLoading] = useState(false)
+
+  async function loadDmEdits() {
+    setDmEditsLoading(true)
+    const weekStart = getWeekMonday(weekOffset)
+    const weekEnd = new Date(weekStart)
+    weekEnd.setDate(weekEnd.getDate() + 6)
+    const from = weekStart.toISOString().split('T')[0]
+    const to = weekEnd.toISOString().split('T')[0]
+    const res = await fetch(`/api/shifts?stats=dm-edits&from=${from}&to=${to}`)
+    if (res.ok) {
+      const d = await res.json()
+      setDmEdits(d.dmEdits ?? [])
+    }
+    setDmEditsLoading(false)
+  }
 
   // Edit modal
   const [editShift, setEditShift] = useState<Shift | null>(null)
@@ -716,6 +751,96 @@ function TimecardsPage() {
           </button>
         </div>
 
+        {/* DM Edit Activity — SD/owner/developer only */}
+        {isOpsPlus && (
+          <div className="mb-4">
+            <button
+              onClick={() => { setShowDmEdits(!showDmEdits); if (!showDmEdits) loadDmEdits() }}
+              className="w-full flex items-center justify-between bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 hover:bg-gray-800/80 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                <span className="text-sm font-semibold text-white">DM Edit Activity</span>
+              </div>
+              <svg className={`w-4 h-4 text-gray-500 transition-transform ${showDmEdits ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showDmEdits && (
+              <div className="mt-2 bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                {dmEditsLoading ? (
+                  <div className="flex justify-center py-6">
+                    <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : dmEdits.length === 0 ? (
+                  <p className="text-sm text-gray-500 text-center py-6">No DM edits this week</p>
+                ) : (
+                  <>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-700">
+                          <th className="text-left px-4 py-2.5 text-xs text-gray-400 font-medium">DM</th>
+                          <th className="text-center px-2 py-2.5 text-xs text-gray-400 font-medium">Edits</th>
+                          <th className="text-center px-2 py-2.5 text-xs text-gray-400 font-medium">Added</th>
+                          <th className="text-right px-4 py-2.5 text-xs text-gray-400 font-medium">Net</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dmEdits.map(dm => {
+                          const net = dm.hours_added - dm.hours_removed
+                          return (
+                            <tr key={dm.dm_id} className="border-b border-gray-700/50 last:border-0">
+                              <td className="px-4 py-2.5 text-white font-medium">{dm.dm_name}</td>
+                              <td className="px-2 py-2.5 text-center">
+                                <div className="flex flex-col items-center">
+                                  <span className="text-amber-400 font-semibold">{dm.edit_count}</span>
+                                  <span className="text-[10px] text-gray-500">
+                                    {dm.clock_in_changes > 0 && `${dm.clock_in_changes} in`}
+                                    {dm.clock_in_changes > 0 && dm.clock_out_changes > 0 && ' · '}
+                                    {dm.clock_out_changes > 0 && `${dm.clock_out_changes} out`}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-2 py-2.5 text-center">
+                                {dm.manual_entries > 0 ? (
+                                  <span className="text-blue-400 font-semibold">{dm.manual_entries}</span>
+                                ) : (
+                                  <span className="text-gray-600">0</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-right">
+                                {(dm.hours_added > 0 || dm.hours_removed > 0) ? (
+                                  <div className="flex flex-col items-end">
+                                    {dm.hours_added > 0 && <span className="text-green-400 text-xs">+{dm.hours_added.toFixed(1)}h</span>}
+                                    {dm.hours_removed > 0 && <span className="text-red-400 text-xs">−{dm.hours_removed.toFixed(1)}h</span>}
+                                    <span className={`text-xs font-semibold ${net > 0 ? 'text-green-400' : net < 0 ? 'text-red-400' : 'text-gray-500'}`}>
+                                      {net > 0 ? '+' : ''}{net.toFixed(1)}h net
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-gray-600 text-xs">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                    <div className="px-4 py-2 bg-gray-800/40 border-t border-gray-700/50">
+                      <p className="text-[10px] text-gray-500">
+                        Showing edits for {weekLabel}. &quot;Edits&quot; = time corrections, &quot;Added&quot; = manual entries.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ── ALL EMPLOYEES VIEW ── */}
         {activeView === 'all' && isMgr && (
           <>
@@ -947,6 +1072,33 @@ function TimecardsPage() {
                                   )}
                                   {shift.is_manual && shift.manual_by_name && (
                                     <p className="text-xs text-gray-600 mt-0.5">By: {shift.manual_by_name}</p>
+                                  )}
+                                  {shift.edits && shift.edits.length > 0 && (
+                                    <div className="mt-1.5 space-y-1">
+                                      {shift.edits.map((edit, ei) => {
+                                        const oldDur = edit.old_clock_out ? (new Date(edit.old_clock_out).getTime() - new Date(edit.old_clock_in).getTime()) / 3600000 : 0
+                                        const newDur = edit.new_clock_out ? (new Date(edit.new_clock_out).getTime() - new Date(edit.new_clock_in).getTime()) / 3600000 : 0
+                                        const diff = newDur - oldDur
+                                        return (
+                                          <div key={ei} className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+                                            <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                              <span className="text-gray-500 line-through">{fmtTime(edit.old_clock_in)} – {edit.old_clock_out ? fmtTime(edit.old_clock_out) : '?'}</span>
+                                              <span className="text-gray-600">→</span>
+                                              <span className="text-amber-300 font-medium">{fmtTime(edit.new_clock_in)} – {edit.new_clock_out ? fmtTime(edit.new_clock_out) : '?'}</span>
+                                              {diff !== 0 && (
+                                                <span className={`font-semibold ${diff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                                  {diff > 0 ? '+' : ''}{diff.toFixed(2)}h
+                                                </span>
+                                              )}
+                                            </div>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">
+                                              {edit.edited_by} · {fmt(edit.edited_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                              {edit.note && <> · {edit.note}</>}
+                                            </p>
+                                          </div>
+                                        )
+                                      })}
+                                    </div>
                                   )}
                                   {shift.shift_note && (
                                     <p className="text-xs text-blue-300/80 mt-1">📝 {shift.shift_note}</p>
@@ -1250,6 +1402,34 @@ function TimecardsPage() {
                         </div>
                         {shift.is_manual && shift.manual_note && (
                           <p className="text-xs text-amber-300/70 mt-2 pt-2 border-t border-gray-700/60">⚠ Corrected: {shift.manual_note}</p>
+                        )}
+                        {shift.edits && shift.edits.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-700/60 space-y-1.5">
+                            <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold">Edit History</p>
+                            {shift.edits.map((edit, ei) => {
+                              const oldDur = edit.old_clock_out ? (new Date(edit.old_clock_out).getTime() - new Date(edit.old_clock_in).getTime()) / 3600000 : 0
+                              const newDur = edit.new_clock_out ? (new Date(edit.new_clock_out).getTime() - new Date(edit.new_clock_in).getTime()) / 3600000 : 0
+                              const diff = newDur - oldDur
+                              return (
+                                <div key={ei} className="bg-amber-500/10 border border-amber-500/20 rounded-lg px-2.5 py-1.5">
+                                  <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                    <span className="text-gray-500 line-through">{fmtTime(edit.old_clock_in)} – {edit.old_clock_out ? fmtTime(edit.old_clock_out) : '?'}</span>
+                                    <span className="text-gray-600">→</span>
+                                    <span className="text-amber-300 font-medium">{fmtTime(edit.new_clock_in)} – {edit.new_clock_out ? fmtTime(edit.new_clock_out) : '?'}</span>
+                                    {diff !== 0 && (
+                                      <span className={`font-semibold ${diff > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {diff > 0 ? '+' : ''}{diff.toFixed(2)}h
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-gray-500 mt-0.5">
+                                    {edit.edited_by} · {fmt(edit.edited_at, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                                    {edit.note && <> · {edit.note}</>}
+                                  </p>
+                                </div>
+                              )
+                            })}
+                          </div>
                         )}
                       </div>
                     )

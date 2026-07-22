@@ -84,6 +84,7 @@ export default function DmSchedulePage() {
   const [editingDay, setEditingDay] = useState<number | null>(null)
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasLoadedRef = useRef(false)
+  const latestScheduleRef = useRef<DaySchedule[]>(emptyWeek())
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => {
@@ -112,6 +113,9 @@ export default function DmSchedulePage() {
 
   const loadSchedules = useCallback(() => {
     if (!session) return
+    // Cancel any pending auto-save from the previous week
+    if (autoSaveTimer.current) { clearTimeout(autoSaveTimer.current); autoSaveTimer.current = null }
+    hasLoadedRef.current = false
     setLoading(true)
     const params = new URLSearchParams({ weekStart })
     if (filterDmId) params.set('dmId', filterDmId)
@@ -122,13 +126,10 @@ export default function DmSchedulePage() {
         setSchedules(scheds)
         // If DM, load their schedule into the editor
         if (canEdit(session.role)) {
-          hasLoadedRef.current = false
           const mine = scheds.find((s: WeekSchedule) => s.dm_id === session.id)
-          if (mine) {
-            setEditSchedule(mine.schedule)
-          } else {
-            setEditSchedule(emptyWeek())
-          }
+          const loaded = mine ? mine.schedule : emptyWeek()
+          setEditSchedule(loaded)
+          latestScheduleRef.current = loaded
           // Delay enabling auto-save so initial state set doesn't trigger it
           setTimeout(() => { hasLoadedRef.current = true }, 500)
         }
@@ -138,14 +139,15 @@ export default function DmSchedulePage() {
 
   useEffect(() => { loadSchedules() }, [loadSchedules])
 
-  async function doSave(schedule: DaySchedule[]) {
+  async function doSave(schedule: DaySchedule[], forWeek?: string) {
+    const saveWeek = forWeek ?? weekStart
     setSaving(true)
     setSaveStatus('saving')
     try {
       const res = await fetch('/api/dm-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ weekStart, schedule }),
+        body: JSON.stringify({ weekStart: saveWeek, schedule }),
       })
       if (res.ok) {
         setSaveStatus('saved')
@@ -160,11 +162,15 @@ export default function DmSchedulePage() {
     }
   }
 
-  // Auto-save: debounce 2 seconds after any edit
+  // Keep ref in sync for blur-save
+  useEffect(() => { latestScheduleRef.current = editSchedule }, [editSchedule])
+
+  // Auto-save: debounce 2 seconds after any edit — captures weekStart at trigger time
   function triggerAutoSave(updated: DaySchedule[]) {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
     setSaveStatus('idle')
-    autoSaveTimer.current = setTimeout(() => doSave(updated), 2000)
+    const capturedWeek = weekStart
+    autoSaveTimer.current = setTimeout(() => doSave(updated, capturedWeek), 2000)
   }
 
   // Wrapper to update state AND trigger auto-save
@@ -179,7 +185,7 @@ export default function DmSchedulePage() {
   // Manual save button
   async function handleSave() {
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
-    await doSave(editSchedule)
+    await doSave(latestScheduleRef.current)
   }
 
   function toggleWorking(dayIdx: number) {
@@ -190,18 +196,34 @@ export default function DmSchedulePage() {
     updateSchedule(prev => prev.map((d, i) => i === dayIdx ? { ...d, locations: [...d.locations, { store_id: '', store_address: '', reason: '' }] } : d))
   }
 
+  // Update location — auto-saves for store selection, but NOT for reason typing (saves on blur)
   function updateLocation(dayIdx: number, locIdx: number, field: 'store_id' | 'reason', value: string) {
-    updateSchedule(prev => prev.map((d, i) => {
-      if (i !== dayIdx) return d
-      const locs = [...d.locations]
-      if (field === 'store_id') {
+    if (field === 'reason') {
+      // For reason: update state only (no auto-save), save happens on blur
+      setEditSchedule(prev => prev.map((d, i) => {
+        if (i !== dayIdx) return d
+        const locs = [...d.locations]
+        locs[locIdx] = { ...locs[locIdx], reason: value }
+        return { ...d, locations: locs }
+      }))
+    } else {
+      // For store selection: update state AND trigger auto-save
+      updateSchedule(prev => prev.map((d, i) => {
+        if (i !== dayIdx) return d
+        const locs = [...d.locations]
         const store = stores.find(s => s.id === value)
         locs[locIdx] = { ...locs[locIdx], store_id: value, store_address: store?.address ?? '' }
-      } else {
-        locs[locIdx] = { ...locs[locIdx], [field]: value }
-      }
-      return { ...d, locations: locs }
-    }))
+        return { ...d, locations: locs }
+      }))
+    }
+  }
+
+  // Save on blur for reason fields — uses ref for latest state
+  function onReasonBlur() {
+    if (hasLoadedRef.current) {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+      doSave(latestScheduleRef.current, weekStart)
+    }
   }
 
   function removeLocation(dayIdx: number, locIdx: number) {
@@ -341,6 +363,7 @@ export default function DmSchedulePage() {
                               </button>
                             </div>
                             <input type="text" value={loc.reason} onChange={e => updateLocation(dayIdx, locIdx, 'reason', e.target.value)}
+                              onBlur={onReasonBlur}
                               placeholder="Why this location? What will you cover?"
                               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-2 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500" />
                           </div>

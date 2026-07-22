@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail } from '@/lib/notifications'
+import { sendPushToUser } from '@/lib/apns'
 
 const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
@@ -221,9 +222,9 @@ export async function POST(req: NextRequest) {
       WHERE id = $2
     `, [session.id, periodId])
 
-    // Email all owners in org
-    const owners = await query<{ email: string; full_name: string }>(`
-      SELECT email, full_name FROM users
+    // Email and push notify all owners in org
+    const owners = await query<{ id: string; email: string; full_name: string }>(`
+      SELECT id, email, full_name FROM users
       WHERE org_id = $1 AND role = 'owner' AND is_active = TRUE
     `, [period.org_id])
 
@@ -240,6 +241,13 @@ export async function POST(req: NextRequest) {
           'Review & Download Payroll',
           `${APP_URL}/payroll`
         )
+      ).catch(() => {})
+
+      sendPushToUser(
+        owner.id,
+        `Payroll Ready — ${periodLabel}`,
+        `${session.fullName} has approved all timecards. Download the ADP CSV and submit payroll.`,
+        'payroll'
       ).catch(() => {})
     }
 

@@ -1,34 +1,38 @@
-# Staff Scheduling
+# Scheduling
 
-## Creating a Schedule
-1. Go to Staff Schedule from the nav menu (DM/manager only)
-2. Select the week you want to schedule
-3. Tap a day cell for an employee to add a shift
-4. Set start time, end time, store location, and optional break minutes
-5. Repeat for all employees
+## How do I see my schedule? (Employees)
+Go to **My Schedule** from the nav. It shows your upcoming shifts with:
+- Day and date
+- Start and end time
+- Store location
+- Any notes from your DM
 
-## Publishing a Schedule
-- Schedules are in draft until published
-- Tap "Publish" to make the schedule visible to employees
-- Published schedules send notifications to all affected employees
-- You can copy a previous week's schedule to save time
+You can only see published schedules. If nothing shows up, your DM hasn't published the schedule yet.
 
-## Employee View
-- Employees see their schedule under "My Schedule"
-- Shows upcoming shifts with times, store location, and any notes
+## How do I build a schedule? (DMs)
+1. Go to **Store Schedule** from the nav.
+2. Select the week you want to schedule.
+3. Tap on a day cell for an employee to add a shift.
+4. Set start time, end time, store location, and optional break minutes.
+5. Repeat for all employees across the week.
 
-## Shift Swaps
-- Employees can request shift swaps with coworkers
-- Go to Shift Swaps to create a swap request
-- The DM must approve all swap requests
-- Both employees are notified of the approval/denial
+## How do I publish a schedule?
+Tap **Publish** at the top of the Store Schedule page. This:
+- Makes the schedule visible to all employees.
+- Sends push notifications to affected employees (if they have schedule_published notifications enabled).
+- Locks the schedule for time-off blocking (employees can't request time off for dates they're scheduled).
 
-## Time Off Requests
-- Employees can request time off from the Time Off page
-- If you're already scheduled on a published shift for that date, the request is blocked — use Shift Swaps instead
-- DMs approve or deny time off requests
+Unpublished schedules are drafts — only you can see them.
 
-## Common Issues
-- Can't see the schedule: Make sure your DM has published it
-- Wrong store location: Contact your DM to update the shift
-- Schedule not showing for a new employee: The DM needs to add them to the schedule
+## Can I copy last week's schedule?
+Yes. On the Store Schedule page, tap **Copy** to duplicate the previous week's schedule into the current week. You can then edit individual shifts before publishing.
+
+## Why can't my employee see their schedule?
+The schedule must be **published** first. Draft schedules are only visible to the DM who created them. Go to Store Schedule and tap Publish.
+
+## Who can see the Store Schedule?
+| Role | Access |
+|------|--------|
+| Employee | Cannot see Store Schedule — they use My Schedule |
+| DM (manager) | Can build and publish for their team |
+| Ops Manager, SD, Owner, Developer | Can view all schedules across the org |

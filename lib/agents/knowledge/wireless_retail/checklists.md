@@ -1,29 +1,46 @@
 # Opening & Closing Checklists
 
-## How to Submit a Checklist
-1. Go to Checklists from the nav menu
-2. Select "Opening" or "Closing"
-3. Choose your store location
-4. Complete each item on the checklist
-5. Upload required photos (inventory, sales floor, cash drawer, etc.)
-6. Enter your daily metrics: Voice Lines, MiM, Home Internet
-7. Tap Submit
+## How do I submit a checklist?
+1. Go to **Checklist** from the nav.
+2. Select **Opening** or **Closing**.
+3. Choose your **store location** from the dropdown.
+4. Complete each checklist item.
+5. Upload required photos (the app will prompt you for each required photo).
+6. For closing checklists, enter your daily metrics:
+   - **Voice Lines**: total voice activations for the day
+   - **MiM** (Money in Motion): revenue metric
+   - **Home Internet**: home internet activations
+7. Tap **Submit**.
 
-## Required Photos
-- Opening: Inventory photo, sales floor photo
-- Closing: Cash drawer photo, POS photo, reconciliation photo
-- Photos must be taken at the time of submission (no uploading old photos)
+## What photos are required?
+Photo requirements depend on the checklist type:
 
-## Daily Metrics
-At close, enter your store's numbers:
-- **Voice Lines**: Total voice activations for the day
-- **MiM** (Money in Motion): Revenue metric
-- **Home Internet**: Home internet activations
+**Opening checklist:**
+- **Inventory photo** — required (the checklist won't submit without it)
+- Additional inventory photo — optional
+- POS photo — optional
+- A-frame photo — optional
 
-## Viewing Past Submissions
-DMs and above can view all checklist submissions for their stores. Tap on any submission to see photos and details.
+**Closing checklist:**
+- **Sales floor photo** — required
+- **Cash drawer photo** — required
+- Reconciliation photo — optional
+- Reconciliation photo 2 — optional
 
-## Common Issues
-- Photo upload failing: Check your internet connection and try again
-- Can't see your store: Contact your DM to make sure you're assigned to the correct store
-- Submission not saving: Make sure all required fields are filled in before submitting
+The submit button is disabled until all required photos are uploaded.
+
+## Can I add a comment?
+Yes. There is a comment field on the checklist submission where you can note anything unusual about the opening or closing.
+
+## Who can view past submissions?
+- **DMs** see all submissions from their team's stores.
+- **SD, Owner, Ops Manager, Developer** see all submissions across the org.
+- **Employees** see their own submissions.
+
+To view past submissions, go to Checklist and look at the submissions list. Tap any submission to see the full details including photos and metrics.
+
+## Why can't I see my store?
+Your store list comes from the stores assigned to your DM's district. If your store isn't listed, contact your DM to make sure the store is set up in Store Locations and assigned.
+
+## Why won't my checklist submit?
+Make sure all required fields are filled in and all required photos are uploaded. The submit button won't work if required items are missing.

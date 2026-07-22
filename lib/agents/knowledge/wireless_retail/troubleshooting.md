@@ -96,6 +96,43 @@ If nobody orders your supplies within 48 hours, the system auto-escalates to the
 **Ticket won't submit**
 Make sure you've uploaded a photo — it's required for all facility tickets. Also check that you've selected a store, category, title, and urgency level.
 
+## Scheduling (DMs)
+
+**"Cannot publish: X shifts still need employees assigned"**
+Some shifts in this week don't have an employee assigned. Assign an employee to every shift or delete the empty ones, then try publishing again. See schedule-publishing.md for details.
+
+**"This week already has shifts. Remove them first before copying."**
+The copy-from-last-week feature requires the target week to be completely empty. Delete existing shifts first or build the schedule manually.
+
+**"This employee has approved time off on that date"**
+You can't schedule someone on a day they have approved time off. Schedule a different employee or have the time-off request cancelled first.
+
+## Accountability
+
+**"Document is not pending approval"**
+The doc was already approved/rejected by someone else, or it's in revision. Check its current status.
+
+**"Only the document author can resubmit"**
+A doc in "needs revision" can only be edited and resubmitted by the DM who originally wrote it.
+
+**"Rejection notes are required"**
+When rejecting a doc, you must include a reason explaining what needs to change.
+
+## Calendar
+
+**"Your role does not have a personal calendar"**
+Only DMs and Sales Directors have their own calendar. Ops managers, owners, and developers can create events but must select whose calendar to add them to. See calendar-access.md for details.
+
+## Expenses
+
+**"A note is required when denying a request"**
+When denying an expense, you must provide a reason. Enter a note and try again.
+
+## New Employees
+
+**New employee can't log in (shows "Invalid credentials")**
+New accounts created by DMs start as "pending approval." The SD or owner must approve the account on the Team page before the employee can log in. The login page shows the same error for wrong password AND inactive accounts. See new-employee-approval.md for full details.
+
 ## General
 
 **App shows blank/white screen**
@@ -103,6 +140,9 @@ Make sure you've uploaded a photo — it's required for all facility tickets. Al
 2. Check your internet connection.
 3. Clear your browser cache (if using web version).
 4. Log out and log back in.
+
+**"Too many failed attempts. Try again in 15 minutes."**
+After 10 failed login attempts from the same IP in 15 minutes, you're temporarily locked out. Wait 15 minutes and try again with the correct credentials. See login-troubleshooting.md.
 
 **Not receiving push notifications**
 1. Check Settings > Notifications in the app — make sure notifications are enabled.

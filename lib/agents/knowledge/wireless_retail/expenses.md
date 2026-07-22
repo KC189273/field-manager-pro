@@ -20,6 +20,7 @@ Sales Directors, Owners, and Developers can approve expenses. DMs and ops manage
 2. You'll see pending expenses at the top.
 3. Tap an expense to review the receipt and details.
 4. Tap **Approve** or **Deny**.
+5. **If denying**, you must provide a note explaining why — "A note is required when denying a request."
 
 ## Where can I see my expense history?
 All your submitted expenses appear on the Expenses page with their status (pending, approved, denied).

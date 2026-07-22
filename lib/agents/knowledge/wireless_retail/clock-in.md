@@ -24,7 +24,9 @@ Several things happen automatically when you clock out:
 You have an active shift that hasn't been clocked out. You can only have one active shift at a time. Go to Clock and tap Clock Out first, then clock in again.
 
 ## Why did I get flagged for being late?
-If you have a scheduled shift and you clock in after the scheduled start time, the system automatically creates a `late_clock_in` flag. The flag shows exactly how many minutes late you were. This is automatic — your DM didn't manually create it.
+If you have a scheduled shift and you clock in after the scheduled start time, the system automatically creates a `late_clock_in` flag. The flag shows exactly how many minutes late you were (e.g., "clocked in at 9:03 AM, scheduled for 9:00 AM (3 min late)"). This is automatic — your DM didn't manually create it.
+
+**There is no grace period.** Even 1 minute late creates a flag. The comparison is exact: your clock-in time vs. your scheduled start time.
 
 ## What is a handoff note?
 When clocking out, you can type a short note in the Handoff Note field. This sends an instant push notification to your DM with your message. Use it for things like "register 2 is acting up" or "we're low on SIM cards."

@@ -47,6 +47,26 @@ Make sure push notifications are enabled for the app on your phone. New appointm
 **Appointment expired before I could confirm**
 Unconfirmed appointments auto-expire after **24 hours**. Check your Barber Dashboard regularly or enable push notifications so you don't miss requests.
 
+**"This appointment has already been updated"**
+Someone else acted on this appointment while you had the page open, or it auto-expired. Refresh to see the current status. See appointment-errors.md for all cases.
+
+**"No proposal to respond to"**
+The barber declined without proposing an alternative time. The customer needs to book a new appointment with a different time.
+
+**"Barber profile not found"**
+The barber account exists but their profile wasn't created properly. Contact support to have the profile set up.
+
+## Shop Setup Issues
+
+**"Shop not found. Check your code and try again."**
+A customer entered the wrong shop code. Verify your code in Shop Setup and have them try again. See shop-codes.md.
+
+**"This code is already taken by another shop"**
+Pick a different 4-character shop code.
+
+**"Only shop owners can add barbers"**
+Regular barbers can't add other barbers. Only the shop owner can do this.
+
 ## Customer Issues
 
 **Customer not showing in "My Customers"**

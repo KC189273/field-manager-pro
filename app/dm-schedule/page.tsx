@@ -153,9 +153,11 @@ export default function DmSchedulePage() {
         setSaveStatus('saved')
         setTimeout(() => setSaveStatus(prev => prev === 'saved' ? 'idle' : prev), 3000)
       } else {
+        console.error('DM Schedule save failed:', res.status)
         setSaveStatus('error')
       }
-    } catch {
+    } catch (err) {
+      console.error('DM Schedule save error:', err)
       setSaveStatus('error')
     } finally {
       setSaving(false)

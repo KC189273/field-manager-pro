@@ -455,11 +455,15 @@ function TimecardsPage() {
     setEditNote(shift.manual_note ?? '')
   }
 
+  const [editError, setEditError] = useState('')
+  const [addError, setAddError] = useState('')
+
   async function saveEdit() {
     if (!editShift || !editNote.trim()) return
     setEditSaving(true)
+    setEditError('')
     try {
-      await fetch('/api/shifts', {
+      const res = await fetch('/api/shifts', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -469,8 +473,15 @@ function TimecardsPage() {
           note: editNote.trim(),
         }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setEditError(d.error ?? `Save failed (${res.status}). Please try again.`)
+        return
+      }
       setEditShift(null)
       await loadShifts()
+    } catch {
+      setEditError('Network error. Please check your connection and try again.')
     } finally {
       setEditSaving(false)
     }
@@ -508,8 +519,9 @@ function TimecardsPage() {
   async function saveAdd() {
     if (!addForDay || !selectedUserId || !addNote.trim()) return
     setAddSaving(true)
+    setAddError('')
     try {
-      await fetch('/api/shifts', {
+      const res = await fetch('/api/shifts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -519,8 +531,15 @@ function TimecardsPage() {
           note: addNote.trim(),
         }),
       })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setAddError(d.error ?? `Save failed (${res.status}). Please try again.`)
+        return
+      }
       setAddForDay(null)
       await loadShifts()
+    } catch {
+      setAddError('Network error. Please check your connection and try again.')
     } finally {
       setAddSaving(false)
     }
@@ -1290,13 +1309,16 @@ function TimecardsPage() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
               </div>
               <p className="text-xs text-amber-400">This entry will be flagged for owner review in the weekly payroll report.</p>
+              {editError && (
+                <div className="bg-red-900/40 border border-red-700 rounded-xl px-3 py-2 text-sm text-red-300">{editError}</div>
+              )}
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={saveEdit} disabled={editSaving || !editNote.trim()}
                 className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
                 {editSaving ? 'Saving…' : 'Save Changes'}
               </button>
-              <button onClick={() => setEditShift(null)}
+              <button onClick={() => { setEditShift(null); setEditError('') }}
                 className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
                 Cancel
               </button>
@@ -1328,13 +1350,16 @@ function TimecardsPage() {
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
               </div>
               <p className="text-xs text-amber-400">This entry will be flagged for owner review in the weekly payroll report.</p>
+              {addError && (
+                <div className="bg-red-900/40 border border-red-700 rounded-xl px-3 py-2 text-sm text-red-300">{addError}</div>
+              )}
             </div>
             <div className="flex gap-2 mt-4">
               <button onClick={saveAdd} disabled={addSaving || !addNote.trim()}
                 className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
                 {addSaving ? 'Adding…' : 'Add Entry'}
               </button>
-              <button onClick={() => setAddForDay(null)}
+              <button onClick={() => { setAddForDay(null); setAddError('') }}
                 className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm transition-colors">
                 Cancel
               </button>

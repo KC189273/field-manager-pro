@@ -228,6 +228,32 @@ function TimecardsPage() {
   const [editShift, setEditShift] = useState<Shift | null>(null)
   const [editIn, setEditIn] = useState('')
   const [editOut, setEditOut] = useState('')
+
+  // Convert a datetime-local value to an ISO string in CST/CDT
+  // This ensures "12:00 PM" entered anywhere is always saved as 12:00 PM Central
+  function toCentralISO(datetimeLocal: string): string {
+    // datetime-local gives us "2026-07-22T12:00" — no timezone
+    // Append Central offset so it's interpreted as Central time, not the browser's timezone
+    // CDT = UTC-5, CST = UTC-6. Detect by checking if the date falls in DST.
+    const d = new Date(datetimeLocal)
+    const jan = new Date(d.getFullYear(), 0, 1).getTimezoneOffset()
+    const jul = new Date(d.getFullYear(), 6, 1).getTimezoneOffset()
+    const isDST = d.getTimezoneOffset() < Math.max(jan, jul)
+    // For Central: DST = -05:00, Standard = -06:00
+    // But we need to use Central's DST, not the browser's
+    // Simpler: just use America/Chicago via a fixed approach
+    // Treat the input as Central by appending the offset
+    const centralOffset = isDSTinCentral(d) ? '-05:00' : '-06:00'
+    return new Date(datetimeLocal + centralOffset).toISOString()
+  }
+
+  function isDSTinCentral(d: Date): boolean {
+    // US DST: second Sunday in March to first Sunday in November
+    const year = d.getFullYear()
+    const marchSecondSun = new Date(year, 2, 8 + (7 - new Date(year, 2, 8).getDay()) % 7, 2)
+    const novFirstSun = new Date(year, 10, 1 + (7 - new Date(year, 10, 1).getDay()) % 7, 2)
+    return d >= marchSecondSun && d < novFirstSun
+  }
   const [editNote, setEditNote] = useState('')
   const [editSaving, setEditSaving] = useState(false)
 
@@ -438,8 +464,8 @@ function TimecardsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shiftId: editShift.id,
-          clockIn: editIn ? new Date(editIn).toISOString() : null,
-          clockOut: editOut ? new Date(editOut).toISOString() : null,
+          clockIn: editIn ? toCentralISO(editIn) : null,
+          clockOut: editOut ? toCentralISO(editOut) : null,
           note: editNote.trim(),
         }),
       })
@@ -488,8 +514,8 @@ function TimecardsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: selectedUserId,
-          clockIn: new Date(addIn).toISOString(),
-          clockOut: addOut ? new Date(addOut).toISOString() : null,
+          clockIn: toCentralISO(addIn),
+          clockOut: addOut ? toCentralISO(addOut) : null,
           note: addNote.trim(),
         }),
       })

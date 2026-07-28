@@ -75,6 +75,10 @@ export default function TimeOffPage() {
   const [myRequests, setMyRequests] = useState<MyRequest[]>([])
   const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([])
   const [teamApproved, setTeamApproved] = useState<(PendingApproval & { approver_name?: string })[]>([])
+  const [allRequests, setAllRequests] = useState<(PendingApproval & { approver_name?: string; status: string; notes?: string | null })[]>([])
+  const [allFilter, setAllFilter] = useState<'all' | 'pending' | 'approved' | 'denied'>('all')
+  const [allSearch, setAllSearch] = useState('')
+  const [allLoaded, setAllLoaded] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Request modal
@@ -114,6 +118,16 @@ export default function TimeOffPage() {
     }
     setLoading(false)
   }, [])
+
+  async function loadAll() {
+    if (allLoaded) return
+    const res = await fetch('/api/time-off?all=true')
+    if (res.ok) {
+      const d = await res.json()
+      setAllRequests(d.allRequests ?? [])
+      setAllLoaded(true)
+    }
+  }
 
   useEffect(() => {
     if (!session) return
@@ -409,6 +423,95 @@ export default function TimeOffPage() {
                 </div>
               )}
             </div>
+
+            {/* All Requests — DM+ */}
+            {['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) && (
+              <div>
+                <button
+                  onClick={() => { loadAll() }}
+                  className="w-full text-left"
+                >
+                  <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-2">
+                    All Team Requests
+                    {allLoaded && <span className="text-gray-600 normal-case font-normal"> — {allRequests.length} total</span>}
+                  </p>
+                </button>
+
+                {!allLoaded ? (
+                  <button onClick={loadAll} className="w-full py-3 bg-gray-900 border border-gray-800 rounded-xl text-sm text-gray-400 hover:text-white transition-colors">
+                    Load all requests...
+                  </button>
+                ) : (
+                  <>
+                    {/* Filter pills + search */}
+                    <div className="flex flex-wrap gap-1.5 mb-2">
+                      {(['all', 'pending', 'approved', 'denied'] as const).map(f => (
+                        <button
+                          key={f}
+                          onClick={() => setAllFilter(f)}
+                          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                            allFilter === f
+                              ? f === 'pending' ? 'bg-amber-600 text-white' : f === 'approved' ? 'bg-green-600 text-white' : f === 'denied' ? 'bg-red-600 text-white' : 'bg-violet-600 text-white'
+                              : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                          }`}
+                        >
+                          {f.charAt(0).toUpperCase() + f.slice(1)}
+                          {f !== 'all' && ` (${allRequests.filter(r => r.status === f).length})`}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="relative mb-3">
+                      <svg className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                      </svg>
+                      <input
+                        value={allSearch}
+                        onChange={e => setAllSearch(e.target.value)}
+                        placeholder="Search by name..."
+                        className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
+                      />
+                    </div>
+
+                    {/* Request list */}
+                    <div className="space-y-2">
+                      {allRequests
+                        .filter(r => allFilter === 'all' || r.status === allFilter)
+                        .filter(r => !allSearch.trim() || r.user_name.toLowerCase().includes(allSearch.toLowerCase()))
+                        .map(r => (
+                          <div key={r.id} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {r.user_avatar_url ? (
+                                  <img src={r.user_avatar_url} alt="" className="w-7 h-7 rounded-full object-cover flex-shrink-0" />
+                                ) : (
+                                  <div className="w-7 h-7 rounded-full bg-violet-800 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">
+                                    {r.user_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()}
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium text-white truncate">{r.user_name}</p>
+                                  <p className="text-xs text-gray-400">{fmtDateRange(r.start_date, r.end_date)}</p>
+                                  {r.partial_day && r.partial_start_time && r.partial_end_time && (
+                                    <p className="text-[10px] text-gray-500">{fmtTime12(r.partial_start_time)} – {fmtTime12(r.partial_end_time)}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border flex-shrink-0 ${STATUS_STYLES[r.status] ?? 'text-gray-400 border-gray-700'}`}>
+                                {r.status}
+                              </span>
+                            </div>
+                            {r.reason && <p className="text-xs text-gray-500 mt-1.5 truncate">{r.reason}</p>}
+                            {r.notes && <p className="text-xs text-gray-600 mt-0.5 italic truncate">Note: {r.notes}</p>}
+                          </div>
+                        ))}
+                      {allRequests.filter(r => allFilter === 'all' || r.status === allFilter).filter(r => !allSearch.trim() || r.user_name.toLowerCase().includes(allSearch.toLowerCase())).length === 0 && (
+                        <p className="text-sm text-gray-600 text-center py-4">No requests found.</p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

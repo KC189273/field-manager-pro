@@ -89,7 +89,8 @@ export async function GET(req: NextRequest) {
     whereClause = `tc.completed_at IS NOT NULL AND tc.completed_at >= NOW() - INTERVAL '60 days'`
   } else {
     params.push(weekStart) // $1
-    whereClause = `t.week_start = $1`
+    // Show tasks for this week OR incomplete tasks from the last 4 weeks that roll over
+    whereClause = `(t.week_start = $1 OR (t.week_start < $1 AND t.week_start >= ($1::date - INTERVAL '28 days') AND NOT EXISTS (SELECT 1 FROM task_completions tc2 WHERE tc2.task_id = t.id)))`
   }
 
   const orgClause = appendOrgFilter(orgFilter, params, 'a')

@@ -113,6 +113,56 @@ export async function GET() {
     results.clockIn++
   }
 
+  // ── 2b. DM alert: employee scheduled but hasn't clocked in (5 min after start) ──
+  const missedClockIns = await query<{
+    id: string
+    employee_id: string
+    employee_name: string
+    manager_id: string
+    start_time: string
+    store_address: string
+  }>(`
+    SELECT ss.id, ss.employee_id, u.full_name AS employee_name, u.manager_id,
+      ss.start_time::text, dsl.address AS store_address
+    FROM scheduled_shifts ss
+    JOIN users u ON u.id = ss.employee_id
+    JOIN dm_store_locations dsl ON dsl.id = ss.store_location_id
+    INNER JOIN scheduled_shifts_publish ssp
+      ON ssp.store_location_id = ss.store_location_id
+      AND ssp.week_start = date_trunc('week', ss.shift_date)::date
+    WHERE u.is_active = TRUE
+      AND u.role = 'employee'
+      AND ss.shift_date = (NOW() AT TIME ZONE 'America/Chicago')::date
+      AND (ss.shift_date + ss.start_time)::timestamp AT TIME ZONE 'America/Chicago'
+            BETWEEN NOW() - INTERVAL '5 minutes 30 seconds'
+                AND NOW() - INTERVAL '4 minutes 30 seconds'
+      AND u.manager_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM shifts s
+        WHERE s.user_id = ss.employee_id
+          AND (s.clock_in_at AT TIME ZONE 'America/Chicago')::date = (NOW() AT TIME ZONE 'America/Chicago')::date
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM shift_reminders_sent srs WHERE srs.scheduled_shift_id = ss.id AND srs.sent_at > NOW() - INTERVAL '1 hour'
+      )
+  `)
+
+  for (const shift of missedClockIns) {
+    const [h, m] = shift.start_time.split(':').map(Number)
+    const ampm = h >= 12 ? 'PM' : 'AM'
+    const h12 = h % 12 || 12
+    const timeStr = `${h12}:${String(m).padStart(2, '0')} ${ampm}`
+    const shortAddr = shift.store_address.split(',')[0]
+
+    await sendPushToUser(
+      shift.manager_id,
+      'Missed Clock-In',
+      `${shift.employee_name} was scheduled at ${shortAddr} at ${timeStr} but hasn't clocked in yet.`,
+      'clock_in_reminder'
+    ).catch(() => {})
+  }
+  results.clockIn += missedClockIns.length
+
   // ── 3. DM and above: clock-out reminder at 8:00 PM CST ──
   if (hour === 20 && minute === 0) {
     const stillClockedIn = await query<{ id: string }>(`

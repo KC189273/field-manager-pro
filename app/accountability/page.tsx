@@ -457,7 +457,20 @@ function DetailModal({
             <p className="text-xs text-gray-500 uppercase tracking-wide">Accountability Record</p>
             <h2 className="font-bold text-white">{doc?.ref_number ?? '…'}</h2>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+          <div className="flex items-center gap-2">
+            {doc && (
+              <a
+                href={`/api/accountability/${docId}/export`}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs font-semibold text-gray-300 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download
+              </a>
+            )}
+            <button onClick={onClose} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+          </div>
         </div>
 
         <div className="p-5 space-y-5">

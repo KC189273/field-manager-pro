@@ -146,9 +146,10 @@ export default function TasksPage() {
   const [completeError, setCompleteError] = useState('')
 
   // Task filter
-  const [taskFilter, setTaskFilter] = useState<'all' | 'mine' | 'employee' | 'dm'>('all')
+  const [taskFilter, setTaskFilter] = useState<'all' | 'mine' | 'employee' | 'dm' | 'overdue'>('all')
   const [filterEmployeeId, setFilterEmployeeId] = useState('')
   const [filterDmId, setFilterDmId] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
 
   // Delete recurring modal
   const [deletingTask, setDeletingTask] = useState<Task | null>(null)
@@ -565,16 +566,35 @@ export default function TasksPage() {
   const empUsers = assignableUsers.filter(u => u.role === 'employee')
 
   const filteredTasks = (() => {
-    const base = session.role !== 'employee' ? deduplicateStoreTasks(tasks) : tasks
-    if (!canCreate) return base
-    if (taskFilter === 'mine') return base.filter(t => t.assignee_id === session.id)
-    if (taskFilter === 'employee' && filterEmployeeId) return base.filter(t => t.assignee_id === filterEmployeeId)
-    if (taskFilter === 'dm' && filterDmId) return base.filter(t => assigneeManagerMap.get(t.assignee_id) === filterDmId)
+    let base = session.role !== 'employee' ? deduplicateStoreTasks(tasks) : tasks
+    if (canCreate) {
+      if (taskFilter === 'mine') base = base.filter(t => t.assignee_id === session.id)
+      else if (taskFilter === 'employee' && filterEmployeeId) base = base.filter(t => t.assignee_id === filterEmployeeId)
+      else if (taskFilter === 'dm' && filterDmId) base = base.filter(t => assigneeManagerMap.get(t.assignee_id) === filterDmId)
+      else if (taskFilter === 'overdue') {
+        const today = new Date().toISOString().split('T')[0]
+        base = base.filter(t => !t.completed_at && t.due_date && t.due_date < today)
+      }
+    }
+    // Search filter
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      base = base.filter(t =>
+        t.title.toLowerCase().includes(q) ||
+        (t.description ?? '').toLowerCase().includes(q) ||
+        t.assignee_name.toLowerCase().includes(q)
+      )
+    }
     return base
   })()
 
   const pendingTasks = filteredTasks.filter(t => !t.completed_at)
   const completedTasks = filteredTasks.filter(t => t.completed_at)
+  const overdueCount = (session.role !== 'employee' ? deduplicateStoreTasks(tasks) : tasks).filter(t => {
+    if (t.completed_at) return false
+    if (!t.due_date) return false
+    return t.due_date < new Date().toISOString().split('T')[0]
+  }).length
 
   return (
     <div className="min-h-screen bg-gray-950 pb-24 pt-14">
@@ -634,21 +654,41 @@ export default function TasksPage() {
               <button onClick={() => setWeekOffset(w => w + 1)} className="text-gray-400 hover:text-white text-xl px-1 transition-colors">›</button>
             </div>
 
+            {/* Search bar */}
+            <div className="mb-3 relative">
+              <svg className="w-4 h-4 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search tasks by title, description, or assignee..."
+                className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-4 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500"
+              />
+              {searchQuery && (
+                <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
             {/* Task filter pills */}
             {canCreate && (
               <div className="mb-4 space-y-2">
                 <div className="flex flex-wrap gap-1.5">
-                  {(['all', 'mine', 'employee', 'dm'] as const).map(f => (
+                  {(['all', 'mine', 'overdue', 'employee', 'dm'] as const).map(f => (
                     <button
                       key={f}
                       onClick={() => { setTaskFilter(f); setFilterEmployeeId(''); setFilterDmId('') }}
                       className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
                         taskFilter === f
-                          ? 'bg-violet-600 text-white'
+                          ? f === 'overdue' ? 'bg-red-600 text-white' : 'bg-violet-600 text-white'
                           : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'
                       }`}
                     >
-                      {f === 'all' ? 'All' : f === 'mine' ? 'My Tasks' : f === 'employee' ? 'By Employee' : 'By DM'}
+                      {f === 'all' ? 'All' : f === 'mine' ? 'My Tasks' : f === 'overdue' ? `Overdue${overdueCount > 0 ? ` (${overdueCount})` : ''}` : f === 'employee' ? 'By Employee' : 'By DM'}
                     </button>
                   ))}
                 </div>

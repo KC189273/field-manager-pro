@@ -109,3 +109,31 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ ok: true, id: row.id })
 }
+
+// DELETE — clear a single day or entire month
+export async function DELETE(req: NextRequest) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  try { await ensureTable() } catch {}
+
+  const { searchParams } = new URL(req.url)
+  const date = searchParams.get('date')
+  const month = searchParams.get('month')
+
+  if (date) {
+    await query('DELETE FROM commission_entries WHERE user_id = $1 AND entry_date = $2', [session.id, date])
+    return NextResponse.json({ ok: true, cleared: 'day', date })
+  }
+
+  if (month) {
+    const monthStart = `${month}-01`
+    const [y, m] = monthStart.split('-').map(Number)
+    const lastDay = new Date(y, m, 0).getDate()
+    const monthEnd = `${month}-${String(lastDay).padStart(2, '0')}`
+    const result = await query('DELETE FROM commission_entries WHERE user_id = $1 AND entry_date >= $2 AND entry_date <= $3 RETURNING id', [session.id, monthStart, monthEnd])
+    return NextResponse.json({ ok: true, cleared: 'month', month, count: result.length })
+  }
+
+  return NextResponse.json({ error: 'Provide ?date=YYYY-MM-DD or ?month=YYYY-MM' }, { status: 400 })
+}

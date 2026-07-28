@@ -59,7 +59,7 @@ const ALL_FEATURES: Feature[] = [
   { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: isRetail },
   { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: isRetail },
   { href: '/dm-visit',        label: 'DM Store Visit',   short: 'DM Visit',  Icon: StoreIcon,          show: canViewTeam },
-  { href: '/dm-schedule',     label: 'DM Schedule',      short: 'DM Sched',  Icon: ScheduleIcon,       show: r => r === 'manager' || r === 'sales_director' || r === 'owner' || r === 'developer' },
+  { href: '/dm-schedule',     label: 'DM Schedules',     short: 'DM Sched',  Icon: ScheduleIcon,       show: r => r === 'sales_director' || r === 'owner' || r === 'developer' },
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: isOpsPlus },
   { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => isRetail(r) && r !== 'employee' },
   { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isRetail },

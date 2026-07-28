@@ -209,6 +209,27 @@ export default function CommissionsPage() {
     }
   }, [selectedDate, entries])
 
+  const [clearing, setClearing] = useState<'day' | 'month' | null>(null)
+
+  async function handleClearDay() {
+    if (!confirm('Clear this day\'s entry? This cannot be undone.')) return
+    setClearing('day')
+    await fetch(`/api/commissions?date=${selectedDate}`, { method: 'DELETE' })
+    setForm({ ...EMPTY_DAY })
+    await loadEntries()
+    setClearing(null)
+  }
+
+  async function handleClearMonth() {
+    const label = new Date(month + '-15').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+    if (!confirm(`Clear ALL entries for ${label}? This cannot be undone.`)) return
+    setClearing('month')
+    await fetch(`/api/commissions?month=${month}`, { method: 'DELETE' })
+    setForm({ ...EMPTY_DAY })
+    await loadEntries()
+    setClearing(null)
+  }
+
   async function handleSave() {
     setSaving(true)
     await fetch('/api/commissions', {
@@ -358,18 +379,32 @@ export default function CommissionsPage() {
               </div>
             </div>
 
-            <button onClick={handleSave} disabled={saving}
-              className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
-              {saving ? 'Saving...' : 'Save Entry'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
+                {saving ? 'Saving...' : 'Save Entry'}
+              </button>
+              <button onClick={handleClearDay} disabled={clearing === 'day'}
+                className="px-4 py-3 bg-gray-800 hover:bg-gray-700 disabled:opacity-60 text-gray-400 hover:text-red-400 font-semibold rounded-xl transition-colors text-sm">
+                {clearing === 'day' ? '...' : 'Clear Day'}
+              </button>
+            </div>
           </div>
         )}
 
         {/* ── MONTHLY SUMMARY ── */}
         {tab === 'summary' && (
           <div className="py-4 space-y-4">
-            <input type="month" value={month} onChange={e => setMonth(e.target.value)}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+            <div className="flex gap-2">
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+              {entries.length > 0 && (
+                <button onClick={handleClearMonth} disabled={clearing === 'month'}
+                  className="px-4 py-2 bg-red-900/40 hover:bg-red-900/60 disabled:opacity-60 border border-red-800/40 text-red-400 font-semibold rounded-xl transition-colors text-sm">
+                  {clearing === 'month' ? '...' : 'Clear Month'}
+                </button>
+              )}
+            </div>
 
             {/* Total Commission */}
             <div className="bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-500/30 rounded-2xl p-5 text-center">

@@ -41,12 +41,59 @@ function fmtTime12(t: string): string {
   return `${h12}:${m.toString().padStart(2, '0')} ${suffix}`
 }
 
-// GET /api/time-off — own requests + pending approvals
-export async function GET() {
+// GET /api/time-off — own requests + pending approvals (+ all team requests if ?all=true)
+export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try { await ensureTable() } catch {}
+
+  const { searchParams } = new URL(req.url)
+  const allMode = searchParams.get('all') === 'true'
+
+  // All team requests — DM+ only
+  if (allMode && ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)) {
+    const orgFilter = await getOrgFilter(session)
+    const params: unknown[] = []
+    let where = ''
+
+    if (session.role === 'manager') {
+      params.push(session.id)
+      where = `WHERE (u.manager_id = $${params.length} OR tor.user_id = $${params.length})`
+    } else if (orgFilter.filterByOrg && orgFilter.orgId) {
+      params.push(orgFilter.orgId)
+      where = `WHERE u.org_id = $${params.length}`
+    } else {
+      where = 'WHERE 1=1'
+    }
+
+    const allRequests = await query<{
+      id: string; start_date: string; end_date: string; reason: string | null
+      status: string; notes: string | null; created_at: string
+      partial_day: boolean; partial_start_time: string | null; partial_end_time: string | null
+      user_name: string; user_id: string; user_avatar_key: string | null
+      approver_name: string | null
+    }>(`
+      SELECT tor.id, tor.start_date::text, tor.end_date::text, tor.reason,
+             tor.status, tor.notes, tor.created_at::text,
+             tor.partial_day, tor.partial_start_time::text, tor.partial_end_time::text,
+             u.full_name AS user_name, u.id AS user_id, u.avatar_key AS user_avatar_key,
+             a.full_name AS approver_name
+      FROM time_off_requests tor
+      JOIN users u ON u.id = tor.user_id
+      LEFT JOIN users a ON a.id = tor.approver_id
+      ${where}
+      ORDER BY tor.start_date DESC
+      LIMIT 200
+    `, params)
+
+    const withAvatars = await Promise.all(allRequests.map(async r => ({
+      ...r,
+      user_avatar_url: r.user_avatar_key ? await getReceiptViewUrl(r.user_avatar_key as string) : null,
+    })))
+
+    return NextResponse.json({ allRequests: withAvatars })
+  }
 
   const myRequests = await query(`
     SELECT tor.id, tor.start_date::text, tor.end_date::text, tor.reason,

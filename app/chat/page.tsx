@@ -1306,37 +1306,44 @@ export default function ChatPage() {
                           )}
                         </button>
                       )}
-                      {/* Reaction pills */}
+                      {/* Reaction pills — iMessage style with names */}
                       {(msg.reactions ?? []).length > 0 && (() => {
                         const grouped = REACTION_EMOJIS
-                          .map(e => ({
-                            emoji: e,
-                            count: (msg.reactions ?? []).filter(r => r.emoji === e).length,
-                            reactedByMe: (msg.reactions ?? []).some(r => r.emoji === e && r.user_id === myId),
-                          }))
+                          .map(e => {
+                            const reactors = (msg.reactions ?? []).filter(r => r.emoji === e)
+                            return {
+                              emoji: e,
+                              count: reactors.length,
+                              reactedByMe: reactors.some(r => r.user_id === myId),
+                              names: reactors.map(r => r.user_id === myId ? 'You' : r.user_name.split(' ')[0]),
+                              fullNames: reactors.map(r => r.user_id === myId ? 'You' : r.user_name),
+                            }
+                          })
                           .filter(g => g.count > 0)
                         return (
                           <div className={`flex flex-wrap gap-1 mt-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
-                            {grouped.map(({ emoji, count, reactedByMe }) => (
-                              <button
-                                key={emoji}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  const names = (msg.reactions ?? [])
-                                    .filter(r => r.emoji === emoji)
-                                    .map(r => r.user_id === myId ? 'You' : r.user_name)
-                                  setReactionViewer({ msgId: msg.id, emoji, names, reactedByMe })
-                                }}
-                                className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-xs border transition-colors ${
-                                  reactedByMe
-                                    ? 'bg-violet-900/40 border-violet-500 text-violet-300'
-                                    : 'bg-gray-800 border-gray-700 text-gray-300'
-                                }`}
-                              >
-                                <span>{emoji}</span>
-                                {count > 1 && <span className="text-[10px]">{count}</span>}
-                              </button>
-                            ))}
+                            {grouped.map(({ emoji, count, reactedByMe, names, fullNames }) => {
+                              const displayNames = names.length <= 3
+                                ? names.join(', ')
+                                : `${names.slice(0, 2).join(', ')} +${names.length - 2}`
+                              return (
+                                <button
+                                  key={emoji}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setReactionViewer({ msgId: msg.id, emoji, names: fullNames, reactedByMe })
+                                  }}
+                                  className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border transition-colors ${
+                                    reactedByMe
+                                      ? 'bg-violet-900/40 border-violet-500 text-violet-300'
+                                      : 'bg-gray-800 border-gray-700 text-gray-300'
+                                  }`}
+                                >
+                                  <span>{emoji}</span>
+                                  <span className="text-[10px] font-medium">{displayNames}</span>
+                                </button>
+                              )
+                            })}
                           </div>
                         )
                       })()}

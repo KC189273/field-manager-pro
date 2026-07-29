@@ -84,11 +84,96 @@ export default function MySchedulePage() {
   const [storeShifts, setStoreShifts] = useState<StoreShift[]>([])
   const [storeLoading, setStoreLoading] = useState(false)
 
+  // DM self-scheduling
+  const [dmStores, setDmStores] = useState<Store[]>([])
+  const [addDay, setAddDay] = useState<string | null>(null)
+  const [addForm, setAddForm] = useState({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' })
+  const [addSaving, setAddSaving] = useState(false)
+  const [addError, setAddError] = useState('')
+
   const weekStart = getWeekMonday(weekOffset)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(setSession)
   }, [])
+
+  // Load DM's stores for self-scheduling
+  useEffect(() => {
+    if (!session || session.role !== 'manager') return
+    fetch('/api/dm-store-locations').then(r => r.json()).then(d => {
+      if (d.locations) setDmStores(d.locations.filter((l: Store & { active: boolean }) => l.active))
+    })
+  }, [session])
+
+  const isDm = session?.role === 'manager'
+
+  async function addDmShift() {
+    if (!addDay || !addForm.storeId || !addForm.startTime || !addForm.endTime) {
+      setAddError('Please select a store and set times.')
+      return
+    }
+    setAddSaving(true)
+    setAddError('')
+    const res = await fetch('/api/staff-schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storeId: addForm.storeId,
+        employeeId: session!.id,
+        shiftDate: addDay,
+        startTime: addForm.startTime,
+        endTime: addForm.endTime,
+        roleNote: addForm.note || null,
+        breakMinutes: 0,
+        isOnCall: false,
+        isDmShift: true,
+      }),
+    })
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setAddError(d.error ?? 'Failed to add shift')
+      setAddSaving(false)
+      return
+    }
+    // Auto-publish so it shows immediately
+    await fetch('/api/staff-schedule/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: addForm.storeId, weekStart }),
+    }).catch(() => {})
+    setAddDay(null)
+    setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' })
+    setAddSaving(false)
+    // Reload shifts
+    setLoading(true)
+    const p = new URLSearchParams({ weekStart })
+    const r = await fetch(`/api/my-schedule?${p}`)
+    if (r.ok) { const d = await r.json(); setShifts(d.shifts ?? []) }
+    setLoading(false)
+  }
+
+  async function deleteDmShift(shiftDate: string, startTime: string, storeAddress: string) {
+    if (!confirm(`Remove your ${fmtTime(startTime)} shift at ${storeAddress.split(',')[0]}?`)) return
+    // Find the shift ID from staff-schedule
+    const res = await fetch(`/api/staff-schedule?weekStart=${weekStart}`)
+    if (!res.ok) return
+    const d = await res.json()
+    const match = (d.shifts ?? []).find((s: { employee_id: string; shift_date: string; start_time: string }) =>
+      s.employee_id === session!.id && s.shift_date === shiftDate && s.start_time === startTime
+    )
+    if (!match) return
+    await fetch('/api/staff-schedule', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftId: match.id }),
+    })
+    // Reload
+    setLoading(true)
+    const p = new URLSearchParams({ weekStart })
+    const r2 = await fetch(`/api/my-schedule?${p}`)
+    if (r2.ok) { const d2 = await r2.json(); setShifts(d2.shifts ?? []) }
+    setLoading(false)
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -204,8 +289,13 @@ export default function MySchedulePage() {
 
                     {/* Shifts or off */}
                     <div className="flex-1 min-w-0">
-                      {dayShifts.length === 0 ? (
+                      {dayShifts.length === 0 && !isDm ? (
                         <p className="text-sm text-gray-600 pt-1">Off</p>
+                      ) : dayShifts.length === 0 && isDm ? (
+                        <button onClick={() => { setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
+                          className="text-sm text-violet-400 hover:text-violet-300 font-medium pt-1 transition-colors">
+                          + Add shift
+                        </button>
                       ) : (
                         <div className="space-y-2">
                           {dayShifts.map((shift, j) => (
@@ -231,6 +321,18 @@ export default function MySchedulePage() {
                       )}
                     </div>
 
+                    {/* DM: add another shift + delete buttons */}
+                    {isDm && dayShifts.length > 0 && (
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <button onClick={() => { setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
+                          className="text-[10px] text-violet-400 hover:text-violet-300 font-semibold">+ Add</button>
+                        {dayShifts.map((s, j) => (
+                          <button key={j} onClick={() => deleteDmShift(dayDate, s.start_time, s.store_address)}
+                            className="text-[10px] text-red-400/60 hover:text-red-400 font-medium">Remove {fmtTime(s.start_time)}</button>
+                        ))}
+                      </div>
+                    )}
+
                     {/* Hours badge — only for non-on-call shifts */}
                     {dayShifts.some(s => !s.is_on_call) && (
                       <div className="flex-shrink-0 text-right">
@@ -251,7 +353,59 @@ export default function MySchedulePage() {
 
         {!loading && shifts.length === 0 && (
           <div className="text-center text-gray-500 py-12">
-            <p className="text-sm">No shifts scheduled for this week</p>
+            <p className="text-sm">{isDm ? 'No shifts yet — tap a day above to add your schedule' : 'No shifts scheduled for this week'}</p>
+          </div>
+        )}
+
+        {/* ── DM Add Shift Modal ── */}
+        {addDay && isDm && (
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setAddDay(null)}>
+            <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
+              <h2 className="text-lg font-bold text-white mb-1">Add Shift</h2>
+              <p className="text-xs text-gray-500 mb-4">
+                {new Date(addDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Store</label>
+                  <select value={addForm.storeId} onChange={e => setAddForm(f => ({ ...f, storeId: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500">
+                    <option value="">Select store...</option>
+                    {dmStores.map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Start Time</label>
+                    <input type="time" value={addForm.startTime} onChange={e => setAddForm(f => ({ ...f, startTime: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">End Time</label>
+                    <input type="time" value={addForm.endTime} onChange={e => setAddForm(f => ({ ...f, endTime: e.target.value }))}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Visit reason / notes</label>
+                  <textarea value={addForm.note} onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
+                    placeholder="Why this store? What will you cover during your visit?"
+                    rows={3}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-violet-500 resize-none" />
+                </div>
+                {addError && <p className="text-sm text-red-400">{addError}</p>}
+              </div>
+              <div className="flex gap-2 mt-5">
+                <button onClick={addDmShift} disabled={addSaving || !addForm.storeId}
+                  className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors">
+                  {addSaving ? 'Adding...' : 'Add Shift'}
+                </button>
+                <button onClick={() => setAddDay(null)}
+                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
           </div>
         )}
 

@@ -4,6 +4,8 @@ import { query, queryOne } from '@/lib/db'
 import Anthropic from '@anthropic-ai/sdk'
 import { getAccountSupportContext } from '@/lib/agents/tools/account-context'
 import { scrubPII } from '@/lib/agents/runtime/guardrails'
+import { sendPushToUser } from '@/lib/apns'
+import { sendEmail } from '@/lib/notifications'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -296,34 +298,69 @@ function parseResponse(text: string): { message: string; escalate: boolean; esca
 }
 
 async function escalateConversation(convId: string, reason: string, userName: string) {
-  // Get full transcript
   const messages = await query<{ role: string; body: string; created_at: string }>(`
     SELECT role, body, created_at::text FROM support_conversation_messages
     WHERE conversation_id = $1 ORDER BY created_at
   `, [convId])
 
   const transcript = messages.map(m => `[${m.role}] ${m.body}`).join('\n\n')
+  const firstUserMsg = messages.find(m => m.role === 'user')?.body ?? 'No message'
 
-  // Get conversation details
-  const conv = await queryOne<{ user_name: string; user_role: string; industry: string; org_id: string | null }>(`
-    SELECT user_name, user_role, industry, org_id FROM support_conversations WHERE id = $1
+  const conv = await queryOne<{ user_name: string; user_role: string; industry: string; org_id: string | null; user_id: string }>(`
+    SELECT user_name, user_role, industry, org_id, user_id FROM support_conversations WHERE id = $1
   `, [convId])
 
-  // Update conversation status
   await queryOne(`
     UPDATE support_conversations SET status = 'escalated', escalated_to = 'Shaun', escalation_reason = $1
     WHERE id = $2
   `, [reason, convId])
 
-  // Create escalation action in agent_actions for the admin inbox
+  // Create escalation action with conversation_id for reply routing
   await queryOne(`
-    INSERT INTO agent_actions (agent, type, risk_level, status, account_id, subject, body, reason)
-    VALUES ('support', 'escalation', 'high', 'pending', $1,
-      $2, $3, $4)
+    INSERT INTO agent_actions (agent, type, risk_level, status, account_id, subject, body, reason, payload)
+    VALUES ('support', 'escalation', 'high', 'pending', $1, $2, $3, $4, $5)
   `, [
     conv?.org_id ?? null,
-    `[SUPPORT ESCALATION] ${conv?.user_name ?? userName} (${conv?.user_role ?? 'unknown'})`,
+    `[SUPPORT] ${conv?.user_name ?? userName} (${conv?.user_role ?? 'unknown'})`,
     `Conversation transcript:\n\n${transcript}`,
     reason,
+    JSON.stringify({ conversation_id: convId, user_id: conv?.user_id, user_name: conv?.user_name, first_question: firstUserMsg }),
   ])
+
+  // Push notification to all developers
+  const devs = await query<{ id: string }>(`SELECT id FROM users WHERE role = 'developer' AND is_active = TRUE`)
+  for (const dev of devs) {
+    sendPushToUser(
+      dev.id,
+      `Support Escalation — ${conv?.user_name ?? userName}`,
+      firstUserMsg.slice(0, 100),
+      'support_escalation'
+    ).catch(() => {})
+  }
+
+  // Email to developer + owner
+  const admins = await query<{ email: string; full_name: string }>(`
+    SELECT email, full_name FROM users WHERE role IN ('developer', 'owner') AND is_active = TRUE
+  `)
+  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  for (const admin of admins) {
+    sendEmail(
+      admin.email,
+      `[Support Escalation] ${conv?.user_name ?? userName}: ${firstUserMsg.slice(0, 60)}`,
+      `<div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+        <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
+          <h1 style="color:white;margin:0;font-size:20px;">Support Escalation</h1>
+          <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">${conv?.user_name ?? userName} (${conv?.user_role ?? 'unknown'})</p>
+        </div>
+        <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
+          <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Question:</strong> ${firstUserMsg}</p>
+          <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Reason:</strong> ${reason}</p>
+          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
+          <p style="font-size:12px;color:#888;margin:0 0 4px;"><strong>Full Transcript:</strong></p>
+          <pre style="font-size:12px;color:#555;background:#f9f9f9;padding:12px;border-radius:8px;white-space:pre-wrap;">${transcript.slice(0, 2000)}</pre>
+          <a href="${appUrl}/admin/agents" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;margin-top:16px;">Reply in App</a>
+        </div>
+      </div>`
+    ).catch(() => {})
+  }
 }

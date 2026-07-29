@@ -17,6 +17,7 @@ interface Action {
   subject: string | null
   body: string | null
   reason: string | null
+  payload: unknown
   reviewed_by: string | null
   created_at: string
   reviewed_at: string | null
@@ -69,7 +70,7 @@ function agentColor(agent: string): string {
 
 export default function AgentInboxPage() {
   const [session, setSession] = useState<Session | null>(null)
-  const [tab, setTab] = useState<'pending' | 'auto' | 'runs' | 'health'>('pending')
+  const [tab, setTab] = useState<'pending' | 'auto' | 'runs' | 'health' | 'support'>('pending')
   const [actions, setActions] = useState<Action[]>([])
   const [runs, setRuns] = useState<Run[]>([])
   const [spend, setSpend] = useState<{ today: number; total: number }>({ today: 0, total: 0 })
@@ -81,6 +82,50 @@ export default function AgentInboxPage() {
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
   const [testResults, setTestResults] = useState<{ test: string; passed: boolean; detail: string }[] | null>(null)
   const [testRunning, setTestRunning] = useState(false)
+
+  // Reply to escalation
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [replyConvId, setReplyConvId] = useState<string | null>(null)
+  const [replyText, setReplyText] = useState('')
+  const [replySending, setReplySending] = useState(false)
+
+  // Support analytics
+  const [analytics, setAnalytics] = useState<{
+    stats: { total: number; active: number; resolved: number; escalated: number; total_messages: number; unique_users: number } | null
+    conversations: { id: string; user_name: string; user_role: string; status: string; turn_count: number; created_at: string; escalation_reason: string | null; first_question: string | null; resolution: string | null }[]
+    topUsers: { user_name: string; user_role: string; count: number }[]
+    escalationReasons: { reason: string; count: number }[]
+  } | null>(null)
+  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+
+  async function sendReply(actionId: string, conversationId: string) {
+    if (!replyText.trim()) return
+    setReplySending(true)
+    const res = await fetch('/api/support/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ conversationId, actionId, message: replyText.trim() }),
+    })
+    if (res.ok) {
+      showMsg('Reply sent! The user has been notified.')
+      setReplyingTo(null); setReplyConvId(null); setReplyText('')
+      await loadData()
+    } else {
+      const d = await res.json().catch(() => ({}))
+      showMsg(d.error ?? 'Reply failed', 'error')
+    }
+    setReplySending(false)
+  }
+
+  async function loadAnalytics() {
+    setAnalyticsLoading(true)
+    const res = await fetch('/api/support/analytics')
+    if (res.ok) {
+      const d = await res.json()
+      setAnalytics(d)
+    }
+    setAnalyticsLoading(false)
+  }
 
   async function runRegressionTest() {
     setTestRunning(true)
@@ -189,15 +234,15 @@ export default function AgentInboxPage() {
 
         {/* Tabs */}
         <div className="flex gap-1 mb-5 bg-gray-900 border border-gray-800 rounded-xl p-1">
-          {(['pending', 'auto', 'runs', 'health'] as const).map(t => (
+          {(['pending', 'support', 'auto', 'runs', 'health'] as const).map(t => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => { setTab(t); if (t === 'support' && !analytics) loadAnalytics() }}
               className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-colors ${
                 tab === t ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'
               }`}
             >
-              {t === 'pending' ? `Pending (${pending.length})` : t === 'auto' ? 'Auto' : t === 'runs' ? 'Runs' : 'Health'}
+              {t === 'pending' ? `Pending (${pending.length})` : t === 'support' ? 'Support' : t === 'auto' ? 'Auto' : t === 'runs' ? 'Runs' : 'Health'}
             </button>
           ))}
         </div>
@@ -281,6 +326,42 @@ export default function AgentInboxPage() {
                           </button>
                         </div>
                       </div>
+                    ) : a.type === 'escalation' && (a.payload as Record<string, unknown>)?.conversation_id ? (
+                      /* Escalation reply flow */
+                      replyingTo === a.id ? (
+                        <div className="space-y-2 border-t border-gray-700 pt-3">
+                          <textarea
+                            value={replyText}
+                            onChange={e => setReplyText(e.target.value)}
+                            placeholder="Type your reply to the user..."
+                            rows={4}
+                            autoFocus
+                            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 resize-none"
+                          />
+                          <p className="text-[10px] text-gray-500">Your reply goes directly to the user&apos;s chat. They&apos;ll get a push notification. The answer is auto-saved so the AI can handle similar questions next time.</p>
+                          <div className="flex gap-2">
+                            <button onClick={() => sendReply(a.id, (a.payload as Record<string, unknown>)?.conversation_id as string)} disabled={replySending || !replyText.trim()}
+                              className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
+                              {replySending ? 'Sending…' : 'Send Reply'}
+                            </button>
+                            <button onClick={() => { setReplyingTo(null); setReplyText('') }}
+                              className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm transition-colors">Cancel</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => { setReplyingTo(a.id); setReplyConvId((a.payload as Record<string, unknown>)?.conversation_id as string); setReplyText('') }}
+                            className="flex-1 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm transition-colors"
+                          >
+                            Reply to User
+                          </button>
+                          <button onClick={() => handleAction(a.id, 'reject')} disabled={acting === a.id + 'reject'}
+                            className="px-4 py-2.5 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-400 text-sm font-semibold transition-colors">
+                            Dismiss
+                          </button>
+                        </div>
+                      )
                     ) : (
                       <div className="flex gap-2 pt-1">
                         <button
@@ -419,6 +500,109 @@ export default function AgentInboxPage() {
                     </div>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* ── SUPPORT ANALYTICS ── */}
+            {tab === 'support' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white">AI Assistant Analytics</p>
+                  <button onClick={loadAnalytics} disabled={analyticsLoading}
+                    className="text-xs text-violet-400 hover:text-violet-300 font-semibold">
+                    {analyticsLoading ? 'Loading...' : 'Refresh'}
+                  </button>
+                </div>
+
+                {!analytics ? (
+                  <div className="text-center text-gray-500 py-10 text-sm">Loading analytics...</div>
+                ) : (
+                  <>
+                    {/* Stats cards */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        ['Conversations', analytics.stats?.total ?? 0],
+                        ['Unique Users', analytics.stats?.unique_users ?? 0],
+                        ['Messages', analytics.stats?.total_messages ?? 0],
+                      ].map(([label, val]) => (
+                        <div key={String(label)} className="bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
+                          <p className="text-lg font-bold text-white">{val}</p>
+                          <p className="text-[10px] text-gray-500">{label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="bg-green-900/20 border border-green-800/30 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-green-400">{analytics.stats?.resolved ?? 0}</p>
+                        <p className="text-[10px] text-green-500">Resolved</p>
+                      </div>
+                      <div className="bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-amber-400">{analytics.stats?.active ?? 0}</p>
+                        <p className="text-[10px] text-amber-500">Active</p>
+                      </div>
+                      <div className="bg-red-900/20 border border-red-800/30 rounded-xl p-3 text-center">
+                        <p className="text-lg font-bold text-red-400">{analytics.stats?.escalated ?? 0}</p>
+                        <p className="text-[10px] text-red-500">Escalated</p>
+                      </div>
+                    </div>
+
+                    {/* Top users */}
+                    {analytics.topUsers.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Top Users</p>
+                        <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+                          {analytics.topUsers.map((u, i) => (
+                            <div key={i} className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 last:border-0">
+                              <div>
+                                <p className="text-sm text-white">{u.user_name}</p>
+                                <p className="text-[10px] text-gray-500">{u.user_role}</p>
+                              </div>
+                              <span className="text-sm font-semibold text-violet-400">{u.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Escalation reasons */}
+                    {analytics.escalationReasons.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Escalation Reasons</p>
+                        <div className="space-y-1.5">
+                          {analytics.escalationReasons.map((r, i) => (
+                            <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2">
+                              <p className="text-xs text-red-300">{r.reason}</p>
+                              <p className="text-[10px] text-red-500 mt-0.5">{r.count}x</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* All conversations */}
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">All Conversations</p>
+                      <div className="space-y-2">
+                        {analytics.conversations.map(c => (
+                          <div key={c.id} className={`bg-gray-900 border rounded-xl px-4 py-3 ${c.status === 'escalated' ? 'border-red-800/40' : c.status === 'resolved' ? 'border-green-800/40' : 'border-gray-800'}`}>
+                            <div className="flex items-start justify-between gap-2 mb-1">
+                              <div>
+                                <p className="text-sm font-medium text-white">{c.user_name}</p>
+                                <p className="text-[10px] text-gray-500">{c.user_role} · {new Date(c.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {c.turn_count} turns</p>
+                              </div>
+                              <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                                c.status === 'resolved' ? 'bg-green-900/30 text-green-400' : c.status === 'escalated' ? 'bg-red-900/30 text-red-400' : 'bg-amber-900/30 text-amber-400'
+                              }`}>{c.status}</span>
+                            </div>
+                            {c.first_question && <p className="text-xs text-gray-300 mb-1">{c.first_question}</p>}
+                            {c.escalation_reason && <p className="text-[10px] text-red-400 italic">Escalation: {c.escalation_reason}</p>}
+                            {c.status === 'resolved' && c.resolution && <p className="text-[10px] text-green-400 italic truncate">Resolution: {c.resolution}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>

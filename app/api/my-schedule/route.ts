@@ -14,7 +14,8 @@ export async function GET(req: NextRequest) {
   weekEnd.setDate(weekEnd.getDate() + 6)
   const weekEndStr = weekEnd.toISOString().split('T')[0]
 
-  // Employee's own shifts
+  // Employee's own shifts — DMs see all (published or not), employees need published
+  const isDm = ['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)
   const shifts = await query<{
     shift_date: string
     start_time: string
@@ -24,19 +25,30 @@ export async function GET(req: NextRequest) {
     break_minutes: number
     is_on_call: boolean
   }>(
-    `SELECT ss.shift_date::text, ss.start_time::text, ss.end_time::text,
-            sl.address AS store_address, ss.role_note,
-            COALESCE(ss.break_minutes, 0) AS break_minutes,
-            COALESCE(ss.is_on_call, FALSE) AS is_on_call
-     FROM scheduled_shifts ss
-     JOIN dm_store_locations sl ON sl.id = ss.store_location_id
-     INNER JOIN scheduled_shifts_publish ssp
-       ON ssp.store_location_id = ss.store_location_id
-       AND ssp.week_start = $2
-     WHERE ss.employee_id = $1
-       AND ss.shift_date >= $2
-       AND ss.shift_date <= $3
-     ORDER BY ss.shift_date, ss.start_time`,
+    isDm
+      ? `SELECT ss.shift_date::text, ss.start_time::text, ss.end_time::text,
+              sl.address AS store_address, ss.role_note,
+              COALESCE(ss.break_minutes, 0) AS break_minutes,
+              COALESCE(ss.is_on_call, FALSE) AS is_on_call
+         FROM scheduled_shifts ss
+         JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+         WHERE ss.employee_id = $1
+           AND ss.shift_date >= $2
+           AND ss.shift_date <= $3
+         ORDER BY ss.shift_date, ss.start_time`
+      : `SELECT ss.shift_date::text, ss.start_time::text, ss.end_time::text,
+              sl.address AS store_address, ss.role_note,
+              COALESCE(ss.break_minutes, 0) AS break_minutes,
+              COALESCE(ss.is_on_call, FALSE) AS is_on_call
+         FROM scheduled_shifts ss
+         JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+         INNER JOIN scheduled_shifts_publish ssp
+           ON ssp.store_location_id = ss.store_location_id
+           AND ssp.week_start = $2
+         WHERE ss.employee_id = $1
+           AND ss.shift_date >= $2
+           AND ss.shift_date <= $3
+         ORDER BY ss.shift_date, ss.start_time`,
     [session.id, weekStart, weekEndStr]
   )
 

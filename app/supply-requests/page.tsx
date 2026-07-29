@@ -231,6 +231,8 @@ export default function SupplyRequestsPage() {
   const [form, setForm] = useState({ itemName: '', quantity: '1', category: '', notes: '', urgency: 2, storeLocationId: '' })
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [photoKey, setPhotoKey] = useState<string | null>(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
 
   // Mark ordered modal
   const [orderingReq, setOrderingReq] = useState<SupplyRequest | null>(null)
@@ -279,9 +281,26 @@ export default function SupplyRequestsPage() {
     setHistLoading(false)
   }
 
+  async function uploadSupplyPhoto(file: File) {
+    setPhotoUploading(true)
+    try {
+      const ext = file.name?.split('.').pop() ?? 'jpg'
+      const res = await fetch('/api/supply-requests/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: `photo.${ext}`, contentType: file.type || 'image/png' }),
+      })
+      const { url, key } = await res.json()
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'image/png' } })
+      setPhotoKey(key)
+    } catch { setSubmitError('Photo upload failed.') }
+    finally { setPhotoUploading(false) }
+  }
+
   async function submitRequest() {
     setSubmitError('')
     if (!form.itemName.trim()) { setSubmitError('Item name is required.'); return }
+    if (!photoKey) { setSubmitError('Photo is required.'); return }
     setSubmitting(true)
     const res = await fetch('/api/supply-requests', {
       method: 'POST',
@@ -293,12 +312,14 @@ export default function SupplyRequestsPage() {
         notes: form.notes || null,
         urgency: form.urgency,
         storeLocationId: form.storeLocationId || null,
+        photoKey,
       }),
     })
     setSubmitting(false)
     if (res.ok) {
       setShowSubmit(false)
       setForm({ itemName: '', quantity: '1', category: '', notes: '', urgency: 2, storeLocationId: '' })
+      setPhotoKey(null)
       await loadRequests()
     } else {
       const d = await res.json().catch(() => ({}))
@@ -702,6 +723,38 @@ export default function SupplyRequestsPage() {
                 <textarea rows={3} placeholder="Any additional details…"
                   value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500 resize-none" />
+              </div>
+
+              {/* Photo upload */}
+              <div>
+                <label className="block text-xs text-gray-400 mb-1.5">Photo <span className="text-red-400">*</span></label>
+                {photoKey ? (
+                  <div className="flex items-center gap-2 bg-green-900/20 border border-green-700/40 rounded-xl px-4 py-3">
+                    <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="text-sm text-green-400 flex-1">Photo uploaded</span>
+                    <button onClick={() => setPhotoKey(null)} className="text-xs text-gray-500 hover:text-red-400">Remove</button>
+                  </div>
+                ) : (
+                  <div
+                    onPaste={(e) => { const img = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/')); if (img) { e.preventDefault(); const f = img.getAsFile(); if (f) uploadSupplyPhoto(f) } }}
+                    tabIndex={0}
+                    className={`relative flex flex-col items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-4 text-sm text-gray-400 hover:text-gray-200 transition-colors ${photoUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                  >
+                    <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadSupplyPhoto(f); e.target.value = '' }} disabled={photoUploading}
+                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }} />
+                    {photoUploading ? 'Uploading...' : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        <span>Add Photo or Paste Screenshot</span>
+                        <span className="text-[10px] text-gray-600">Tap to browse or Ctrl+V / Cmd+V to paste</span>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
 
               {submitError && (

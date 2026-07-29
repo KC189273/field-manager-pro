@@ -4,6 +4,7 @@ import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { Resend } from 'resend'
 import { escapeHtml } from '@/lib/escape-html'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
@@ -412,6 +413,26 @@ export async function POST(req: NextRequest) {
       ${c.fu_follow_up_date?.trim() ? `<div style="padding:12px 10px;border-bottom:1px solid #e5e7eb"><p style="font-weight:600;color:#6b7280;font-size:12px;margin:0 0 4px">Follow-Up Date</p><p style="font-size:13px;color:#374151">${c.fu_follow_up_date.trim()}</p></div>` : ''}
     ` : ''
 
+    // Generate signed URLs for photos to embed in email
+    let photoHtml = ''
+    if (body.photoKeys?.length > 0) {
+      const photoUrls: string[] = []
+      for (const key of body.photoKeys as string[]) {
+        try {
+          const signedUrl = await getReceiptViewUrl(key)
+          photoUrls.push(signedUrl)
+        } catch {}
+      }
+      if (photoUrls.length > 0) {
+        photoHtml = `<div style="padding:12px 10px;border-bottom:1px solid #e5e7eb">
+          <p style="font-weight:600;color:#6b7280;font-size:12px;margin:0 0 8px">Photos / Screenshots</p>
+          <div style="display:flex;flex-wrap:wrap;gap:8px">
+            ${photoUrls.map(url => `<img src="${url}" alt="Visit photo" style="max-width:280px;max-height:200px;border-radius:8px;border:1px solid #e5e7eb" />`).join('')}
+          </div>
+        </div>`
+      }
+    }
+
     // Email copy to selected RDM + DM
     const rdmEmail = RDM_EMAILS[quickRdm]
     if (rdmEmail) {
@@ -437,6 +458,7 @@ export async function POST(req: NextRequest) {
           <div style="padding:12px 10px;border-bottom:1px solid #e5e7eb"><p style="font-weight:600;color:#6b7280;font-size:12px;margin:0 0 4px">Key Takeaways & Commitments</p><p style="color:#111827;margin:0;font-size:14px">${escapeHtml(body.quick_takeaways.trim())}</p></div>
           <div style="padding:12px 10px${coachingHtml ? ';border-bottom:1px solid #e5e7eb' : ''}"><p style="font-weight:600;color:#6b7280;font-size:12px;margin:0 0 4px">DM Visit Impact Made</p><p style="color:#111827;margin:0;font-size:14px">${escapeHtml(body.quick_impact.trim())}</p></div>
           ${coachingHtml}
+          ${photoHtml}
         </div>
         <p style="font-size:11px;color:#9ca3af;text-align:center;margin-top:16px">Submitted via Field Manager Pro</p>
       </div>`

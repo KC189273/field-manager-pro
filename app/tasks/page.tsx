@@ -151,6 +151,9 @@ export default function TasksPage() {
   const [filterDmId, setFilterDmId] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // Detail modal
+  const [detailTask, setDetailTask] = useState<Task | null>(null)
+
   // Delete recurring modal
   const [deletingTask, setDeletingTask] = useState<Task | null>(null)
 
@@ -752,6 +755,7 @@ export default function TasksPage() {
                           onLightbox={setLightboxUrl}
                           onRemind={sendReminder}
                           onReassign={task.store_id && canCreate ? () => { setReassigningTask(task); setReassignToId('') } : undefined}
+                          onDetail={setDetailTask}
                           selectMode={selectMode}
                           selected={selectedIds.has(task.id)}
                           onSelect={toggleSelect}
@@ -779,6 +783,7 @@ export default function TasksPage() {
                           onLightbox={setLightboxUrl}
                           onRemind={sendReminder}
                           onReassign={undefined}
+                          onDetail={setDetailTask}
                           selectMode={selectMode}
                           selected={selectedIds.has(task.id)}
                           onSelect={toggleSelect}
@@ -1265,6 +1270,115 @@ export default function TasksPage() {
       )}
 
       {/* ── Photo Lightbox ── */}
+      {/* Task Detail Modal */}
+      {detailTask && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setDetailTask(null)}>
+          <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-lg border border-gray-800 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-gray-900 z-10 flex items-center justify-between px-5 py-4 border-b border-gray-800">
+              <div>
+                <p className="text-xs text-gray-500 uppercase tracking-wide">Task Detail</p>
+                <h2 className="text-lg font-bold text-white mt-0.5">{detailTask.title}</h2>
+              </div>
+              <button onClick={() => setDetailTask(null)} className="text-gray-500 hover:text-white text-2xl leading-none">&times;</button>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Status */}
+              <div className="flex flex-wrap gap-2">
+                <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-full border ${detailTask.completed_at ? 'bg-green-900/30 text-green-400 border-green-800/40' : 'bg-amber-900/30 text-amber-400 border-amber-800/40'}`}>
+                  {detailTask.completed_at ? 'Completed' : 'Pending'}
+                </span>
+                {detailTask.require_photo && <span className="text-[10px] font-semibold bg-amber-900/30 text-amber-400 border border-amber-800/40 px-2.5 py-1 rounded-full">📷 Photo Required</span>}
+                {detailTask.recurrence && detailTask.recurrence !== 'none' && <span className="text-[10px] font-semibold bg-emerald-900/30 text-emerald-400 border border-emerald-800/40 px-2.5 py-1 rounded-full">↻ {detailTask.recurrence}</span>}
+              </div>
+
+              {/* Meta */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Assigned To</p>
+                  <p className="text-sm text-white font-medium">{detailTask.store_address ? `🏪 ${detailTask.store_address}` : detailTask.assignee_name}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Created By</p>
+                  <p className="text-sm text-white font-medium">{detailTask.created_by_name ?? 'Unknown'}</p>
+                </div>
+                <div className="bg-gray-800 rounded-xl p-3">
+                  <p className="text-xs text-gray-500 mb-1">Created</p>
+                  <p className="text-sm text-white font-medium">{new Date(detailTask.created_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                </div>
+                {detailTask.due_date && (
+                  <div className="bg-gray-800 rounded-xl p-3">
+                    <p className="text-xs text-gray-500 mb-1">Due Date</p>
+                    <p className={`text-sm font-medium ${!detailTask.completed_at && new Date(detailTask.due_date) < new Date() ? 'text-red-400' : 'text-white'}`}>
+                      {new Date(detailTask.due_date).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}
+                      {' '}
+                      {new Date(detailTask.due_date).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Description */}
+              {detailTask.description && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1.5">Description</p>
+                  <div className="bg-gray-800 rounded-xl px-4 py-3">
+                    <p className="text-sm text-gray-200 whitespace-pre-wrap leading-relaxed">{detailTask.description}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Store task assignees */}
+              {detailTask.store_id && detailTask.storeAssignees && detailTask.storeAssignees.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1.5">Sent To</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {detailTask.storeAssignees.map((name, i) => (
+                      <span key={i} className="text-xs bg-gray-800 text-gray-300 px-2.5 py-1 rounded-full">{name}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Completion info */}
+              {detailTask.completed_at && (
+                <div className="bg-green-900/20 border border-green-800/40 rounded-xl px-4 py-3 space-y-2">
+                  <p className="text-sm font-medium text-green-400">
+                    ✓ Completed {new Date(detailTask.completed_at).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    {detailTask.completed_by_name && ` by ${detailTask.completed_by_name}`}
+                  </p>
+                  {detailTask.note && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1">Completion Note</p>
+                      <p className="text-sm text-gray-300 italic">"{detailTask.note}"</p>
+                    </div>
+                  )}
+                  {(detailTask.photo_urls?.length > 0 || detailTask.photo_url) && (
+                    <div>
+                      <p className="text-xs text-gray-500 mb-1.5">Completion Photos</p>
+                      <div className="flex flex-wrap gap-2">
+                        {(detailTask.photo_urls?.length > 0 ? detailTask.photo_urls : [detailTask.photo_url]).filter(Boolean).map((url, i) => (
+                          <button key={i} onClick={() => { setDetailTask(null); setLightboxUrl(url!) }}>
+                            <img src={url!} alt="Photo" className="h-24 w-28 object-cover rounded-lg border border-gray-700 hover:border-violet-500 transition-colors" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Week info */}
+              <div className="text-xs text-gray-600 text-center pt-2">
+                Week of {new Date(detailTask.week_start + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                {detailTask.week_start < new Date().toISOString().split('T')[0] && !detailTask.completed_at && (
+                  <span className="text-amber-400 ml-1">· Rolled over from previous week</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {lightboxUrl && (
         <div
           className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
@@ -1318,6 +1432,7 @@ function TaskCard({
   onLightbox,
   onRemind,
   onReassign,
+  onDetail,
   selectMode = false,
   selected = false,
   onSelect,
@@ -1334,6 +1449,7 @@ function TaskCard({
   onLightbox: (url: string) => void
   onRemind: (id: string) => void
   onReassign?: () => void
+  onDetail?: (task: Task) => void
   selectMode?: boolean
   selected?: boolean
   onSelect?: (id: string) => void
@@ -1402,7 +1518,7 @@ function TaskCard({
         )}
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0" onClick={!selectMode ? () => onDetail?.(task) : undefined} style={!selectMode ? { cursor: 'pointer' } : undefined}>
           <p className={`text-sm font-semibold ${isDone ? 'text-gray-400 line-through' : 'text-white'}`}>
             {task.title}
           </p>

@@ -200,6 +200,7 @@ export async function POST(req: NextRequest) {
   const { notes, photos, storeLocationId, opsManagerId } = await req.json()
   if (!notes?.trim())   return NextResponse.json({ error: 'Notes are required' }, { status: 400 })
   if (!opsManagerId)    return NextResponse.json({ error: 'Ops manager is required' }, { status: 400 })
+  if (!photos?.length)  return NextResponse.json({ error: 'At least one photo is required' }, { status: 400 })
 
   const user = await queryOne<{ manager_id: string | null; org_id: string | null }>(
     `SELECT manager_id, org_id FROM users WHERE id = $1`, [session.id]

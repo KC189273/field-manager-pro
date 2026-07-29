@@ -249,10 +249,24 @@ export default function MerchOrdersPage() {
     setSubmitError('')
   }
 
+  function handleMerchPaste(e: React.ClipboardEvent) {
+    const img = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'))
+    if (!img) return
+    e.preventDefault()
+    const file = img.getAsFile()
+    if (file) {
+      setPhotoFiles(prev => [...prev, file])
+      const reader = new FileReader()
+      reader.onload = ev => setPhotoPreviews(prev => [...prev, ev.target?.result as string])
+      reader.readAsDataURL(file)
+    }
+  }
+
   async function submitOrder() {
     setSubmitError('')
     if (!form.notes.trim())    { setSubmitError('Please describe what you need.'); return }
     if (!form.opsManagerId)    { setSubmitError('Please select an ops manager.'); return }
+    if (photoFiles.length === 0) { setSubmitError('At least one photo is required.'); return }
     setSubmitting(true)
 
     // Upload photos sequentially
@@ -572,9 +586,14 @@ export default function MerchOrdersPage() {
                     ))}
                   </div>
                 )}
-                <div className="relative w-full border border-dashed border-gray-700 rounded-xl py-3 text-sm text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-colors text-center">
+                <div
+                  onPaste={handleMerchPaste}
+                  tabIndex={0}
+                  className="relative w-full border border-dashed border-gray-700 rounded-xl py-4 text-sm text-gray-500 hover:text-gray-300 hover:border-gray-600 transition-colors text-center flex flex-col items-center gap-1"
+                >
                   <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={e => { addPhotos(e.target.files); e.target.value = '' }} style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
-                  + Add Photos
+                  <span>+ Add Photos or Paste Screenshot</span>
+                  <span className="text-[10px] text-gray-600">Tap to browse or Ctrl+V / Cmd+V to paste</span>
                 </div>
               </div>
 

@@ -182,9 +182,10 @@ export async function POST(req: NextRequest) {
 
   try { await ensureTable() } catch {}
 
-  const { itemName, quantity, category, notes, urgency, storeLocationId } = await req.json()
+  const { itemName, quantity, category, notes, urgency, storeLocationId, photoKey } = await req.json()
   if (!itemName?.trim())         return NextResponse.json({ error: 'Item name is required' }, { status: 400 })
   if (![1, 2, 3].includes(urgency)) return NextResponse.json({ error: 'Invalid urgency level' }, { status: 400 })
+  if (!photoKey) return NextResponse.json({ error: 'Photo is required' }, { status: 400 })
 
   const user = await queryOne<{ manager_id: string | null; org_id: string | null }>(
     `SELECT manager_id, org_id FROM users WHERE id = $1`, [session.id]
@@ -213,8 +214,8 @@ export async function POST(req: NextRequest) {
   await query(`
     INSERT INTO supply_requests
       (org_id, employee_id, employee_name, manager_id, manager_name,
-       store_location_id, store_address, item_name, quantity, category, notes, urgency)
-    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       store_location_id, store_address, item_name, quantity, category, notes, urgency, photo_key)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
   `, [
     user?.org_id ?? null,
     session.id, session.fullName,
@@ -225,6 +226,7 @@ export async function POST(req: NextRequest) {
     category || null,
     notes?.trim() || null,
     urgency,
+    photoKey,
   ])
 
   // Only notify the DM if the submitter is an employee (DMs don't notify themselves)

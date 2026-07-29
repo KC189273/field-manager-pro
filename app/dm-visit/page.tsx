@@ -433,25 +433,40 @@ export default function DmVisitPage() {
     }
   }
 
-  async function handleQuickPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function uploadPhotoFile(file: File) {
     setQuickPhotoUploading(true)
     try {
+      const ext = file.name?.split('.').pop() ?? (file.type === 'image/png' ? 'png' : 'jpg')
       const res = await fetch('/api/dm-store-visits/upload-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, contentType: file.type }),
+        body: JSON.stringify({ filename: `screenshot.${ext}`, contentType: file.type || 'image/png' }),
       })
       const { url, key } = await res.json()
-      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type || 'image/png' } })
       setQuickPhotoKeys(prev => [...prev, key])
     } catch {
       setQuickError('Photo upload failed. Please try again.')
     } finally {
       setQuickPhotoUploading(false)
-      e.target.value = ''
     }
+  }
+
+  async function handleQuickPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    await uploadPhotoFile(file)
+    e.target.value = ''
+  }
+
+  async function handleQuickPhotoPaste(e: React.ClipboardEvent) {
+    const items = Array.from(e.clipboardData.items)
+    const imageItem = items.find(item => item.type.startsWith('image/'))
+    if (!imageItem) return
+    e.preventDefault()
+    const file = imageItem.getAsFile()
+    if (!file) return
+    await uploadPhotoFile(file)
   }
 
   async function handleQuickSubmit(e: React.FormEvent) {
@@ -1119,15 +1134,20 @@ export default function DmVisitPage() {
                     ))}
                   </div>
                 )}
-                <div className={`relative flex items-center gap-2 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-3 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full justify-center ${quickPhotoUploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                <div
+                  onPaste={handleQuickPhotoPaste}
+                  tabIndex={0}
+                  className={`relative flex flex-col items-center gap-1 bg-gray-800 hover:bg-gray-700 border border-dashed border-gray-600 rounded-xl px-4 py-4 text-sm text-gray-400 hover:text-gray-200 transition-colors w-full ${quickPhotoUploading ? 'opacity-50 pointer-events-none' : ''}`}
+                >
                   <input type="file" accept="image/*" onChange={handleQuickPhotoUpload} disabled={quickPhotoUploading}
                     style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%' }} />
                   {quickPhotoUploading ? 'Uploading...' : (
                     <>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                       </svg>
-                      Add Photo
+                      <span>Add Photo or Paste Screenshot</span>
+                      <span className="text-[10px] text-gray-600">Tap to browse or Ctrl+V / Cmd+V to paste</span>
                     </>
                   )}
                 </div>

@@ -122,6 +122,17 @@ export default function FacilitiesPage() {
     setPhotoPreview(URL.createObjectURL(file))
   }
 
+  function onFacilityPhotoPaste(e: React.ClipboardEvent) {
+    const img = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image/'))
+    if (!img) return
+    e.preventDefault()
+    const file = img.getAsFile()
+    if (file) {
+      setPhotoFile(file)
+      setPhotoPreview(URL.createObjectURL(file))
+    }
+  }
+
   async function submitTicket() {
     if (!form.storeId) return alert('Please select a store.')
     if (!form.category) return alert('Please select a category.')
@@ -383,16 +394,19 @@ export default function FacilitiesPage() {
                     </button>
                   </div>
                 ) : (
-                  <button
+                  <div
+                    onPaste={onFacilityPhotoPaste}
+                    tabIndex={0}
                     onClick={() => fileRef.current?.click()}
-                    className="w-full h-32 border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-violet-500 hover:text-violet-400 transition-colors"
+                    className="w-full h-32 border-2 border-dashed border-gray-700 rounded-xl flex flex-col items-center justify-center gap-1 text-gray-500 hover:border-violet-500 hover:text-violet-400 transition-colors cursor-pointer"
                   >
                     <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    <span className="text-sm">Tap to take or upload a photo</span>
-                  </button>
+                    <span className="text-sm">Tap to take/upload or paste screenshot</span>
+                    <span className="text-[10px] text-gray-600">Ctrl+V / Cmd+V to paste</span>
+                  </div>
                 )}
               </div>
 

@@ -131,25 +131,17 @@ export default function DmSchedulesPage() {
                         <div className="w-2 h-2 rounded-full bg-green-400" />
                         <span className="text-sm font-semibold text-white">{dm.dm_name}</span>
                       </div>
-                      <span className="text-[10px] text-gray-500">{dm.shifts.length} shift{dm.shifts.length !== 1 ? 's' : ''}</span>
+                      <span className="text-[10px] text-gray-500">{dm.shifts.length} store{dm.shifts.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="px-4 py-2 space-y-1.5">
                       {dm.shifts.map((s, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span className="text-xs text-violet-400 font-medium w-28 shrink-0">{fmtTime(s.start_time)} – {fmtTime(s.end_time)}</span>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-gray-300 truncate">{shortAddr(s.store_address)}</p>
-                            {s.role_note && <p className="text-xs text-gray-500 truncate">{s.role_note}</p>}
-                          </div>
+                        <div key={i}>
+                          <p className="text-sm text-gray-300">{shortAddr(s.store_address)}{s.role_note ? <span className="text-gray-500"> — {s.role_note}</span> : ''}</p>
                         </div>
                       ))}
                       {dm.visit_notes.filter(n => n.reason).map((n, i) => (
-                        <div key={`n-${i}`} className="flex items-start gap-2">
-                          <span className="text-xs text-amber-400 font-medium w-28 shrink-0">Plan note</span>
-                          <div className="flex-1 min-w-0">
-                            {n.store_address && <p className="text-sm text-gray-300 truncate">{shortAddr(n.store_address)}</p>}
-                            <p className="text-xs text-gray-500">{n.reason}</p>
-                          </div>
+                        <div key={`n-${i}`}>
+                          <p className="text-sm text-gray-300">{n.store_address ? shortAddr(n.store_address) : ''}{n.store_address && n.reason ? <span className="text-gray-500"> — </span> : ''}<span className="text-amber-400/70">{n.reason}</span></p>
                         </div>
                       ))}
                     </div>
@@ -202,7 +194,7 @@ export default function DmSchedulesPage() {
                 {dmSchedules.length === 0 && <p className="text-gray-500 text-sm text-center py-8">No DM schedules found for this week.</p>}
                 {dmSchedules.map(dm => {
                   const isExp = expandedDm === dm.dm_id || filterDmId === dm.dm_id || dmSchedules.length === 1
-                  const totalShifts = dm.days.reduce((s, d) => s + d.shifts.length, 0)
+                  const totalStores = dm.days.reduce((s, d) => s + d.shifts.length, 0)
                   const workDays = dm.days.filter(d => d.working).length
                   return (
                     <div key={dm.dm_id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -210,7 +202,7 @@ export default function DmSchedulesPage() {
                         <div>
                           <p className="text-sm font-semibold text-white">{dm.dm_name}</p>
                           <p className="text-xs text-gray-500">
-                            {workDays} day{workDays !== 1 ? 's' : ''} · {totalShifts} shift{totalShifts !== 1 ? 's' : ''}
+                            {workDays} day{workDays !== 1 ? 's' : ''} · {totalStores} store{totalStores !== 1 ? 's' : ''}
                             {!dm.has_shifts && !dm.has_notes && <span className="text-amber-400 ml-1">· No schedule submitted</span>}
                           </p>
                         </div>
@@ -232,14 +224,12 @@ export default function DmSchedulesPage() {
                                       <>
                                         {day.shifts.map((s, si) => (
                                           <div key={si} className="mb-1">
-                                            <p className="text-sm text-gray-300">{shortAddr(s.store_address)}</p>
-                                            <p className="text-xs text-gray-500">{fmtTime(s.start_time)} – {fmtTime(s.end_time)}{s.role_note ? ` · ${s.role_note}` : ''}</p>
+                                            <p className="text-sm text-gray-300" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{shortAddr(s.store_address)}{s.role_note ? <span className="text-gray-500"> — {s.role_note}</span> : ''}</p>
                                           </div>
                                         ))}
                                         {day.visit_notes.filter(n => n.reason || n.store_address).map((n, ni) => (
                                           <div key={`vn-${ni}`} className="mb-1">
-                                            {n.store_address && <p className="text-sm text-gray-300">{shortAddr(n.store_address)}</p>}
-                                            {n.reason && <p className="text-xs text-amber-400/70">{n.reason}</p>}
+                                            <p className="text-sm text-gray-300" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{n.store_address ? shortAddr(n.store_address) : ''}{n.store_address && n.reason ? <span className="text-gray-500"> — </span> : ''}{n.reason && <span className="text-amber-400/70">{n.reason}</span>}</p>
                                           </div>
                                         ))}
                                         {day.shifts.length === 0 && day.visit_notes.filter(n => n.reason || n.store_address).length === 0 && (

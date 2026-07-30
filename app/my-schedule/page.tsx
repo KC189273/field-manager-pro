@@ -90,6 +90,7 @@ export default function MySchedulePage() {
   const [addForm, setAddForm] = useState({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' })
   const [addSaving, setAddSaving] = useState(false)
   const [addError, setAddError] = useState('')
+  const [editingShift, setEditingShift] = useState<{ date: string; startTime: string; storeAddress: string } | null>(null)
 
   const weekStart = getWeekMonday(weekOffset)
 
@@ -108,12 +109,18 @@ export default function MySchedulePage() {
   const isDm = session?.role === 'manager'
 
   async function addDmShift() {
-    if (!addDay || !addForm.storeId || !addForm.startTime || !addForm.endTime) {
-      setAddError('Please select a store and set times.')
+    if (!addDay || !addForm.storeId) {
+      setAddError('Please select a store.')
       return
     }
     setAddSaving(true)
     setAddError('')
+
+    // If editing, delete the old shift first
+    if (editingShift) {
+      await deleteDmShift(editingShift.date, editingShift.startTime, editingShift.storeAddress, true)
+    }
+
     const res = await fetch('/api/staff-schedule', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -152,8 +159,8 @@ export default function MySchedulePage() {
     setLoading(false)
   }
 
-  async function deleteDmShift(shiftDate: string, startTime: string, storeAddress: string) {
-    if (!confirm(`Remove your ${fmtTime(startTime)} shift at ${storeAddress.split(',')[0]}?`)) return
+  async function deleteDmShift(shiftDate: string, startTime: string, storeAddress: string, silent = false) {
+    if (!silent && !confirm(`Remove your shift at ${storeAddress.split(',')[0]}?`)) return
     // Find the shift ID from staff-schedule
     const res = await fetch(`/api/staff-schedule?weekStart=${weekStart}`)
     if (!res.ok) return
@@ -252,8 +259,8 @@ export default function MySchedulePage() {
         {!loading && shifts.length > 0 && (
           <div className="flex gap-3 mb-5">
             <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-center">
-              <p className="text-xl font-bold text-white">{totalHours % 1 === 0 ? totalHours : totalHours.toFixed(1)}</p>
-              <p className="text-xs text-gray-500 mt-0.5">Hours</p>
+              <p className="text-xl font-bold text-white">{shifts.length}</p>
+              <p className="text-xs text-gray-500 mt-0.5">Store{shifts.length !== 1 ? 's' : ''}</p>
             </div>
             <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-center">
               <p className="text-xl font-bold text-white">{daysWorking}</p>
@@ -292,28 +299,20 @@ export default function MySchedulePage() {
                       {dayShifts.length === 0 && !isDm ? (
                         <p className="text-sm text-gray-600 pt-1">Off</p>
                       ) : dayShifts.length === 0 && isDm ? (
-                        <button onClick={() => { setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
+                        <button onClick={() => { setEditingShift(null); setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
                           className="text-sm text-violet-400 hover:text-violet-300 font-medium pt-1 transition-colors">
-                          + Add shift
+                          + Add store
                         </button>
                       ) : (
                         <div className="space-y-2">
                           {dayShifts.map((shift, j) => (
-                            <div key={j}>
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <p className={`text-sm font-semibold ${shift.is_on_call ? 'text-amber-300' : isToday ? 'text-violet-200' : 'text-white'}`}>
-                                  {fmtTime(shift.start_time)} – {fmtTime(shift.end_time)}
-                                  {!shift.is_on_call && shift.break_minutes > 0 && (
-                                    <span className="text-gray-500 font-normal text-xs ml-2">· {shift.break_minutes}m break</span>
-                                  )}
-                                </p>
-                                {shift.is_on_call && (
-                                  <span className="text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.5 rounded-full">ON CALL</span>
-                                )}
-                              </div>
-                              <p className="text-xs text-gray-400 mt-0.5 truncate">{shift.store_address}</p>
+                            <div key={j} onClick={isDm ? () => { const matchStore = dmStores.find(s => s.address === shift.store_address); setEditingShift({ date: dayDate, startTime: shift.start_time, storeAddress: shift.store_address }); setAddDay(dayDate); setAddForm({ storeId: matchStore?.id ?? '', startTime: shift.start_time, endTime: shift.end_time, note: shift.role_note ?? '' }); setAddError('') } : undefined}
+                              className={isDm ? 'cursor-pointer hover:bg-gray-800/50 rounded-lg px-1 -mx-1 transition-colors' : ''}>
+                              <p className={`text-sm font-semibold ${isToday ? 'text-violet-200' : 'text-white'}`}>
+                                {shift.store_address}
+                              </p>
                               {shift.role_note && (
-                                <p className="text-xs text-violet-400 mt-0.5">{shift.role_note}</p>
+                                <p className="text-xs text-violet-400 mt-0.5 leading-relaxed" style={{ wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{shift.role_note}</p>
                               )}
                             </div>
                           ))}
@@ -321,26 +320,20 @@ export default function MySchedulePage() {
                       )}
                     </div>
 
-                    {/* DM: add another shift + delete buttons */}
+                    {/* DM: add + edit hint */}
                     {isDm && dayShifts.length > 0 && (
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <button onClick={() => { setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
-                          className="text-[10px] text-violet-400 hover:text-violet-300 font-semibold">+ Add</button>
-                        {dayShifts.map((s, j) => (
-                          <button key={j} onClick={() => deleteDmShift(dayDate, s.start_time, s.store_address)}
-                            className="text-[10px] text-red-400/60 hover:text-red-400 font-medium">Remove {fmtTime(s.start_time)}</button>
-                        ))}
+                      <div className="mt-1.5">
+                        <button onClick={() => { setEditingShift(null); setAddDay(dayDate); setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' }); setAddError('') }}
+                          className="text-[10px] text-violet-400 hover:text-violet-300 font-semibold">+ Add Store</button>
+                        <span className="text-[10px] text-gray-600 ml-2">Tap a store to edit</span>
                       </div>
                     )}
 
-                    {/* Hours badge — only for non-on-call shifts */}
-                    {dayShifts.some(s => !s.is_on_call) && (
+                    {/* Store count badge */}
+                    {dayShifts.length > 0 && (
                       <div className="flex-shrink-0 text-right">
                         <span className={`text-xs font-semibold ${isToday ? 'text-violet-400' : 'text-gray-400'}`}>
-                          {(() => {
-                            const h = dayShifts.filter(s => !s.is_on_call).reduce((s, sh) => s + shiftHours(sh.start_time, sh.end_time, sh.break_minutes), 0)
-                            return h % 1 === 0 ? `${h}h` : `${h.toFixed(1)}h`
-                          })()}
+                          {dayShifts.length} store{dayShifts.length !== 1 ? 's' : ''}
                         </span>
                       </div>
                     )}
@@ -359,9 +352,9 @@ export default function MySchedulePage() {
 
         {/* ── DM Add Shift Modal ── */}
         {addDay && isDm && (
-          <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setAddDay(null)}>
+          <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => { setAddDay(null); setEditingShift(null) }}>
             <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
-              <h2 className="text-lg font-bold text-white mb-1">Add Shift</h2>
+              <h2 className="text-lg font-bold text-white mb-1">{editingShift ? 'Edit Store Visit' : 'Add Store Visit'}</h2>
               <p className="text-xs text-gray-500 mb-4">
                 {new Date(addDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
               </p>
@@ -374,18 +367,7 @@ export default function MySchedulePage() {
                     {dmStores.map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
                   </select>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">Start Time</label>
-                    <input type="time" value={addForm.startTime} onChange={e => setAddForm(f => ({ ...f, startTime: e.target.value }))}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-gray-500 mb-1">End Time</label>
-                    <input type="time" value={addForm.endTime} onChange={e => setAddForm(f => ({ ...f, endTime: e.target.value }))}
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500" />
-                  </div>
-                </div>
+                {/* Times hidden — not needed for DM store visit planning */}
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Visit reason / notes</label>
                   <textarea value={addForm.note} onChange={e => setAddForm(f => ({ ...f, note: e.target.value }))}
@@ -398,10 +380,16 @@ export default function MySchedulePage() {
               <div className="flex gap-2 mt-5">
                 <button onClick={addDmShift} disabled={addSaving || !addForm.storeId}
                   className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors">
-                  {addSaving ? 'Adding...' : 'Add Shift'}
+                  {addSaving ? 'Saving...' : editingShift ? 'Save Changes' : 'Add Store'}
                 </button>
-                <button onClick={() => setAddDay(null)}
-                  className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors">
+                {editingShift && (
+                  <button onClick={() => { deleteDmShift(editingShift.date, editingShift.startTime, editingShift.storeAddress); setAddDay(null); setEditingShift(null) }}
+                    className="px-4 py-3 bg-red-900/40 hover:bg-red-900/60 text-red-400 font-semibold rounded-xl text-sm transition-colors">
+                    Remove
+                  </button>
+                )}
+                <button onClick={() => { setAddDay(null); setEditingShift(null) }}
+                  className={`${editingShift ? 'px-4' : 'flex-1'} bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors`}>
                   Cancel
                 </button>
               </div>

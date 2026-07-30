@@ -199,6 +199,27 @@ export default function BottomNav() {
     setAiStatus('new')
   }
 
+  // Hide AI button on scroll down, show on scroll up
+  const [aiButtonHidden, setAiButtonHidden] = useState(false)
+  const lastScrollY = useRef(0)
+
+  useEffect(() => {
+    let ticking = false
+    function onScroll() {
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        const y = window.scrollY
+        if (y > lastScrollY.current + 10) setAiButtonHidden(true)
+        else if (y < lastScrollY.current - 10) setAiButtonHidden(false)
+        lastScrollY.current = y
+        ticking = false
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   // Don't show on public/special pages
   const isHidden = NO_NAV_PREFIXES.some(p => pathname === p || pathname.startsWith(p + '/'))
   if (isHidden || !role) return null
@@ -342,8 +363,8 @@ export default function BottomNav() {
       )}
 
       {/* ── AI Assistant floating button + thought bubble ── */}
-      {!aiChatOpen && !moreOpen && (
-        <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+      {!aiChatOpen && !moreOpen && !aiButtonHidden && (
+        <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2 transition-all duration-200" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {/* Thought bubble */}
           {!aiBubbleDismissed && (
             <div className="relative bg-white rounded-2xl pl-4 pr-2 py-2 shadow-lg flex items-center gap-1">

@@ -130,9 +130,9 @@ export async function GET() {
     actionItems.push({ severity: 'warning', title: 'Cache hit ratio below optimal', detail: `${cache[0].ratio}% (target: >99%).`, action: 'Monitor — may need more RAM if this drops further.' })
   }
 
-  // Table bloat
+  // Table bloat — only flag if dead rows exceed 100K (Postgres autovacuum handles normal bloat)
   for (const t of tables) {
-    if (t.dead_rows > 10000) {
+    if (t.dead_rows > 100000) {
       actionItems.push({ severity: 'warning', title: `Table bloat: ${t.table_name}`, detail: `${t.dead_rows.toLocaleString()} dead rows taking up space.`, action: 'Run VACUUM on this table in the Supabase SQL editor.' })
     }
   }
@@ -169,7 +169,7 @@ export async function GET() {
 
   // GPS table growth
   const gpsTableData = tables.find(t => t.table_name === 'gps_breadcrumbs')
-  if (gpsTableData && gpsTableData.row_count > 1500000) {
+  if (gpsTableData && gpsTableData.row_count > 3000000) {
     actionItems.push({ severity: 'warning', title: 'GPS table growing large', detail: `${gpsTableData.row_count.toLocaleString()} rows (${gpsTableData.total_size}). Weekly cleanup runs Sundays.`, action: 'No action needed — cleanup cron handles this. If growth accelerates, consider reducing GPS ping frequency.' })
   } else if (gpsTableData) {
     actionItems.push({ severity: 'info', title: 'GPS table healthy', detail: `${gpsTableData.row_count.toLocaleString()} rows (${gpsTableData.total_size}). Auto-cleanup removes data older than 90 days.`, action: 'No action needed.' })

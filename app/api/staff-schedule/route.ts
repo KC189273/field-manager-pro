@@ -60,12 +60,14 @@ export async function GET(req: NextRequest) {
       FROM scheduled_shifts ss
       JOIN users u ON u.id = ss.employee_id
       JOIN dm_store_locations sl ON sl.id = ss.store_location_id
-      INNER JOIN scheduled_shifts_publish ssp
-        ON ssp.store_location_id = ss.store_location_id
-        AND ssp.week_start = $1
       WHERE ss.employee_id = $2
         AND ss.shift_date >= $1
         AND ss.shift_date <= $3
+        AND EXISTS (
+          SELECT 1 FROM scheduled_shifts_publish ssp
+          WHERE ssp.store_location_id = ss.store_location_id
+            AND ssp.week_start BETWEEN ($1::date - 6) AND ($3::date)
+        )
       ORDER BY ss.shift_date, ss.start_time
     `, [weekStart, session.id, weekEndStr])
 

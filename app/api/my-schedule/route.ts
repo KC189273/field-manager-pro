@@ -42,12 +42,14 @@ export async function GET(req: NextRequest) {
               COALESCE(ss.is_on_call, FALSE) AS is_on_call
          FROM scheduled_shifts ss
          JOIN dm_store_locations sl ON sl.id = ss.store_location_id
-         INNER JOIN scheduled_shifts_publish ssp
-           ON ssp.store_location_id = ss.store_location_id
-           AND ssp.week_start = $2
          WHERE ss.employee_id = $1
            AND ss.shift_date >= $2
            AND ss.shift_date <= $3
+           AND EXISTS (
+             SELECT 1 FROM scheduled_shifts_publish ssp
+             WHERE ssp.store_location_id = ss.store_location_id
+               AND ssp.week_start BETWEEN ($2::date - 6) AND ($3::date)
+           )
          ORDER BY ss.shift_date, ss.start_time`,
     [session.id, weekStart, weekEndStr]
   )
@@ -98,12 +100,14 @@ export async function GET(req: NextRequest) {
                     ss.role_note, COALESCE(ss.is_on_call, FALSE) AS is_on_call
              FROM scheduled_shifts ss
              JOIN users u ON u.id = ss.employee_id
-             INNER JOIN scheduled_shifts_publish ssp
-               ON ssp.store_location_id = ss.store_location_id
-               AND ssp.week_start = $1
              WHERE ss.store_location_id = $2
                AND ss.shift_date >= $1
                AND ss.shift_date <= $3
+               AND EXISTS (
+                 SELECT 1 FROM scheduled_shifts_publish ssp
+                 WHERE ssp.store_location_id = ss.store_location_id
+                   AND ssp.week_start BETWEEN ($1::date - 6) AND ($3::date)
+               )
              ORDER BY ss.shift_date, ss.start_time, u.full_name`,
             [weekStart, storeId, weekEndStr]
           )

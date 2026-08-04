@@ -194,6 +194,27 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ shifts })
 }
 
+// Check for overlapping shifts — returns the conflicting shift if found
+async function findOverlappingShift(userId: string, clockIn: string, clockOut: string | null, excludeShiftId?: string): Promise<{ id: string; clock_in_at: string; clock_out_at: string } | null> {
+  if (!clockOut) return null // Can't overlap if no clock-out
+  const exclude = excludeShiftId ? ` AND s.id != '${excludeShiftId.replace(/'/g, "''")}'` : ''
+  const overlap = await queryOne<{ id: string; clock_in_at: string; clock_out_at: string }>(`
+    SELECT s.id, s.clock_in_at::text, s.clock_out_at::text
+    FROM shifts s
+    WHERE s.user_id = $1
+      AND s.clock_out_at IS NOT NULL
+      AND s.clock_in_at < $3::timestamptz
+      AND s.clock_out_at > $2::timestamptz
+      ${exclude}
+    LIMIT 1
+  `, [userId, clockIn, clockOut])
+  return overlap
+}
+
+function fmtOverlapTime(iso: string): string {
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+}
+
 async function isTimecardLocked(userId: string, shiftDate: string): Promise<boolean> {
   const row = await queryOne<{ locked: boolean }>(`
     SELECT EXISTS(
@@ -233,6 +254,17 @@ export async function POST(req: NextRequest) {
     `SELECT id, full_name, email, org_id FROM users WHERE id = $1`, [userId]
   )
   if (!employee[0]) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+
+  // Check for overlapping shifts
+  if (clockOut) {
+    const overlap = await findOverlappingShift(userId, clockIn, clockOut)
+    if (overlap) {
+      return NextResponse.json({
+        error: `This entry overlaps with an existing shift (${fmtOverlapTime(overlap.clock_in_at)} – ${fmtOverlapTime(overlap.clock_out_at)}). Please adjust the times so they don't overlap.`,
+        overlap: { existingIn: overlap.clock_in_at, existingOut: overlap.clock_out_at },
+      }, { status: 409 })
+    }
+  }
 
   await query(
     `INSERT INTO shifts (user_id, clock_in_at, clock_out_at, is_manual, manual_note, manual_by)
@@ -311,9 +343,23 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Capture original values before updating
-  const before = await queryOne<{ clock_in_at: string; clock_out_at: string | null }>(
-    'SELECT clock_in_at, clock_out_at FROM shifts WHERE id = $1', [shiftId]
+  const before = await queryOne<{ clock_in_at: string; clock_out_at: string | null; user_id: string }>(
+    'SELECT clock_in_at, clock_out_at, user_id FROM shifts WHERE id = $1', [shiftId]
   )
+  if (!before) return NextResponse.json({ error: 'Shift not found' }, { status: 404 })
+
+  // Check for overlapping shifts with the new times
+  const newClockIn = clockIn ?? before.clock_in_at
+  const newClockOut = clockOut ?? before.clock_out_at
+  if (newClockOut) {
+    const overlap = await findOverlappingShift(before.user_id, newClockIn, newClockOut, shiftId)
+    if (overlap) {
+      return NextResponse.json({
+        error: `These times overlap with an existing shift (${fmtOverlapTime(overlap.clock_in_at)} – ${fmtOverlapTime(overlap.clock_out_at)}). Please adjust the times so they don't overlap.`,
+        overlap: { existingIn: overlap.clock_in_at, existingOut: overlap.clock_out_at },
+      }, { status: 409 })
+    }
+  }
 
   const shift = await query<{ user_id: string }>(
     `UPDATE shifts SET clock_in_at = COALESCE($1, clock_in_at), clock_out_at = $2,

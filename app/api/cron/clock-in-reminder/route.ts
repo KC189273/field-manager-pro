@@ -248,5 +248,10 @@ export async function GET() {
   await query(`DELETE FROM login_attempts WHERE window_start < NOW() - INTERVAL '1 hour'`).catch(() => {})
   await query(`DELETE FROM overstaffing_alerts WHERE alerted_at < NOW() - INTERVAL '30 days'`).catch(() => {})
 
+  // Auto-close stale support conversations (>48h inactive)
+  if (hour === 6 && minute === 0) {
+    await query(`UPDATE support_conversations SET status = 'resolved', resolved_at = NOW() WHERE status = 'active' AND created_at < NOW() - INTERVAL '48 hours'`).catch(() => {})
+  }
+
   return NextResponse.json({ ok: true, ...results })
 }

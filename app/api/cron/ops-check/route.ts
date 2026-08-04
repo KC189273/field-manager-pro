@@ -53,13 +53,27 @@ export async function GET(req: NextRequest) {
     `)
     if (stores[0].cnt > 0) items.push({ severity: 'info', title: `${stores[0].cnt} stores without DM`, detail: 'Employees can\'t clock into these stores.', action: 'Assign on DM Store Visit → Manage Stores.' })
 
-    // 6. Table bloat
-    const bloat = await query<{ relname: string; dead: number }>(`
-      SELECT relname, n_dead_tup::int as dead FROM pg_stat_user_tables WHERE n_dead_tup > 10000 ORDER BY n_dead_tup DESC LIMIT 3
+    // 6. Table bloat — only flag if >5% dead and >100K rows
+    const bloat = await query<{ relname: string; dead: number; live: number }>(`
+      SELECT relname, n_dead_tup::int as dead, n_live_tup::int as live
+      FROM pg_stat_user_tables WHERE n_dead_tup > 100000 ORDER BY n_dead_tup DESC LIMIT 3
     `)
     for (const t of bloat) {
-      items.push({ severity: 'warning', title: `Table bloat: ${t.relname}`, detail: `${t.dead.toLocaleString()} dead rows`, action: 'Run VACUUM in Supabase SQL editor.' })
+      const pct = t.live > 0 ? (t.dead / t.live) * 100 : 0
+      if (pct > 5) items.push({ severity: 'warning', title: `Table bloat: ${t.relname}`, detail: `${t.dead.toLocaleString()} dead rows (${pct.toFixed(1)}%)`, action: 'Weekly VACUUM runs Sundays. If persistent, run manually.' })
     }
+
+    // 7. Stale time-off requests (pending >14 days)
+    const staleTimeOff = await query<{ cnt: number }>(`
+      SELECT COUNT(*)::int as cnt FROM time_off_requests WHERE status = 'pending' AND created_at < NOW() - INTERVAL '14 days'
+    `)
+    if (staleTimeOff[0].cnt > 0) items.push({ severity: 'warning', title: `${staleTimeOff[0].cnt} time-off requests pending >14 days`, detail: 'DMs need to approve or deny these.', action: 'Check Time Off page for stale requests.' })
+
+    // 8. Stale supply requests (pending >7 days, already escalated)
+    const staleSupply = await query<{ cnt: number }>(`
+      SELECT COUNT(*)::int as cnt FROM supply_requests WHERE status = 'pending' AND created_at < NOW() - INTERVAL '7 days'
+    `)
+    if (staleSupply[0].cnt > 0) items.push({ severity: 'info', title: `${staleSupply[0].cnt} supply requests pending >7 days`, detail: 'These were already escalated. DMs may need a nudge.', action: 'Check Supply Requests for stale orders.' })
 
     // Only email if there are critical or warning items
     const urgent = items.filter(i => i.severity === 'critical' || i.severity === 'warning')

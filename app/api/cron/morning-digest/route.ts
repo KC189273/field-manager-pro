@@ -194,14 +194,18 @@ export async function GET() {
       // Today's scheduled employees
       query<{ name: string; store: string; start: string; end: string }>(`
         SELECT u.full_name as name,
-               COALESCE(sl.address, 'Unassigned') as store,
+               COALESCE(dsl.address, 'Unassigned') as store,
                TO_CHAR(ss.start_time, 'HH12:MI AM') as start,
                TO_CHAR(ss.end_time, 'HH12:MI AM') as end
         FROM scheduled_shifts ss
-        JOIN users u ON u.id = ss.user_id
-        LEFT JOIN store_locations sl ON sl.id = ss.store_location_id
-        WHERE ss.manager_id = $1 AND ss.shift_date = $2
-          AND EXISTS (SELECT 1 FROM scheduled_shifts_publish ssp WHERE ssp.manager_id = ss.manager_id AND ssp.week_start = ss.week_start)
+        JOIN users u ON u.id = ss.employee_id
+        LEFT JOIN dm_store_locations dsl ON dsl.id = ss.store_location_id
+        WHERE u.manager_id = $1 AND ss.shift_date = $2
+          AND EXISTS (
+            SELECT 1 FROM scheduled_shifts_publish ssp
+            WHERE ssp.store_location_id = ss.store_location_id
+              AND ssp.week_start BETWEEN ($2::date - 6) AND $2::date
+          )
         ORDER BY ss.start_time
       `, [dm.id, todayDate]).catch(() => []),
 

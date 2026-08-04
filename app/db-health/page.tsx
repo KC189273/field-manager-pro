@@ -101,6 +101,8 @@ export default function DbHealthPage() {
   const [loading, setLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null)
   const [dismissedItems, setDismissedItems] = useState<Set<string>>(new Set())
+  const [healthCheck, setHealthCheck] = useState<{ summary: { critical: number; warning: number; info: number; ok: number }; findings: { category: string; severity: string; title: string; detail: string }[] } | null>(null)
+  const [healthLoading, setHealthLoading] = useState(false)
 
   // Load dismissed items from localStorage
   useEffect(() => {
@@ -214,6 +216,63 @@ export default function DbHealthPage() {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* System Health Check */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-bold text-white">System Health Check</p>
+                  <p className="text-[10px] text-gray-500">Runs automatically every 3 days (Tue/Fri/Sun) · or run manually below</p>
+                </div>
+                <button
+                  onClick={async () => { setHealthLoading(true); const r = await fetch('/api/cron/system-health'); if (r.ok) { const d = await r.json(); setHealthCheck(d) } setHealthLoading(false) }}
+                  disabled={healthLoading}
+                  className="text-sm bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold px-4 py-2 rounded-xl transition-colors"
+                >
+                  {healthLoading ? 'Scanning...' : 'Run Full Scan'}
+                </button>
+              </div>
+
+              {healthCheck && (
+                <>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center bg-red-900/20 border border-red-800/30 rounded-xl p-2">
+                      <p className="text-lg font-bold text-red-400">{healthCheck.summary.critical}</p>
+                      <p className="text-[10px] text-red-500">Critical</p>
+                    </div>
+                    <div className="text-center bg-amber-900/20 border border-amber-800/30 rounded-xl p-2">
+                      <p className="text-lg font-bold text-amber-400">{healthCheck.summary.warning}</p>
+                      <p className="text-[10px] text-amber-500">Warning</p>
+                    </div>
+                    <div className="text-center bg-blue-900/20 border border-blue-800/30 rounded-xl p-2">
+                      <p className="text-lg font-bold text-blue-400">{healthCheck.summary.info}</p>
+                      <p className="text-[10px] text-blue-500">Info</p>
+                    </div>
+                    <div className="text-center bg-green-900/20 border border-green-800/30 rounded-xl p-2">
+                      <p className="text-lg font-bold text-green-400">{healthCheck.summary.ok}</p>
+                      <p className="text-[10px] text-green-500">OK</p>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                    {healthCheck.findings.filter(f => f.severity !== 'ok').map((f, i) => (
+                      <div key={i} className={`px-3 py-2 rounded-xl border text-sm ${
+                        f.severity === 'critical' ? 'bg-red-900/20 border-red-800/40 text-red-300'
+                        : f.severity === 'warning' ? 'bg-amber-900/20 border-amber-800/40 text-amber-300'
+                        : 'bg-blue-900/10 border-blue-800/30 text-blue-300'
+                      }`}>
+                        <span className="text-[10px] text-gray-500 mr-1">[{f.category}]</span>{f.title}
+                        {f.detail && <p className="text-[10px] text-gray-500 mt-0.5">{f.detail}</p>}
+                      </div>
+                    ))}
+                    {healthCheck.findings.filter(f => f.severity === 'ok').length > 0 && (
+                      <p className="text-xs text-green-500 text-center pt-1">
+                        ✓ {healthCheck.findings.filter(f => f.severity === 'ok').length} checks passed
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Action Items & Suggestions */}

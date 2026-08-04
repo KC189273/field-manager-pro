@@ -21,9 +21,12 @@ export async function GET(req: NextRequest) {
        SELECT COUNT(*)::int as cnt FROM deleted`
     )
 
-    // Run ANALYZE on cleaned tables if rows were deleted
-    if (gps[0].cnt > 0) await query('ANALYZE gps_breadcrumbs').catch(() => {})
-    if (notifs[0].cnt > 0) await query('ANALYZE notifications').catch(() => {})
+    // Run VACUUM ANALYZE on cleaned tables to reclaim dead rows
+    if (gps[0].cnt > 0) await query('VACUUM ANALYZE gps_breadcrumbs').catch(() => {})
+    if (notifs[0].cnt > 0) await query('VACUUM ANALYZE notifications').catch(() => {})
+
+    // Proactive VACUUM on GPS even if no deletes (handles dead rows from updates)
+    if (gps[0].cnt === 0) await query('VACUUM ANALYZE gps_breadcrumbs').catch(() => {})
 
     return NextResponse.json({
       ok: true,

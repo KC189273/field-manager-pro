@@ -141,7 +141,8 @@ export async function GET(req: NextRequest) {
       ss.start_time::text AS start_time,
       ss.end_time::text   AS end_time,
       ss.role_note, COALESCE(ss.break_minutes, 0) AS break_minutes,
-      COALESCE(ss.is_on_call, FALSE) AS is_on_call
+      COALESCE(ss.is_on_call, FALSE) AS is_on_call,
+      COALESCE(ss.is_dm_shift, FALSE) AS is_dm_shift
     FROM scheduled_shifts ss
     LEFT JOIN users u ON u.id = ss.employee_id
     JOIN dm_store_locations sl ON sl.id = ss.store_location_id
@@ -152,8 +153,8 @@ export async function GET(req: NextRequest) {
   `, [storeId, weekStart, weekEndStr])
 
   const pubRow = await queryOne(
-    `SELECT 1 FROM scheduled_shifts_publish WHERE store_location_id = $1 AND week_start = $2`,
-    [storeId, weekStart]
+    `SELECT 1 FROM scheduled_shifts_publish WHERE store_location_id = $1 AND week_start BETWEEN ($2::date - 6) AND ($3::date)`,
+    [storeId, weekStart, weekEndStr]
   )
 
   return NextResponse.json({ shifts, isPublished: !!pubRow })

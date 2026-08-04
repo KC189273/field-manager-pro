@@ -108,7 +108,9 @@ export async function GET() {
   if (conns[0].active > conns[0].max * 0.6) issues.push(`High connections: ${conns[0].active}/${conns[0].max}`)
   if (cache[0].ratio < 99) issues.push(`Low cache hit: ${cache[0].ratio}%`)
   for (const t of tables) {
-    if (t.dead_rows > 5000) issues.push(`${t.table_name}: ${t.dead_rows.toLocaleString()} dead rows`)
+    // Only flag dead rows if >5% of live rows (Postgres autovacuum handles normal churn)
+    const deadPct = t.row_count > 0 ? (t.dead_rows / t.row_count) * 100 : 0
+    if (t.dead_rows > 100000 && deadPct > 5) issues.push(`${t.table_name}: ${t.dead_rows.toLocaleString()} dead rows (${deadPct.toFixed(1)}%)`)
   }
 
   // ── Action items (smart suggestions) ──────────────────────────────────
@@ -130,10 +132,11 @@ export async function GET() {
     actionItems.push({ severity: 'warning', title: 'Cache hit ratio below optimal', detail: `${cache[0].ratio}% (target: >99%).`, action: 'Monitor — may need more RAM if this drops further.' })
   }
 
-  // Table bloat — only flag if dead rows exceed 100K (Postgres autovacuum handles normal bloat)
+  // Table bloat — only flag if dead rows are >5% of live rows AND >100K absolute
   for (const t of tables) {
-    if (t.dead_rows > 100000) {
-      actionItems.push({ severity: 'warning', title: `Table bloat: ${t.table_name}`, detail: `${t.dead_rows.toLocaleString()} dead rows taking up space.`, action: 'Run VACUUM on this table in the Supabase SQL editor.' })
+    const deadPct = t.row_count > 0 ? (t.dead_rows / t.row_count) * 100 : 0
+    if (t.dead_rows > 100000 && deadPct > 5) {
+      actionItems.push({ severity: 'warning', title: `Table bloat: ${t.table_name}`, detail: `${t.dead_rows.toLocaleString()} dead rows (${deadPct.toFixed(1)}% of table). Weekly VACUUM runs Sundays.`, action: 'Autovacuum and weekly cleanup should handle this. If persistent, run VACUUM ANALYZE manually.' })
     }
   }
 

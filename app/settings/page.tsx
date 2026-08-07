@@ -349,8 +349,8 @@ export default function SettingsPage() {
                     min={50} max={2000} step={50}
                     value={geoSettings.radius_ft}
                     onChange={e => setGeoSettings(g => g ? { ...g, radius_ft: Number(e.target.value) } : g)}
-                    onMouseUp={() => saveGeo({ radius_ft: geoSettings.radius_ft })}
-                    onTouchEnd={() => saveGeo({ radius_ft: geoSettings.radius_ft })}
+                    onMouseUp={e => saveGeo({ radius_ft: Number((e.target as HTMLInputElement).value) })}
+                    onTouchEnd={e => saveGeo({ radius_ft: Number((e.target as HTMLInputElement).value) })}
                     disabled={geoSaving}
                     className="w-full accent-violet-600"
                   />
@@ -372,8 +372,8 @@ export default function SettingsPage() {
                     min={5} max={60} step={5}
                     value={geoSettings.exit_minutes}
                     onChange={e => setGeoSettings(g => g ? { ...g, exit_minutes: Number(e.target.value) } : g)}
-                    onMouseUp={() => saveGeo({ exit_minutes: geoSettings.exit_minutes })}
-                    onTouchEnd={() => saveGeo({ exit_minutes: geoSettings.exit_minutes })}
+                    onMouseUp={e => saveGeo({ exit_minutes: Number((e.target as HTMLInputElement).value) })}
+                    onTouchEnd={e => saveGeo({ exit_minutes: Number((e.target as HTMLInputElement).value) })}
                     disabled={geoSaving}
                     className="w-full accent-violet-600"
                   />

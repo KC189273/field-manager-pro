@@ -50,6 +50,7 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   calendar_rsvp: '/calendar',
   pending_approval: '/team',
   gps_alert: '/map',
+  geofence: '/flags',
 }
 
 interface Org { id: string; name: string }

@@ -120,6 +120,7 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   calendar_rsvp: '/calendar',
   pending_approval: '/team',
   gps_alert: '/map',
+  geofence: '/flags',
 }
 
 // Valid notification preference column names — guards against dynamic SQL injection

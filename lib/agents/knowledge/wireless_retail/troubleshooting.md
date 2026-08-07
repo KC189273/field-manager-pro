@@ -34,6 +34,9 @@ Employees must be within 300 feet of the selected store. Check that you picked t
 **"Location is required to clock in"**
 Employees must have GPS enabled to clock in (needed for geofence verification). Enable Location Services in your phone settings and try again.
 
+**"You were auto clocked out for leaving the store geofence"**
+If you leave the store area (300 feet) for more than 10 minutes, the system auto clocks you out. Both you and your DM get notified. A `geofence_exit` flag is created. If this was accidental (e.g., GPS drift), ask your DM to adjust your timecard.
+
 **GPS location not recording**
 Enable Location Services for Field Manager Pro in your phone settings. Set it to "Always" (iOS) or "Allow all the time" (Android).
 

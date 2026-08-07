@@ -2,6 +2,7 @@
 sources:
   - app/api/clock/in/route.ts
   - app/api/clock/out/route.ts
+  - app/api/gps/breadcrumb/route.ts
   - app/clock/page.tsx
   - app/api/clock/my-stores/route.ts
 features:
@@ -9,6 +10,7 @@ features:
   - clock-out
   - gps-tracking
   - geofencing
+  - auto-clockout-geofence
   - handoff-notes
   - late-clock-in-flag
 permissions:
@@ -42,6 +44,15 @@ Several things happen automatically when you clock out:
 - If you're an **employee** and your projected weekly hours are 45+, your DM gets an OT alert push notification. At 50+, the owner gets notified too.
 - If you're a **DM**, an AI End-of-Day Recap email is generated and sent to you and your leadership.
 - If your weekly hours exceed 40, an overtime flag is created and your DM is emailed.
+
+## Auto clock-out (geofence exit)
+If you leave your store's geofence (300 feet) for more than **10 consecutive minutes**, the system will automatically clock you out. When this happens:
+- You'll get a push notification telling you that you were auto clocked out.
+- Your DM also gets notified.
+- A `geofence_exit` flag is created showing how far you were and how long you were outside.
+- Any active break is ended automatically.
+
+This only applies to **employees**. DMs and above are not monitored.
 
 ## Why does it say "Already clocked in"?
 You have an active shift that hasn't been clocked out. You can only have one active shift at a time. Go to Clock and tap Clock Out first, then clock in again.

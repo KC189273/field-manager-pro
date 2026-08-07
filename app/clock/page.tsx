@@ -122,12 +122,18 @@ export default function ClockPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        }).then(r => r.json()).then(data => {
+          if (data.autoClockOut) {
+            setMessage({ text: 'You were auto clocked out for leaving the store geofence.', type: 'error' })
+            stopNativeTracking()
+            fetchStatus()
+          }
         }).catch(() => {})
       }, () => { /* GPS unavailable — skip breadcrumb */ })
     }
     const id = setInterval(sendBreadcrumb, 3 * 60 * 1000)
     return () => clearInterval(id)
-  }, [status?.activeShift])
+  }, [status?.activeShift, fetchStatus])
 
   async function getCoords(): Promise<{ lat: number; lng: number } | null> {
     return new Promise(resolve => {

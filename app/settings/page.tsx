@@ -98,6 +98,12 @@ function Toggle({ on, disabled, onToggle }: { on: boolean; disabled: boolean; on
   )
 }
 
+interface GeoSettings {
+  enabled: boolean
+  radius_ft: number
+  exit_minutes: number
+}
+
 export default function SettingsPage() {
   const [session, setSession] = useState<Session | null>(null)
   const [prefs, setPrefs] = useState<Prefs | null>(null)
@@ -107,9 +113,19 @@ export default function SettingsPage() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
+  const [geoSettings, setGeoSettings] = useState<GeoSettings | null>(null)
+  const [geoSaving, setGeoSaving] = useState(false)
+  const [geoMsg, setGeoMsg] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(setSession)
+    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(s => {
+      setSession(s)
+      if (s && ['owner', 'sales_director', 'developer'].includes(s.role)) {
+        fetch('/api/geofence/settings').then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.settings) setGeoSettings(d.settings)
+        })
+      }
+    })
     fetch('/api/push/preferences').then(r => r.json()).then(d => setPrefs(d.prefs))
     fetch('/api/team/users/avatar?view=true').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.avatarUrl) setAvatarUrl(d.avatarUrl)
@@ -140,6 +156,24 @@ export default function SettingsPage() {
       setUploadingAvatar(false)
       if (avatarInputRef.current) avatarInputRef.current.value = ''
     }
+  }
+
+  async function saveGeo(updates: Partial<GeoSettings>) {
+    setGeoSaving(true)
+    setGeoMsg(null)
+    try {
+      const res = await fetch('/api/geofence/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      })
+      const data = await res.json()
+      if (res.ok && data.settings) {
+        setGeoSettings(data.settings)
+        setGeoMsg('Saved')
+        setTimeout(() => setGeoMsg(null), 2000)
+      }
+    } catch {} finally { setGeoSaving(false) }
   }
 
   async function registerPush() {
@@ -285,6 +319,73 @@ export default function SettingsPage() {
                 )
               })
             })()}
+          </div>
+        )}
+
+        {/* Geofence Admin Controls — owner, SD, developer only */}
+        {geoSettings && session && ['owner', 'sales_director', 'developer'].includes(session.role) && (
+          <div className="bg-gray-900 rounded-2xl border border-gray-800 divide-y divide-gray-800 mt-4">
+            <div className="px-5 py-3 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Geofencing</p>
+              {geoMsg && <span className="text-xs text-green-400 font-medium">{geoMsg}</span>}
+            </div>
+            <div className="flex items-start justify-between gap-4 px-5 py-4">
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium">Enable Geofencing</p>
+                <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">Require employees to be near their store to clock in. Auto clock-out when they leave.</p>
+              </div>
+              <Toggle on={geoSettings.enabled} disabled={geoSaving} onToggle={() => saveGeo({ enabled: !geoSettings.enabled })} />
+            </div>
+            {geoSettings.enabled && (
+              <>
+                <div className="px-5 py-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-white text-sm font-medium">Clock-in radius</p>
+                    <span className="text-violet-400 text-sm font-mono font-bold">{geoSettings.radius_ft} ft</span>
+                  </div>
+                  <p className="text-gray-500 text-xs mb-3">How close employees must be to the store to clock in.</p>
+                  <input
+                    type="range"
+                    min={50} max={2000} step={50}
+                    value={geoSettings.radius_ft}
+                    onChange={e => setGeoSettings(g => g ? { ...g, radius_ft: Number(e.target.value) } : g)}
+                    onMouseUp={() => saveGeo({ radius_ft: geoSettings.radius_ft })}
+                    onTouchEnd={() => saveGeo({ radius_ft: geoSettings.radius_ft })}
+                    disabled={geoSaving}
+                    className="w-full accent-violet-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                    <span>50 ft</span>
+                    <span>500 ft</span>
+                    <span>1000 ft</span>
+                    <span>2000 ft</span>
+                  </div>
+                </div>
+                <div className="px-5 py-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-white text-sm font-medium">Auto clock-out after</p>
+                    <span className="text-violet-400 text-sm font-mono font-bold">{geoSettings.exit_minutes} min</span>
+                  </div>
+                  <p className="text-gray-500 text-xs mb-3">How long an employee can be outside the geofence before auto clock-out.</p>
+                  <input
+                    type="range"
+                    min={5} max={60} step={5}
+                    value={geoSettings.exit_minutes}
+                    onChange={e => setGeoSettings(g => g ? { ...g, exit_minutes: Number(e.target.value) } : g)}
+                    onMouseUp={() => saveGeo({ exit_minutes: geoSettings.exit_minutes })}
+                    onTouchEnd={() => saveGeo({ exit_minutes: geoSettings.exit_minutes })}
+                    disabled={geoSaving}
+                    className="w-full accent-violet-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                    <span>5 min</span>
+                    <span>15 min</span>
+                    <span>30 min</span>
+                    <span>60 min</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

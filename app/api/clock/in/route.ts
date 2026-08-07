@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
-
-/** Haversine distance in feet between two lat/lng points */
-function haversineDistanceFt(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 20902231 // Earth radius in feet
-  const toRad = (d: number) => (d * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-}
-
-const GEOFENCE_RADIUS_FT = 300
+import { getGeofenceSettings, haversineDistanceFt } from '@/lib/geofence'
 
 let ensured = false
 async function ensureShiftColumns() {
@@ -38,23 +27,26 @@ export async function POST(req: NextRequest) {
 
   // ── Geofence check (employees only) ──
   if (session.role === 'employee') {
-    if (!lat || !lng) {
-      return NextResponse.json({ error: 'Location is required to clock in. Please enable GPS and try again.' }, { status: 400 })
-    }
-    if (!storeId) {
-      return NextResponse.json({ error: 'Please select which store you are working at.' }, { status: 400 })
-    }
-    const store = await queryOne<{ lat: number; lng: number; address: string }>(
-      `SELECT lat, lng, address FROM dm_store_locations WHERE id = $1`,
-      [storeId]
-    )
-    if (store && store.lat && store.lng) {
-      const distFt = haversineDistanceFt(lat, lng, store.lat, store.lng)
-      if (distFt > GEOFENCE_RADIUS_FT) {
-        return NextResponse.json({
-          error: `You are too far from ${store.address} to clock in. You must be within ${GEOFENCE_RADIUS_FT} feet of the store. (Currently ${Math.round(distFt)} ft away)`,
-          distanceFt: Math.round(distFt),
-        }, { status: 403 })
+    const geo = await getGeofenceSettings(session.org_id)
+    if (geo.enabled) {
+      if (!lat || !lng) {
+        return NextResponse.json({ error: 'Location is required to clock in. Please enable GPS and try again.' }, { status: 400 })
+      }
+      if (!storeId) {
+        return NextResponse.json({ error: 'Please select which store you are working at.' }, { status: 400 })
+      }
+      const store = await queryOne<{ lat: number; lng: number; address: string }>(
+        `SELECT lat, lng, address FROM dm_store_locations WHERE id = $1`,
+        [storeId]
+      )
+      if (store && store.lat && store.lng) {
+        const distFt = haversineDistanceFt(lat, lng, store.lat, store.lng)
+        if (distFt > geo.radius_ft) {
+          return NextResponse.json({
+            error: `You are too far from ${store.address} to clock in. You must be within ${geo.radius_ft} feet of the store. (Currently ${Math.round(distFt)} ft away)`,
+            distanceFt: Math.round(distFt),
+          }, { status: 403 })
+        }
       }
     }
   }

@@ -3,8 +3,11 @@ sources:
   - app/api/clock/in/route.ts
   - app/api/clock/out/route.ts
   - app/api/gps/breadcrumb/route.ts
+  - app/api/geofence/settings/route.ts
   - app/clock/page.tsx
+  - app/settings/page.tsx
   - app/api/clock/my-stores/route.ts
+  - lib/geofence.ts
 features:
   - clock-in
   - clock-out
@@ -16,8 +19,9 @@ features:
 permissions:
   - "all retail roles can clock in/out"
   - "employees must select a store"
-  - "employees must be within 300 feet of selected store to clock in"
+  - "employees must be within geofence radius (default 300 ft, configurable 50-2000 ft) to clock in"
   - "DMs and above are exempt from geofence check"
+  - "owners, SDs, and developers can configure geofence settings in Settings"
   - "late clock-in flag has no grace period"
 verified: 2026-08-07
 ---
@@ -53,6 +57,14 @@ If you leave your store's geofence (300 feet) for more than **10 consecutive min
 - Any active break is ended automatically.
 
 This only applies to **employees**. DMs and above are not monitored.
+
+## Geofence admin settings
+Owners, Sales Directors, and Developers can configure geofencing in **Settings** (scroll down to the Geofencing section):
+- **Enable/Disable** — toggle geofencing on or off for the entire organization.
+- **Clock-in radius** — how close employees must be (50–2,000 feet, default 300).
+- **Auto clock-out timer** — how long outside the geofence before auto clock-out (5–60 minutes, default 10).
+
+These settings are per-organization and stored in the `organizations` table.
 
 ## Why does it say "Already clocked in"?
 You have an active shift that hasn't been clocked out. You can only have one active shift at a time. Go to Clock and tap Clock Out first, then clock in again.

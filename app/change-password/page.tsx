@@ -14,8 +14,8 @@ export default function ChangePasswordPage() {
     e.preventDefault()
     setError('')
 
-    if (newPassword.length < 6) {
-      setError('Password must be at least 6 characters.')
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters.')
       return
     }
     if (newPassword !== confirm) {
@@ -60,7 +60,7 @@ export default function ChangePasswordPage() {
               type="password"
               value={newPassword}
               onChange={e => setNewPassword(e.target.value)}
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               required
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500"
             />

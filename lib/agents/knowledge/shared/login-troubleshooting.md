@@ -9,7 +9,7 @@ features:
   - password-requirements
 permissions:
   - "10 attempts per IP per 15 min"
-  - "change=6 chars, reset=8 chars"
+  - "all passwords require minimum 8 chars"
   - "inactive accounts get same error as wrong password"
 verified: 2026-07-22
 ---
@@ -69,7 +69,7 @@ Go back to the login page, tap "Forgot Password" again, and request a new reset 
 ---
 
 ## Symptom: Password requirement confusion
-- **Changing your password** (Settings > Change Password): minimum **6 characters**
+- **Changing your password** (Settings > Change Password): minimum **8 characters**
 - **Resetting your password** (via Forgot Password link): minimum **8 characters**
 
 These requirements are different. If your reset fails with "Password must be at least 8 characters," use a longer password.

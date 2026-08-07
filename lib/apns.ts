@@ -121,6 +121,7 @@ const NOTIFICATION_PATHS: Record<string, string> = {
   pending_approval: '/team',
   gps_alert: '/map',
   geofence: '/flags',
+  system_health: '/db-health',
 }
 
 // Valid notification preference column names — guards against dynamic SQL injection

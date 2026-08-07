@@ -27,7 +27,7 @@ verified: 2026-07-22
 3. Enter your current password and your new password twice.
 4. Tap Save.
 
-Passwords must be at least 6 characters. They are case-sensitive.
+Passwords must be at least 8 characters. They are case-sensitive.
 
 ## I forgot my password
 1. On the login screen, tap **Forgot Password**.

@@ -157,6 +157,11 @@ export default function ClockPage() {
         setLoading(false)
         return
       }
+      if (session?.role === 'employee' && !coords) {
+        setMessage({ text: 'Location is required to clock in. Please enable GPS in your device settings and try again.', type: 'error' })
+        setLoading(false)
+        return
+      }
       const res = await fetch('/api/clock/in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -28,8 +28,14 @@ You may already be clocked in on another shift. Check your current status on the
 **"No active shift" when trying to clock out**
 Your shift may have been auto-clocked out by the system (runs at 9 PM CST daily) or manually ended by your DM. Check your timecards to see if the shift shows as completed.
 
+**"You are too far from [store] to clock in"**
+Employees must be within 300 feet of the selected store. Check that you picked the right store, try stepping outside for a better GPS fix, or move closer to the store. DMs and above are exempt from this check.
+
+**"Location is required to clock in"**
+Employees must have GPS enabled to clock in (needed for geofence verification). Enable Location Services in your phone settings and try again.
+
 **GPS location not recording**
-Enable Location Services for Field Manager Pro in your phone settings. Set it to "Always" (iOS) or "Allow all the time" (Android). The clock-in still works without GPS, but your location won't be recorded.
+Enable Location Services for Field Manager Pro in your phone settings. Set it to "Always" (iOS) or "Allow all the time" (Android).
 
 ## Breaks
 

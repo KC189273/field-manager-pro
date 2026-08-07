@@ -8,13 +8,16 @@ features:
   - clock-in
   - clock-out
   - gps-tracking
+  - geofencing
   - handoff-notes
   - late-clock-in-flag
 permissions:
   - "all retail roles can clock in/out"
   - "employees must select a store"
+  - "employees must be within 300 feet of selected store to clock in"
+  - "DMs and above are exempt from geofence check"
   - "late clock-in flag has no grace period"
-verified: 2026-07-22
+verified: 2026-08-07
 ---
 # Clock In / Clock Out
 
@@ -24,7 +27,9 @@ verified: 2026-07-22
 3. Tap **Clock In**. Your GPS location and time are recorded automatically.
 4. You'll see a confirmation with your clock-in time and store.
 
-If GPS isn't available, the clock-in still goes through — but your location won't be recorded.
+**Geofencing:** You must be within **300 feet** of the store you selected to clock in. If you're too far away, you'll see a message showing how far you are. Move closer and try again. GPS must be enabled — if location can't be determined, clock-in is blocked.
+
+> DMs, SDs, owners, and ops managers are **not** subject to the geofence check.
 
 ## How do I clock out?
 1. Tap **Clock** from the bottom nav.
@@ -58,3 +63,12 @@ Your DM needs to assign stores to your district. Contact your DM or the SD to ma
 3. Make sure **Location** is set to "Always" or "While Using."
 4. On Android, also check that Location Services are turned on globally.
 5. Try closing and reopening the app.
+
+GPS is **required** for employees to clock in (needed for geofence verification). If your device can't get a GPS fix, you won't be able to clock in until location is available.
+
+## "You are too far from the store"
+This means your GPS location is more than 300 feet from the store you selected. Common causes:
+- You selected the wrong store — double-check the dropdown.
+- GPS is inaccurate indoors — try stepping outside briefly and retrying.
+- You're genuinely not at the store yet — move closer and try again.
+The error message shows your exact distance from the store in feet.

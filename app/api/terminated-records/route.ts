@@ -158,7 +158,6 @@ export async function POST(req: NextRequest) {
 
   // ── Sheet 1: Certification Letter ──
   const certSheet = workbook.addWorksheet('Certification Letter')
-  certSheet.pageSetup = { paperSize: 1, orientation: 'portrait', fitToPage: true, margins: { top: 1, bottom: 1, left: 1, right: 1, header: 0.5, footer: 0.5 } }
   certSheet.columns = [
     { width: 4 }, { width: 70 },
   ]

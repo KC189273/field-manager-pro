@@ -54,6 +54,7 @@ export async function POST(req: NextRequest) {
   const { employeeId } = await req.json()
   if (!employeeId) return NextResponse.json({ error: 'employeeId required' }, { status: 400 })
 
+  try {
   // Get employee info
   const emp = await queryOne<{
     id: string; full_name: string; username: string; email: string
@@ -96,7 +97,8 @@ export async function POST(req: NextRequest) {
   `, [employeeId])
 
   // Get shift edits for audit trail
-  const edits = await query<{
+  const shiftIds = shifts.map(s => s.id)
+  const edits = shiftIds.length > 0 ? await query<{
     shift_id: string; field: string; old_value: string | null; new_value: string | null
     edited_by_name: string; edited_at: string
   }>(`
@@ -104,9 +106,9 @@ export async function POST(req: NextRequest) {
            u.full_name as edited_by_name, se.edited_at::text
     FROM shift_edits se
     JOIN users u ON u.id = se.edited_by
-    WHERE se.shift_id = ANY($1)
+    WHERE se.shift_id = ANY($1::uuid[])
     ORDER BY se.edited_at ASC
-  `, [shifts.map(s => s.id)])
+  `, [shiftIds]).catch(() => [] as Array<{ shift_id: string; field: string; old_value: string | null; new_value: string | null; edited_by_name: string; edited_at: string }>) : []
 
   // Log the export
   await query(`
@@ -463,4 +465,8 @@ These records have been maintained in the ordinary course of business and are pr
       'Content-Disposition': `attachment; filename="${emp.full_name.replace(/[^a-zA-Z0-9 ]/g, '')}_Timecard_Record.xlsx"`,
     },
   })
+  } catch (err) {
+    console.error('Terminated record export error:', err)
+    return NextResponse.json({ error: 'Failed to generate report: ' + String(err) }, { status: 500 })
+  }
 }

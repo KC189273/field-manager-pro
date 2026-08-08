@@ -338,7 +338,7 @@ export default function TeamPage() {
           {session && ['owner', 'sales_director', 'ops_manager', 'developer'].includes(session.role) && (
             <a
               href="/terminated-records"
-              className="text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+              className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
             >
               Terminated Records
             </a>

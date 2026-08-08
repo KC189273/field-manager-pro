@@ -334,6 +334,15 @@ export default function TeamPage() {
       <div className={`px-4 pt-6 ${viewMode === 'tree' ? '' : 'max-w-lg mx-auto'}`}>
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-white">Team</h1>
+          <div className="flex items-center gap-3">
+          {session && ['owner', 'sales_director', 'ops_manager', 'developer'].includes(session.role) && (
+            <a
+              href="/terminated-records"
+              className="text-xs font-semibold text-gray-400 hover:text-white transition-colors"
+            >
+              Terminated Records
+            </a>
+          )}
           {canBulkImport && (
             <button
               onClick={() => { setShowBulkImport(true); setBulkResults(null); setBulkFile(null) }}
@@ -342,6 +351,7 @@ export default function TeamPage() {
               Bulk Import
             </button>
           )}
+          </div>
         </div>
 
         {/* Toast message */}

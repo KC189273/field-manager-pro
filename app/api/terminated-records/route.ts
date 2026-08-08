@@ -169,7 +169,8 @@ export async function POST(req: NextRequest) {
   // Company header
   certSheet.mergeCells(`A${row}:B${row}`)
   const companyCell = certSheet.getCell(`A${row}`)
-  companyCell.value = 'GEPHART ENTERPRISES LLC'
+  const orgName = emp.org_name || 'Organization'
+  companyCell.value = orgName.toUpperCase()
   companyCell.font = { bold: true, size: 16, color: { argb: VIOLET } }
   companyCell.alignment = { horizontal: 'center' }
   row++
@@ -249,7 +250,7 @@ export async function POST(req: NextRequest) {
   certSheet.getCell(`A${row}`).font = { bold: true, size: 12, color: { argb: DARK } }
   row++
 
-  const certText = `I hereby certify that the time and attendance records contained in this document are true and accurate records maintained by Gephart Enterprises LLC through Field Manager Pro (fieldmanagerpro.app), an automated time and attendance tracking system.
+  const certText = `I hereby certify that the time and attendance records contained in this document are true and accurate records maintained by ${orgName} through Field Manager Pro (fieldmanagerpro.app), an automated time and attendance tracking system.
 
 All clock-in and clock-out times were recorded electronically via GPS-verified timestamps at the time of each event. GPS coordinates (latitude/longitude) are captured at both clock-in and clock-out and are included in the detailed records attached.
 
@@ -271,7 +272,7 @@ These records have been maintained in the ordinary course of business and are pr
   certSheet.getCell(`A${row}`).font = { size: 11 }
   row++
   certSheet.mergeCells(`A${row}:B${row}`)
-  certSheet.getCell(`A${row}`).value = 'Authorized Representative — Gephart Enterprises LLC'
+  certSheet.getCell(`A${row}`).value = `Authorized Representative — ${orgName}`
   certSheet.getCell(`A${row}`).font = { size: 10, color: { argb: 'FF6B7280' } }
   row += 2
 

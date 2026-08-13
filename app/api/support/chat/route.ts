@@ -338,7 +338,69 @@ async function escalateConversation(convId: string, reason: string, userName: st
     ).catch(() => {})
   }
 
-  // Email to developer + owner
+  // ── Auto-triage: diagnose the user's account ──
+  const diagnosis: string[] = []
+  const userId = conv?.user_id
+  if (userId) {
+    const question = (firstUserMsg + ' ' + (reason || '')).toLowerCase()
+
+    if (question.includes('clock') || question.includes('location') || question.includes('gps') || question.includes('freeze')) {
+      const activeShift = await queryOne<{ id: string; clock_in_at: string }>(`
+        SELECT id, clock_in_at::text FROM shifts WHERE user_id = $1 AND clock_in_at IS NOT NULL AND clock_out_at IS NULL
+      `, [userId]).catch(() => null)
+      if (activeShift) {
+        const hoursActive = (Date.now() - new Date(activeShift.clock_in_at).getTime()) / 3600000
+        diagnosis.push(`Active shift found (${hoursActive.toFixed(1)}h)${hoursActive > 14 ? ' — likely stuck' : ''}`)
+      } else {
+        diagnosis.push('No active shift')
+      }
+
+      const recentGps = await queryOne<{ cnt: number }>(`
+        SELECT COUNT(*)::int as cnt FROM gps_breadcrumbs WHERE user_id = $1 AND recorded_at > NOW() - INTERVAL '7 days'
+      `, [userId]).catch(() => null)
+      diagnosis.push(`GPS breadcrumbs (7d): ${recentGps?.cnt ?? 0}${(recentGps?.cnt ?? 0) === 0 ? ' — device GPS may not be working' : ''}`)
+
+      if (conv?.org_id) {
+        const geo = await queryOne<{ geofence_enabled: boolean; geofence_radius_ft: number }>(`
+          SELECT COALESCE(geofence_enabled, TRUE) as geofence_enabled, COALESCE(geofence_radius_ft, 300) as geofence_radius_ft
+          FROM organizations WHERE id = $1
+        `, [conv.org_id]).catch(() => null)
+        if (geo?.geofence_enabled) diagnosis.push(`Geofencing ON (${geo.geofence_radius_ft}ft) — GPS required`)
+      }
+    }
+
+    const userInfo = await queryOne<{ is_active: boolean; is_terminated: boolean; manager_id: string | null; manager_name: string | null }>(`
+      SELECT u.is_active, u.is_terminated, u.manager_id, m.full_name as manager_name
+      FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.id = $1
+    `, [userId]).catch(() => null)
+    if (userInfo) {
+      if (!userInfo.is_active) diagnosis.push('ACCOUNT INACTIVE')
+      if (userInfo.is_terminated) diagnosis.push('ACCOUNT TERMINATED')
+      if (!userInfo.manager_id) diagnosis.push('NO MANAGER ASSIGNED')
+      else diagnosis.push(`Manager: ${userInfo.manager_name}`)
+    }
+
+    const lastShift = await queryOne<{ clock_in_at: string; store_address: string | null }>(`
+      SELECT s.clock_in_at::text, sl.address as store_address FROM shifts s
+      LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
+      WHERE s.user_id = $1 AND s.clock_out_at IS NOT NULL ORDER BY s.clock_in_at DESC LIMIT 1
+    `, [userId]).catch(() => null)
+    if (lastShift) diagnosis.push(`Last shift: ${lastShift.clock_in_at.slice(0, 10)} at ${lastShift.store_address || 'unknown'}`)
+  }
+
+  const triageHtml = diagnosis.length > 0
+    ? `<div style="margin:16px 0 0;">
+        <p style="font-size:13px;font-weight:700;color:#7c3aed;margin:0 0 8px;">Auto-Triage Findings</p>
+        ${diagnosis.map(d => {
+          const isCritical = d.includes('INACTIVE') || d.includes('TERMINATED') || d.includes('NO MANAGER') || d.includes('stuck')
+          return `<div style="padding:6px 10px;margin-bottom:4px;border-left:3px solid ${isCritical ? '#dc2626' : '#7c3aed'};background:${isCritical ? '#fef2f2' : '#f5f3ff'};border-radius:0 6px 6px 0;">
+            <p style="margin:0;font-size:13px;color:#111;">${d}</p>
+          </div>`
+        }).join('')}
+      </div>`
+    : ''
+
+  // Email to developer + owner with triage included
   const admins = await query<{ email: string; full_name: string }>(`
     SELECT email, full_name FROM users WHERE role IN ('developer', 'owner') AND is_active = TRUE
   `)
@@ -355,6 +417,7 @@ async function escalateConversation(convId: string, reason: string, userName: st
         <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
           <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Question:</strong> ${firstUserMsg}</p>
           <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Reason:</strong> ${reason}</p>
+          ${triageHtml}
           <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
           <p style="font-size:12px;color:#888;margin:0 0 4px;"><strong>Full Transcript:</strong></p>
           <pre style="font-size:12px;color:#555;background:#f9f9f9;padding:12px;border-radius:8px;white-space:pre-wrap;">${transcript.slice(0, 2000)}</pre>

@@ -138,9 +138,17 @@ export default function ClockPage() {
   async function getCoords(): Promise<{ lat: number; lng: number } | null> {
     return new Promise(resolve => {
       if (!navigator.geolocation) { resolve(null); return }
+      let resolved = false
+      const timer = setTimeout(() => {
+        if (!resolved) { resolved = true; resolve(null) }
+      }, 12000)
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        () => resolve(null),
+        pos => {
+          if (!resolved) { resolved = true; clearTimeout(timer); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }) }
+        },
+        () => {
+          if (!resolved) { resolved = true; clearTimeout(timer); resolve(null) }
+        },
         { timeout: 10000, maximumAge: 0 }
       )
     })
@@ -164,7 +172,7 @@ export default function ClockPage() {
         return
       }
       if (session?.role === 'employee' && !coords) {
-        setMessage({ text: 'Location is required to clock in. Please enable GPS in your device settings and try again.', type: 'error' })
+        setMessage({ text: 'Could not get your location. Make sure GPS is enabled, try stepping outside for a better signal, then tap Clock In again. If this keeps happening, contact your DM.', type: 'error' })
         setLoading(false)
         return
       }

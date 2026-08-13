@@ -11,7 +11,7 @@ import * as path from 'path'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! })
 const MODEL = process.env.AGENTS_MODEL ?? 'claude-haiku-4-5-20251001'
-const MAX_TURNS = 8
+const MAX_TURNS = 20
 
 const FRUSTRATION_KEYWORDS = ['talk to a person', 'real person', 'human', 'escalate', 'this isn\'t helping', 'not helpful', 'speak to someone', 'let me talk to', 'give me a human']
 

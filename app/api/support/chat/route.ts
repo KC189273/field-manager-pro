@@ -46,9 +46,10 @@ HOW YOU WORK:
 3. You give ONE specific fix or step to try.
 4. You ALWAYS end with: "Did that solve it?" or "Let me know if that worked!"
 5. If they say no or it didn't work, you try the NEXT solution from the docs.
-6. If you run out of solutions, you say: "I've tried everything I can on my end. Want me to escalate this to the dev team? They'll get the full conversation and everything we've tried so they can pick up right where we left off."
-7. If they say yes to escalation, set escalate=true.
-8. If they say the fix worked, set resolved=true.
+6. You should use lookup_account EARLY to check the user's data and diagnose issues before guessing. Always look up their account when troubleshooting clock-in, schedule, timecard, or permission issues.
+7. NEVER give up easily. You must exhaust ALL troubleshooting steps before escalating. Do NOT offer to escalate until you have tried every possible solution. Keep going — try different angles, ask more questions, suggest alternative workarounds.
+8. If they say yes to escalation, set escalate=true.
+9. If they say the fix worked, set resolved=true.
 
 RULES:
 1. You ONLY answer questions covered in the help docs below. If a question isn't covered, offer to escalate immediately.
@@ -60,13 +61,31 @@ RULES:
 7. Never share other users' data, even within the same org.
 8. Be warm and casual. Use their first name. No "I apologize for the inconvenience" — just help them.
 
-DEVICE & NETWORK TRIAGE — for technical issues (clock-in problems, GPS issues, app freezing, loading errors, features not working), ask early in the conversation:
+DEVICE & NETWORK TRIAGE — for technical issues (clock-in problems, GPS issues, app freezing, loading errors, features not working), ask these questions early:
 - What device are you using? (iPhone/Android, model if they know)
 - Are you using the app or a browser?
 - Is your app updated to the latest version?
 - Is your phone's software up to date?
 - Are you on WiFi or cellular data?
-This helps determine if it's a device issue, a network issue, an outdated app/OS issue, or a bug we need to fix. Include all of this info when escalating so the dev team can diagnose faster.
+- Is Low Power Mode / Battery Saver turned on?
+This helps determine if it's a device issue, a network issue, an outdated app/OS issue, or a bug we need to fix.
+
+GPS / CLOCK-IN TROUBLESHOOTING — if the user can't clock in due to GPS/location issues, work through ALL of these steps in order before even considering escalation:
+1. Force close the app and reopen
+2. Check location permission is set to "Always" (not "While Using")
+3. iPhone: check that "Precise Location" is ON (separate toggle under Location)
+4. Toggle location permission off then back on (While Using → Always)
+5. Check if Low Power Mode is on — turn it OFF
+6. Step outside for a better GPS signal
+7. Full phone restart (power off, wait 10 sec, power on)
+8. iPhone: check Settings → Privacy → Location Services → System Services — make sure location-related toggles are on
+9. Ask if they recently updated their phone software (iOS/Android update can reset permissions)
+10. Delete the app/bookmark from Home Screen and re-add it: open Safari → go to fieldmanagerpro.app → Share button → Add to Home Screen → grant location permission fresh
+11. Try clocking in through the BROWSER directly (Safari/Chrome → fieldmanagerpro.app) instead of the app — this tests whether the issue is app-specific or phone-wide
+12. Check if other apps can use GPS (open Maps and see if it finds their location)
+13. iPhone: Reset Location & Privacy settings (Settings → General → Transfer or Reset → Reset → Reset Location & Privacy) — this is a last resort that resets ALL app permissions
+
+ONLY escalate clock-in/GPS issues after you have tried ALL of the above steps AND confirmed the user's device info. The dev team should never receive an escalation that just says "GPS doesn't work" — they need to know exactly what was tried and what the results were.
 
 ESCALATION — when you offer to escalate, explain:
 "I'll send the dev team our full conversation plus everything we've tried, so they can pick up right where we left off. They'll reach out to you directly."
@@ -346,54 +365,126 @@ async function escalateConversation(convId: string, reason: string, userName: st
     ).catch(() => {})
   }
 
-  // ── Auto-triage: diagnose the user's account ──
+  // ── Auto-triage: comprehensive diagnostics ──
   const diagnosis: string[] = []
   const userId = conv?.user_id
   if (userId) {
-    const question = (firstUserMsg + ' ' + (reason || '')).toLowerCase()
+    const question = (firstUserMsg + ' ' + (reason || '') + ' ' + transcript).toLowerCase()
 
+    // Account checks (always run)
+    const userInfo = await queryOne<{ is_active: boolean; is_terminated: boolean; manager_id: string | null; manager_name: string | null; pay_type: string }>(`
+      SELECT u.is_active, u.is_terminated, u.manager_id, m.full_name as manager_name, u.pay_type
+      FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.id = $1
+    `, [userId]).catch(() => null)
+    if (userInfo) {
+      if (!userInfo.is_active) diagnosis.push('CRITICAL: ACCOUNT INACTIVE — cannot log in or clock in')
+      if (userInfo.is_terminated) diagnosis.push('CRITICAL: ACCOUNT TERMINATED')
+      if (!userInfo.manager_id) diagnosis.push('CRITICAL: NO MANAGER ASSIGNED — invisible to all DMs')
+      else diagnosis.push(`Manager: ${userInfo.manager_name}`)
+    }
+
+    // Clock-in / GPS diagnostics
     if (question.includes('clock') || question.includes('location') || question.includes('gps') || question.includes('freeze')) {
+      // Active shift check
       const activeShift = await queryOne<{ id: string; clock_in_at: string }>(`
         SELECT id, clock_in_at::text FROM shifts WHERE user_id = $1 AND clock_in_at IS NOT NULL AND clock_out_at IS NULL
       `, [userId]).catch(() => null)
       if (activeShift) {
         const hoursActive = (Date.now() - new Date(activeShift.clock_in_at).getTime()) / 3600000
-        diagnosis.push(`Active shift found (${hoursActive.toFixed(1)}h)${hoursActive > 14 ? ' — likely stuck' : ''}`)
+        diagnosis.push(`Active shift found (${hoursActive.toFixed(1)}h)${hoursActive > 14 ? ' — LIKELY STUCK, needs manual clock-out' : ''}`)
       } else {
-        diagnosis.push('No active shift')
+        diagnosis.push('No active shift — not currently clocked in')
       }
 
-      const recentGps = await queryOne<{ cnt: number }>(`
-        SELECT COUNT(*)::int as cnt FROM gps_breadcrumbs WHERE user_id = $1 AND recorded_at > NOW() - INTERVAL '7 days'
-      `, [userId]).catch(() => null)
-      diagnosis.push(`GPS breadcrumbs (7d): ${recentGps?.cnt ?? 0}${(recentGps?.cnt ?? 0) === 0 ? ' — device GPS may not be working' : ''}`)
-
+      // Geofence settings
       if (conv?.org_id) {
-        const geo = await queryOne<{ geofence_enabled: boolean; geofence_radius_ft: number }>(`
-          SELECT COALESCE(geofence_enabled, TRUE) as geofence_enabled, COALESCE(geofence_radius_ft, 300) as geofence_radius_ft
+        const geo = await queryOne<{ geofence_enabled: boolean; geofence_radius_ft: number; geofence_exit_minutes: number }>(`
+          SELECT COALESCE(geofence_enabled, TRUE) as geofence_enabled, COALESCE(geofence_radius_ft, 300) as geofence_radius_ft, COALESCE(geofence_exit_minutes, 10) as geofence_exit_minutes
           FROM organizations WHERE id = $1
         `, [conv.org_id]).catch(() => null)
-        if (geo?.geofence_enabled) diagnosis.push(`Geofencing ON (${geo.geofence_radius_ft}ft) — GPS required`)
+        if (geo?.geofence_enabled) diagnosis.push(`Geofencing ON (${geo.geofence_radius_ft}ft radius, ${geo.geofence_exit_minutes}min exit) — GPS REQUIRED for employees`)
+        else diagnosis.push('Geofencing OFF — GPS not required')
+      }
+
+      // Shift history analysis — when did GPS last work?
+      const recentShifts = await query<{ clock_in_at: string; clock_in_lat: string | null; store_address: string | null }>(`
+        SELECT s.clock_in_at::text, s.clock_in_lat::text, sl.address as store_address
+        FROM shifts s LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
+        WHERE s.user_id = $1 ORDER BY s.clock_in_at DESC LIMIT 10
+      `, [userId]).catch(() => [])
+
+      const withGps = recentShifts.filter(s => s.clock_in_lat)
+      const withoutGps = recentShifts.filter(s => !s.clock_in_lat)
+      const lastGpsShift = withGps.length > 0 ? withGps[0] : null
+      const daysSinceLastShift = recentShifts.length > 0 ? Math.round((Date.now() - new Date(recentShifts[0].clock_in_at).getTime()) / 86400000) : -1
+
+      diagnosis.push(`Last 10 shifts: ${withGps.length} with GPS, ${withoutGps.length} without GPS`)
+      if (lastGpsShift) {
+        const daysSinceGps = Math.round((Date.now() - new Date(lastGpsShift.clock_in_at).getTime()) / 86400000)
+        diagnosis.push(`Last GPS clock-in: ${lastGpsShift.clock_in_at.slice(0, 10)} (${daysSinceGps} days ago) at ${lastGpsShift.store_address || 'unknown'}`)
+        if (daysSinceGps <= 7 && daysSinceLastShift > daysSinceGps) {
+          diagnosis.push(`GPS worked ${daysSinceGps} days ago but employee hasn't clocked in for ${daysSinceLastShift} days — DEVICE ISSUE: GPS broke recently`)
+        }
+      }
+      if (withGps.length === 0 && recentShifts.length > 0) {
+        diagnosis.push('DEVICE ISSUE: Employee has NEVER had GPS on any shift — device location is completely off or denied')
+      }
+
+      // GPS breadcrumbs
+      const recentGps = await queryOne<{ cnt: number; latest: string | null }>(`
+        SELECT COUNT(*)::int as cnt, MAX(recorded_at)::text as latest
+        FROM gps_breadcrumbs WHERE user_id = $1 AND recorded_at > NOW() - INTERVAL '14 days'
+      `, [userId]).catch(() => null)
+      diagnosis.push(`GPS breadcrumbs (14d): ${recentGps?.cnt ?? 0}${recentGps?.latest ? ` (latest: ${recentGps.latest.slice(0, 10)})` : ''}`)
+
+      // Store assignment check
+      if (userInfo?.manager_id) {
+        const storeCount = await queryOne<{ cnt: number }>(`
+          SELECT COUNT(*)::int as cnt FROM dm_manager_stores dms
+          JOIN dm_store_locations dsl ON dsl.id = dms.store_location_id AND dsl.active = TRUE
+          WHERE dms.manager_id = $1
+        `, [userInfo.manager_id]).catch(() => null)
+        diagnosis.push(`Stores via manager: ${storeCount?.cnt ?? 0}${(storeCount?.cnt ?? 0) === 0 ? ' — NO STORES, cannot clock in' : ''}`)
+      }
+
+      // Test clock-in from server side (geofence check)
+      if (lastGpsShift?.clock_in_lat && lastGpsShift?.store_address) {
+        diagnosis.push(`Server-side geofence test would use last known GPS — if clock-in works from backend, issue is DEVICE not APP`)
+      }
+
+      // Extract device info from transcript
+      if (question.includes('iphone')) diagnosis.push('Device: iPhone')
+      else if (question.includes('android')) diagnosis.push('Device: Android')
+      if (question.includes('safari')) diagnosis.push('Using: Safari browser')
+      if (question.includes('app')) diagnosis.push('Using: Native app / PWA')
+
+      // Assessment
+      diagnosis.push('---')
+      if (withGps.length > 0 && daysSinceLastShift > (lastGpsShift ? Math.round((Date.now() - new Date(lastGpsShift.clock_in_at).getTime()) / 86400000) : 999)) {
+        diagnosis.push('ASSESSMENT: Device GPS issue — GPS worked previously but stopped. Likely cause: iOS update, Low Power Mode, PWA permission reset, or Precise Location toggled off.')
+      } else if (withGps.length === 0) {
+        diagnosis.push('ASSESSMENT: Device GPS never worked — location services likely denied or phone GPS is off entirely. Employee needs to enable location services.')
+      } else {
+        diagnosis.push('ASSESSMENT: Need more info to determine root cause.')
       }
     }
 
-    const userInfo = await queryOne<{ is_active: boolean; is_terminated: boolean; manager_id: string | null; manager_name: string | null }>(`
-      SELECT u.is_active, u.is_terminated, u.manager_id, m.full_name as manager_name
-      FROM users u LEFT JOIN users m ON m.id = u.manager_id WHERE u.id = $1
-    `, [userId]).catch(() => null)
-    if (userInfo) {
-      if (!userInfo.is_active) diagnosis.push('ACCOUNT INACTIVE')
-      if (userInfo.is_terminated) diagnosis.push('ACCOUNT TERMINATED')
-      if (!userInfo.manager_id) diagnosis.push('NO MANAGER ASSIGNED')
-      else diagnosis.push(`Manager: ${userInfo.manager_name}`)
+    // Schedule checks
+    if (question.includes('schedule') || question.includes('shift') || question.includes('work')) {
+      const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+      const scheduled = await queryOne<{ cnt: number }>(`SELECT COUNT(*)::int as cnt FROM scheduled_shifts WHERE employee_id = $1 AND shift_date = $2`, [userId, todayCST]).catch(() => null)
+      diagnosis.push(`Scheduled today: ${scheduled?.cnt || 0} shift(s)`)
+      const published = await queryOne<{ cnt: number }>(`SELECT COUNT(*)::int as cnt FROM scheduled_shifts_publish WHERE week_start BETWEEN ($1::date - 6) AND $1::date`, [todayCST]).catch(() => null)
+      if (!published || published.cnt === 0) diagnosis.push('No published schedule this week — employee sees empty My Schedule')
     }
 
+    // Last shift
     const lastShift = await queryOne<{ clock_in_at: string; store_address: string | null }>(`
       SELECT s.clock_in_at::text, sl.address as store_address FROM shifts s
       LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
       WHERE s.user_id = $1 AND s.clock_out_at IS NOT NULL ORDER BY s.clock_in_at DESC LIMIT 1
     `, [userId]).catch(() => null)
-    if (lastShift) diagnosis.push(`Last shift: ${lastShift.clock_in_at.slice(0, 10)} at ${lastShift.store_address || 'unknown'}`)
+    if (lastShift) diagnosis.push(`Last completed shift: ${lastShift.clock_in_at.slice(0, 10)} at ${lastShift.store_address || 'unknown'}`)
   }
 
   const triageHtml = diagnosis.length > 0

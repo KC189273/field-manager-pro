@@ -171,12 +171,17 @@ export async function POST(req: NextRequest) {
     ).catch(() => {})
   }
 
-  // Email all management so they don't miss it if push is not seen
+  // Email management — exclude DMs if terminating an SD or DM
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
+  const terminatedUserRole = await queryOne<{ role: string }>(`SELECT role FROM users WHERE id = $1`, [employee.id]).catch(() => null)
+  const isLeadershipTerm = terminatedUserRole && ['sales_director', 'manager'].includes(terminatedUserRole.role)
+  const mgmtRoleFilter = isLeadershipTerm
+    ? `AND role IN ('ops_manager', 'owner', 'developer')`
+    : `AND role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`
   const management = await query<{ email: string; full_name: string }>(
     `SELECT email, full_name FROM users
      WHERE org_id = $1 AND is_active = TRUE
-       AND role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')
+       ${mgmtRoleFilter}
        AND id != $2`,
     [employee.org_id, session.id]
   )

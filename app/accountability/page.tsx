@@ -1448,7 +1448,7 @@ export default function AccountabilityPage() {
       if (session.role === 'developer' && allActiveUsers.length === 0) {
         fetch('/api/team/users').then(r => r.json()).then(d => {
           const users = d.users ?? d ?? []
-          setAllActiveUsers(users.filter((u: { is_active: boolean; is_terminated: boolean; role: string }) => u.is_active && !u.is_terminated && u.role !== 'developer'))
+          setAllActiveUsers(users.filter((u: { is_terminated: boolean; role: string }) => !u.is_terminated && u.role !== 'developer'))
         }).catch(() => {})
       }
     }

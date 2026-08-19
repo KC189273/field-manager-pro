@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
   const orgFilter = await getOrgFilter(session)
 
   const employee = await queryOne<{ id: string; full_name: string; email: string; org_id: string; manager_id: string | null }>(
-    `SELECT id, full_name, email, org_id, manager_id FROM users WHERE id = $1 AND is_active = TRUE`,
+    `SELECT id, full_name, email, org_id, manager_id FROM users WHERE id = $1 AND is_terminated = FALSE`,
     [employee_id]
   )
 

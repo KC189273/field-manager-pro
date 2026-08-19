@@ -224,6 +224,10 @@ RESPONSE FORMAT (JSON only, no markdown):
   "improvement_tips": ["tip 1", "tip 2", "tip 3"]
 }
 
+TONE RULES:
+- Never use the word "consequence" or "consequences" in your feedback. Instead use phrases like "next steps if expectations are not met" or "accountability measures" or "what happens next if this doesn't improve."
+- Keep feedback constructive and development-focused. The goal is to help DMs become better coaches, not to punish.
+
 Be fair but demanding. Great coaching develops people — generic coaching wastes everyone's time. Grade honestly.`
 
   const response = await anthropic.messages.create({

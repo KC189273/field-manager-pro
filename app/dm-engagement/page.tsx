@@ -135,6 +135,8 @@ export default function DmEngagementPage() {
   const [coachingTrend, setCoachingTrend] = useState('new')
   const [detailLoading, setDetailLoading] = useState(false)
   const [expandedGrade, setExpandedGrade] = useState<string | null>(null)
+  const [availableMonths, setAvailableMonths] = useState<string[]>([])
+  const [selectedMonth, setSelectedMonth] = useState('')
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
@@ -168,15 +170,18 @@ export default function DmEngagementPage() {
     setCoachingLoading(true)
     fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.dmRollup) setCoachingDms(d.dmRollup)
+      if (d?.availableMonths) setAvailableMonths(d.availableMonths)
+      if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth)
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
 
-  function openDmCoaching(dmId: string, dmName: string) {
+  function openDmCoaching(dmId: string, dmName: string, month?: string) {
     setSelectedDmId(dmId)
     setSelectedDmName(dmName)
     setDetailLoading(true)
-    fetch(`/api/coaching-grades?dmId=${dmId}`).then(r => r.ok ? r.json() : null).then(d => {
+    const m = month || selectedMonth
+    fetch(`/api/coaching-grades?dmId=${dmId}${m ? `&month=${m}` : ''}`).then(r => r.ok ? r.json() : null).then(d => {
       if (d) {
         setCoachingDetails(d.grades ?? [])
         setCoachingMonthlyAvg(d.monthlyAvg ?? [])
@@ -242,6 +247,25 @@ export default function DmEngagementPage() {
         {/* ── Coaching Performance Tab ── */}
         {mainTab === 'coaching' && !selectedDmId && (
           <div className="space-y-3">
+            {/* Month selector */}
+            {availableMonths.length > 0 && (
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">
+                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                </p>
+                <select
+                  value={selectedMonth}
+                  onChange={e => setSelectedMonth(e.target.value)}
+                  className="bg-gray-900 border border-gray-700 text-gray-300 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-violet-500"
+                >
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>
+                      {new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             {coachingLoading ? (
               <p className="text-gray-500 text-sm text-center py-10">Loading coaching data...</p>
             ) : coachingDms.length === 0 ? (
@@ -284,9 +308,24 @@ export default function DmEngagementPage() {
         {/* ── DM Coaching Detail View ── */}
         {mainTab === 'coaching' && selectedDmId && (
           <div className="space-y-4">
-            <button onClick={() => setSelectedDmId(null)} className="text-violet-400 text-sm font-semibold hover:text-violet-300 transition-colors">
-              ← Back to all DMs
-            </button>
+            <div className="flex items-center justify-between">
+              <button onClick={() => setSelectedDmId(null)} className="text-violet-400 text-sm font-semibold hover:text-violet-300 transition-colors">
+                ← Back to all DMs
+              </button>
+              {availableMonths.length > 0 && (
+                <select
+                  value={selectedMonth}
+                  onChange={e => { setSelectedMonth(e.target.value); openDmCoaching(selectedDmId, selectedDmName, e.target.value) }}
+                  className="bg-gray-900 border border-gray-700 text-gray-300 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-violet-500"
+                >
+                  {availableMonths.map(m => (
+                    <option key={m} value={m}>
+                      {new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
 
             <div className="flex items-center justify-between">
               <div>

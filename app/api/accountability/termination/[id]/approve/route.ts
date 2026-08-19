@@ -107,15 +107,21 @@ export async function POST(
     buildTerminationEmailHtml(emailParams)
   ).catch(e => console.error('Termination async error:', e))
 
-  // CC: DM, ops managers, SD, owner — respecting notification preferences
+  // Determine who should receive management copies based on the terminated employee's role
+  // If terminating a SD or DM, only ops_manager/owner/developer get the email (not other DMs)
+  const terminatedRole = await queryOne<{ role: string }>(`SELECT role FROM users WHERE id = $1`, [termReq.employee_id])
+  const isLeadershipTermination = terminatedRole && ['sales_director', 'manager'].includes(terminatedRole.role)
+  const ccRoleFilter = isLeadershipTermination
+    ? `AND u.role IN ('ops_manager', 'owner', 'developer')`
+    : `AND u.role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`
+
   const ccRecipients = await query<{ id: string; email: string; full_name: string; role: string; email_ok: boolean; push_ok: boolean }>(
     `SELECT u.id, u.email, u.full_name, u.role,
        (COALESCE(np.termination_docs, TRUE) AND COALESCE(np.email_enabled, TRUE)) as email_ok,
        (COALESCE(np.termination_docs, TRUE) AND COALESCE(np.push_enabled, TRUE)) as push_ok
      FROM users u
      LEFT JOIN notification_preferences np ON np.user_id = u.id
-     WHERE u.org_id = $1 AND u.is_active = TRUE
-       AND u.role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`,
+     WHERE u.org_id = $1 AND u.is_active = TRUE ${ccRoleFilter}`,
     [termReq.org_id]
   )
 

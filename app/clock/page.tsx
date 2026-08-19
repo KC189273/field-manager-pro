@@ -59,6 +59,12 @@ export default function ClockPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoUploading, setPhotoUploading] = useState(false)
   const photoInputRef = useRef<HTMLInputElement>(null)
+  const [geofenceBlocked, setGeofenceBlocked] = useState<{ distanceFt: number; storeAddress: string } | null>(null)
+  const [overrideRequesting, setOverrideRequesting] = useState(false)
+  const [overrideReason, setOverrideReason] = useState('')
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; full_name: string }>>([])
+  const [overrideEmpId, setOverrideEmpId] = useState('')
+  const [overrideStoreId, setOverrideStoreId] = useState('')
 
   const fetchStatus = useCallback(async () => {
     const [meRes, statusRes] = await Promise.all([
@@ -206,8 +212,12 @@ export default function ClockPage() {
       })
       const data = await res.json()
       if (!res.ok) {
+        if (data.geofenceBlocked) {
+          setGeofenceBlocked({ distanceFt: data.distanceFt, storeAddress: data.storeAddress })
+        }
         setMessage({ text: data.error || 'Failed to clock in', type: 'error' })
       } else {
+        setGeofenceBlocked(null)
         setMessage({ text: 'Clocked in successfully', type: 'success' })
         setClockInPhoto(null)
         setPhotoPreview(null)
@@ -394,6 +404,113 @@ export default function ClockPage() {
             message.type === 'success' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'
           }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* Geofence Blocked — employee sees "contact your DM" */}
+        {geofenceBlocked && !clocked && session?.role === 'employee' && (
+          <div className="w-full mb-4 bg-gray-900 border border-amber-700/50 rounded-2xl p-4">
+            <p className="text-amber-400 font-semibold text-sm mb-1">Can't clock in — GPS shows you too far</p>
+            <p className="text-gray-400 text-xs mb-3">
+              GPS shows you {geofenceBlocked.distanceFt} ft from {geofenceBlocked.storeAddress}. If you're at the store and your GPS is inaccurate, ask your DM to clock you in using the Geofence Override on their phone.
+            </p>
+          </div>
+        )}
+
+        {/* Geofence Override — DMs+ can clock in any employee with a reason */}
+        {!clocked && ['manager', 'ops_manager', 'owner', 'developer'].includes(session?.role ?? '') && (
+          <div className="w-full mb-4">
+            {!overrideRequesting ? (
+              <button
+                onClick={() => {
+                  setOverrideRequesting(true)
+                  if (teamMembers.length === 0) {
+                    fetch('/api/team/users').then(r => r.json()).then(d => {
+                      const users = d.users ?? d ?? []
+                      setTeamMembers(users.filter((u: { is_active: boolean; role: string }) => u.is_active && u.role === 'employee').map((u: { id: string; full_name: string }) => ({ id: u.id, full_name: u.full_name })))
+                    }).catch(() => {})
+                  }
+                }}
+                className="text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors"
+              >
+                Geofence Override — Clock in an employee
+              </button>
+            ) : (
+              <div className="bg-gray-900 border border-amber-700/50 rounded-2xl p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-amber-400 font-semibold text-sm">Geofence Override</p>
+                  <button onClick={() => { setOverrideRequesting(false); setOverrideReason('') }} className="text-gray-500 hover:text-white text-lg">×</button>
+                </div>
+                <p className="text-gray-400 text-xs">Clock in an employee who is at the store but GPS is inaccurate.</p>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Employee</label>
+                  <select
+                    value={overrideEmpId}
+                    onChange={e => setOverrideEmpId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="">— Select Employee —</option>
+                    {teamMembers.map(t => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Store</label>
+                  <select
+                    value={overrideStoreId}
+                    onChange={e => setOverrideStoreId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="">— Select Store —</option>
+                    {stores.map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 mb-1">Reason for Override</label>
+                  <select
+                    value={overrideReason}
+                    onChange={e => setOverrideReason(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-violet-500"
+                  >
+                    <option value="">— Select a reason —</option>
+                    <option value="GPS not accurate indoors">GPS not accurate indoors</option>
+                    <option value="Phone software update / iOS beta affecting GPS">Phone software update / iOS beta</option>
+                    <option value="Phone GPS hardware issue">Phone GPS hardware issue</option>
+                    <option value="Poor cell signal in area">Poor cell signal in area</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!overrideEmpId) { setMessage({ text: 'Please select an employee', type: 'error' }); return }
+                    if (!overrideStoreId) { setMessage({ text: 'Please select a store', type: 'error' }); return }
+                    if (!overrideReason) { setMessage({ text: 'Please select a reason', type: 'error' }); return }
+                    setLoading(true)
+                    try {
+                      const res = await fetch('/api/clock/override', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ employeeId: overrideEmpId, storeId: overrideStoreId, reason: overrideReason }),
+                      })
+                      const data = await res.json()
+                      if (!res.ok) {
+                        setMessage({ text: data.error || 'Override failed', type: 'error' })
+                      } else {
+                        setMessage({ text: `Override approved — employee is now clocked in${data.overrideCount >= 3 ? '. Note: This employee has needed multiple overrides recently — check their device.' : ''}`, type: 'success' })
+                        setOverrideRequesting(false)
+                        setOverrideReason('')
+                        setOverrideEmpId('')
+                        setOverrideStoreId('')
+                      }
+                    } catch { setMessage({ text: 'Network error', type: 'error' }) }
+                    finally { setLoading(false) }
+                  }}
+                  disabled={loading}
+                  className="w-full bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors"
+                >
+                  {loading ? 'Processing...' : 'Clock In Employee (Override)'}
+                </button>
+              </div>
+            )}
           </div>
         )}
 

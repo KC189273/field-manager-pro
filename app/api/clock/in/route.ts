@@ -46,6 +46,8 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             error: `You are too far from ${store.address} to clock in. You must be within ${geo.radius_ft} feet of the store. (Currently ${Math.round(distFt)} ft away)`,
             distanceFt: Math.round(distFt),
+            geofenceBlocked: true,
+            storeAddress: store.address,
           }, { status: 403 })
         }
       }

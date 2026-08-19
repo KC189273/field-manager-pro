@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
 import { Readable } from 'stream'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
@@ -25,6 +25,10 @@ export async function getReceiptUploadUrl(key: string, contentType?: string): Pr
 export async function getReceiptViewUrl(key: string): Promise<string> {
   const cmd = new GetObjectCommand({ Bucket: BUCKET, Key: key })
   return getSignedUrl(s3, cmd, { expiresIn: 3600 })
+}
+
+export async function deleteS3Object(key: string): Promise<void> {
+  await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }))
 }
 
 /** 7-day presigned URL — use this when embedding photos in emails */

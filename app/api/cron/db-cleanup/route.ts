@@ -28,10 +28,40 @@ export async function GET(req: NextRequest) {
     // Proactive VACUUM on GPS even if no deletes (handles dead rows from updates)
     if (gps[0].cnt === 0) await query('VACUUM ANALYZE gps_breadcrumbs').catch(() => {})
 
+    // Clean up clock-in photos for approved payroll periods
+    // Delete photo keys from S3 and null out the column for shifts in approved periods
+    let photosDeleted = 0
+    try {
+      const { deleteS3Object } = await import('@/lib/s3')
+      const photoShifts = await query<{ id: string; clock_in_photo_key: string }>(`
+        SELECT s.id, s.clock_in_photo_key FROM shifts s
+        WHERE s.clock_in_photo_key IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM payroll_periods pp
+            WHERE pp.status = 'approved'
+              AND s.clock_in_at >= pp.period_start
+              AND s.clock_in_at <= pp.period_end
+          )
+      `)
+      for (const ps of photoShifts) {
+        await deleteS3Object(ps.clock_in_photo_key).catch(() => {})
+      }
+      if (photoShifts.length > 0) {
+        await query(`
+          UPDATE shifts SET clock_in_photo_key = NULL
+          WHERE id = ANY($1::uuid[])
+        `, [photoShifts.map(p => p.id)])
+        photosDeleted = photoShifts.length
+      }
+    } catch (err) {
+      console.error('Photo cleanup error:', err)
+    }
+
     return NextResponse.json({
       ok: true,
       gps_deleted: gps[0].cnt,
       notifications_deleted: notifs[0].cnt,
+      photos_deleted: photosDeleted,
     })
   } catch (err) {
     console.error('DB cleanup error:', err)

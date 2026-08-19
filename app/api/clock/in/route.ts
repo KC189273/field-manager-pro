@@ -14,9 +14,10 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { lat, lng, address, storeId } = await req.json()
+  const { lat, lng, address, storeId, photoKey } = await req.json()
 
   try { await ensureShiftColumns() } catch {}
+  await query(`ALTER TABLE shifts ADD COLUMN IF NOT EXISTS clock_in_photo_key TEXT`).catch(() => {})
 
   // Check if already clocked in
   const active = await queryOne(
@@ -52,9 +53,9 @@ export async function POST(req: NextRequest) {
   }
 
   const shift = await queryOne<{ id: string }>(
-    `INSERT INTO shifts (user_id, clock_in_at, clock_in_lat, clock_in_lng, clock_in_address, store_location_id)
-     VALUES ($1, NOW(), $2, $3, $4, $5) RETURNING id`,
-    [session.id, lat, lng, address ?? null, storeId || null]
+    `INSERT INTO shifts (user_id, clock_in_at, clock_in_lat, clock_in_lng, clock_in_address, store_location_id, clock_in_photo_key)
+     VALUES ($1, NOW(), $2, $3, $4, $5, $6) RETURNING id`,
+    [session.id, lat, lng, address ?? null, storeId || null, photoKey || null]
   )
 
   // Record first breadcrumb if coordinates available
@@ -101,6 +102,35 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch { /* never block clock-in */ }
+
+  // Flag missing clock-in photo (check org setting)
+  if (!photoKey) {
+    try {
+      const photoRequired = await queryOne<{ val: boolean }>(`
+        SELECT COALESCE((SELECT geofence_enabled FROM organizations WHERE id = $1), FALSE) as val
+      `, [session.org_id]).catch(() => null)
+      // For now, use a dev_config flag for mandatory photos
+      const mandatory = await queryOne<{ value: string }>(`
+        SELECT value FROM dev_config WHERE key = 'clock_in_photo_required'
+      `).catch(() => null)
+      if (mandatory?.value === 'true') {
+        const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+        await query(
+          `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
+           VALUES ($1, $2, 'missing_clock_in_photo', $3, $4, $5)`,
+          [session.id, shift!.id, todayCST,
+           `${session.fullName} clocked in without a uniform photo.`,
+           storeId || null]
+        )
+        // Notify DM
+        const mgr = await queryOne<{ id: string }>(`SELECT manager_id as id FROM users WHERE id = $1 AND manager_id IS NOT NULL`, [session.id])
+        if (mgr) {
+          const { sendPushToUser } = await import('@/lib/apns')
+          sendPushToUser(mgr.id, 'Missing Clock-In Photo', `${session.fullName} clocked in without a uniform photo.`, 'flag_created').catch(() => {})
+        }
+      }
+    } catch { /* never block clock-in */ }
+  }
 
   return NextResponse.json({ ok: true, shiftId: shift!.id })
 }

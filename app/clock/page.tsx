@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import NavBar from '@/components/NavBar'
 import { startNativeTracking, stopNativeTracking, isCapacitor } from '@/lib/gps-native'
 
@@ -55,6 +55,10 @@ export default function ClockPage() {
   const [breakLoading, setBreakLoading] = useState(false)
   const [breakElapsed, setBreakElapsed] = useState('')
   const [showDisclosure, setShowDisclosure] = useState(false)
+  const [clockInPhoto, setClockInPhoto] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoUploading, setPhotoUploading] = useState(false)
+  const photoInputRef = useRef<HTMLInputElement>(null)
 
   const fetchStatus = useCallback(async () => {
     const [meRes, statusRes] = await Promise.all([
@@ -176,16 +180,37 @@ export default function ClockPage() {
         setLoading(false)
         return
       }
+      // Upload photo if taken
+      let photoKey: string | null = null
+      if (clockInPhoto) {
+        try {
+          setPhotoUploading(true)
+          const urlRes = await fetch('/api/clock/photo-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contentType: clockInPhoto.type }),
+          })
+          const urlData = await urlRes.json()
+          if (urlRes.ok && urlData.url) {
+            await fetch(urlData.url, { method: 'PUT', body: clockInPhoto, headers: { 'Content-Type': clockInPhoto.type } })
+            photoKey = urlData.key
+          }
+        } catch { /* photo upload failed — proceed without it */ }
+        finally { setPhotoUploading(false) }
+      }
+
       const res = await fetch('/api/clock/in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lat: coords?.lat ?? null, lng: coords?.lng ?? null, storeId: selectedStoreId }),
+        body: JSON.stringify({ lat: coords?.lat ?? null, lng: coords?.lng ?? null, storeId: selectedStoreId, photoKey }),
       })
       const data = await res.json()
       if (!res.ok) {
         setMessage({ text: data.error || 'Failed to clock in', type: 'error' })
       } else {
         setMessage({ text: 'Clocked in successfully', type: 'success' })
+        setClockInPhoto(null)
+        setPhotoPreview(null)
         await fetchStatus()
         // Start native background GPS tracking (no-op in browser)
         if (data.shiftId) startNativeTracking(data.shiftId)
@@ -434,6 +459,59 @@ export default function ClockPage() {
           </div>
         )}
 
+        {/* Clock-in photo — camera only, shown when not clocked in */}
+        {!clocked && (
+          <div className="w-full mb-4">
+            <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">
+              Uniform Photo
+            </label>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="user"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) {
+                  setClockInPhoto(file)
+                  setPhotoPreview(URL.createObjectURL(file))
+                }
+                if (photoInputRef.current) photoInputRef.current.value = ''
+              }}
+            />
+            {photoPreview ? (
+              <div className="relative">
+                <img src={photoPreview} alt="Clock-in photo" className="w-full h-40 object-cover rounded-xl border border-gray-700" />
+                <button
+                  onClick={() => { setClockInPhoto(null); setPhotoPreview(null) }}
+                  className="absolute top-2 right-2 bg-black/60 text-white w-7 h-7 rounded-full flex items-center justify-center text-sm hover:bg-black/80"
+                >
+                  ×
+                </button>
+                <button
+                  onClick={() => photoInputRef.current?.click()}
+                  className="absolute bottom-2 right-2 bg-violet-600/80 text-white text-xs font-semibold px-3 py-1 rounded-lg hover:bg-violet-500"
+                >
+                  Retake
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                className="w-full bg-gray-900 border border-dashed border-gray-700 rounded-xl px-4 py-4 text-center hover:border-violet-500 transition-colors"
+              >
+                <svg className="w-6 h-6 text-gray-500 mx-auto mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+                <p className="text-xs text-gray-500">Take a photo in uniform with name tag</p>
+                <p className="text-[10px] text-gray-600 mt-0.5">Optional during testing · Required starting Sept 1</p>
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Clock-out confirmation */}
         {confirmingClockOut && (
           <div className="w-full mb-4 bg-gray-900 border border-red-700 rounded-2xl p-4">
@@ -478,7 +556,7 @@ export default function ClockPage() {
               : 'bg-violet-600 hover:bg-violet-500 text-white'
           }`}
         >
-          {loading ? (locating ? 'Getting Location…' : 'Processing…') : clocked ? 'Clock Out' : 'Clock In'}
+          {loading ? (locating ? 'Getting Location…' : photoUploading ? 'Uploading Photo…' : 'Processing…') : clocked ? 'Clock Out' : 'Clock In'}
         </button>
         {onBreak && (
           <p className="text-xs text-amber-600 mt-2 text-center">End your break before clocking out</p>

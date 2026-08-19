@@ -153,6 +153,7 @@ export async function GET(req: NextRequest) {
       (rawShifts as Record<string, unknown>[]).map(async s => ({
         ...s,
         avatar_url: s.avatar_key ? await getReceiptViewUrl(s.avatar_key as string) : null,
+        clock_in_photo_url: s.clock_in_photo_key ? await getReceiptViewUrl(s.clock_in_photo_key as string).catch(() => null) : null,
       }))
     )
     return NextResponse.json({ shifts })

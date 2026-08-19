@@ -36,6 +36,8 @@ interface Shift {
   username: string
   avatar_url?: string | null
   edits: ShiftEdit[] | null
+  clock_in_photo_key: string | null
+  clock_in_photo_url: string | null
 }
 
 interface ShiftEdit {
@@ -1091,6 +1093,12 @@ function TimecardsPage() {
                           {dayShifts.map(shift => (
                             <div key={shift.id} className={`px-4 py-3 ${shift.is_manual ? 'bg-amber-500/5' : ''}`}>
                               <div className="flex items-start justify-between gap-2">
+                                {/* Clock-in photo thumbnail */}
+                                {shift.clock_in_photo_url && (
+                                  <button onClick={() => window.open(shift.clock_in_photo_url!, '_blank')} className="flex-shrink-0 w-10 h-10 rounded-lg overflow-hidden border border-gray-700 hover:border-violet-500 transition-colors">
+                                    <img src={shift.clock_in_photo_url} alt="Clock-in" className="w-full h-full object-cover" />
+                                  </button>
+                                )}
                                 <div className="min-w-0 flex-1">
                                   <div className="flex items-center gap-2 flex-wrap">
                                     <span className="text-sm font-medium text-white">{fmtTime(shift.clock_in_at)}</span>

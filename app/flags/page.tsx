@@ -40,6 +40,7 @@ const FLAG_LABELS: Record<string, string> = {
   break_multiple: 'Multiple Breaks',
   auto_clock_out: 'Auto Clock-Out',
   geofence_exit: 'Geofence Auto Clock-Out',
+  missing_clock_in_photo: 'Missing Clock-In Photo',
   late_clock_in: 'Late Clock-In',
 }
 
@@ -57,6 +58,7 @@ const FLAG_COLORS: Record<string, string> = {
   break_multiple: 'text-yellow-400 bg-yellow-900/30 border-yellow-800/50',
   auto_clock_out: 'text-blue-400 bg-blue-900/30 border-blue-800/50',
   geofence_exit: 'text-cyan-400 bg-cyan-900/30 border-cyan-800/50',
+  missing_clock_in_photo: 'text-pink-400 bg-pink-900/30 border-pink-800/50',
   late_clock_in: 'text-rose-400 bg-rose-900/30 border-rose-800/50',
 }
 

@@ -69,6 +69,53 @@ function engagementLevel(dm: DmRow): 'high' | 'medium' | 'low' {
   return 'low'
 }
 
+interface CoachingDm {
+  dm_id: string; dm_name: string; avg_score: number | null; count: number
+  grade: string | null; prev_grade: string | null; trend: string
+}
+
+interface CoachingDetail {
+  id: string; visit_id: string; graded_at: string; store_address: string
+  employee_coached: string | null; overall_grade: string; overall_score: number
+  specificity_grade: string; specificity_feedback: string
+  actionability_grade: string; actionability_feedback: string
+  follow_up_grade: string; follow_up_feedback: string
+  depth_grade: string; depth_feedback: string
+  prior_reference_grade: string; prior_reference_feedback: string
+  summary: string; improvement_tips: string
+}
+
+const gradeColor = (g: string | null) => {
+  if (!g) return 'text-gray-500'
+  if (g.startsWith('A')) return 'text-green-400'
+  if (g.startsWith('B')) return 'text-blue-400'
+  if (g.startsWith('C')) return 'text-amber-400'
+  if (g.startsWith('D')) return 'text-orange-400'
+  return 'text-red-400'
+}
+
+const gradeBg = (g: string | null) => {
+  if (!g) return 'bg-gray-800'
+  if (g.startsWith('A')) return 'bg-green-900/30 border-green-800/50'
+  if (g.startsWith('B')) return 'bg-blue-900/30 border-blue-800/50'
+  if (g.startsWith('C')) return 'bg-amber-900/30 border-amber-800/50'
+  if (g.startsWith('D')) return 'bg-orange-900/30 border-orange-800/50'
+  return 'bg-red-900/30 border-red-800/50'
+}
+
+const trendIcon = (t: string) => {
+  if (t === 'improving') return '↑'
+  if (t === 'declining') return '↓'
+  if (t === 'consistent') return '→'
+  return '•'
+}
+
+const trendColor = (t: string) => {
+  if (t === 'improving') return 'text-green-400'
+  if (t === 'declining') return 'text-red-400'
+  return 'text-gray-500'
+}
+
 export default function DmEngagementPage() {
   const router = useRouter()
   const [session, setSession] = useState<Session | null>(null)
@@ -76,6 +123,18 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
+  const [mainTab, setMainTab] = useState<'coaching' | 'metrics'>('coaching')
+
+  // Coaching state
+  const [coachingDms, setCoachingDms] = useState<CoachingDm[]>([])
+  const [coachingLoading, setCoachingLoading] = useState(true)
+  const [selectedDmId, setSelectedDmId] = useState<string | null>(null)
+  const [selectedDmName, setSelectedDmName] = useState('')
+  const [coachingDetails, setCoachingDetails] = useState<CoachingDetail[]>([])
+  const [coachingMonthlyAvg, setCoachingMonthlyAvg] = useState<Array<{ month: string; avg_score: number; grade: string; count: number }>>([])
+  const [coachingTrend, setCoachingTrend] = useState('new')
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [expandedGrade, setExpandedGrade] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
@@ -102,6 +161,30 @@ export default function DmEngagementPage() {
   useEffect(() => {
     if (session) fetchData(rangeDays)
   }, [session, rangeDays, fetchData])
+
+  // Load coaching rollup
+  useEffect(() => {
+    if (!session) return
+    setCoachingLoading(true)
+    fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.dmRollup) setCoachingDms(d.dmRollup)
+      setCoachingLoading(false)
+    }).catch(() => setCoachingLoading(false))
+  }, [session])
+
+  function openDmCoaching(dmId: string, dmName: string) {
+    setSelectedDmId(dmId)
+    setSelectedDmName(dmName)
+    setDetailLoading(true)
+    fetch(`/api/coaching-grades?dmId=${dmId}`).then(r => r.ok ? r.json() : null).then(d => {
+      if (d) {
+        setCoachingDetails(d.grades ?? [])
+        setCoachingMonthlyAvg(d.monthlyAvg ?? [])
+        setCoachingTrend(d.trend ?? 'new')
+      }
+      setDetailLoading(false)
+    }).catch(() => setDetailLoading(false))
+  }
 
   const sorted = [...dms].sort((a, b) =>
     sortBy === 'activity' ? totalActivity(b) - totalActivity(a) : a.dm_name.localeCompare(b.dm_name)
@@ -137,9 +220,172 @@ export default function DmEngagementPage() {
         {/* Header */}
         <div>
           <h1 className="text-xl font-bold text-white">DM Engagement</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Activity across all district managers</p>
+          <p className="text-xs text-gray-500 mt-0.5">Coaching performance and activity metrics</p>
         </div>
 
+        {/* Main Tab Switcher */}
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
+          <button
+            onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Coaching Performance
+          </button>
+          <button
+            onClick={() => setMainTab('metrics')}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'metrics' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Activity Metrics
+          </button>
+        </div>
+
+        {/* ── Coaching Performance Tab ── */}
+        {mainTab === 'coaching' && !selectedDmId && (
+          <div className="space-y-3">
+            {coachingLoading ? (
+              <p className="text-gray-500 text-sm text-center py-10">Loading coaching data...</p>
+            ) : coachingDms.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-sm">No coaching grades yet.</p>
+                <p className="text-gray-600 text-xs mt-1">Grades appear after DMs submit Quick Visit w/ Coaching reports.</p>
+              </div>
+            ) : (
+              coachingDms.map(dm => (
+                <button
+                  key={dm.dm_id}
+                  onClick={() => openDmCoaching(dm.dm_id, dm.dm_name)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 text-left hover:border-violet-700/50 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-white font-semibold text-sm">{dm.dm_name}</p>
+                      <p className="text-gray-500 text-xs mt-0.5">
+                        {dm.count} coaching{dm.count !== 1 ? 's' : ''} this month
+                        {dm.prev_grade && ` · Last month: ${dm.prev_grade}`}
+                      </p>
+                    </div>
+                    <div className="text-right flex items-center gap-2">
+                      {dm.grade ? (
+                        <>
+                          <span className={`text-2xl font-bold ${gradeColor(dm.grade)}`}>{dm.grade}</span>
+                          <span className={`text-sm ${trendColor(dm.trend)}`}>{trendIcon(dm.trend)}</span>
+                        </>
+                      ) : (
+                        <span className="text-gray-600 text-sm">No grades</span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── DM Coaching Detail View ── */}
+        {mainTab === 'coaching' && selectedDmId && (
+          <div className="space-y-4">
+            <button onClick={() => setSelectedDmId(null)} className="text-violet-400 text-sm font-semibold hover:text-violet-300 transition-colors">
+              ← Back to all DMs
+            </button>
+
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white">{selectedDmName}</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {coachingTrend !== 'new' ? `Trend: ${coachingTrend}` : 'First month'}
+                  {coachingMonthlyAvg.length > 0 && ` · ${coachingMonthlyAvg[0].count} coaching${coachingMonthlyAvg[0].count !== 1 ? 's' : ''} this month`}
+                </p>
+              </div>
+              {coachingMonthlyAvg.length > 0 && (
+                <div className="text-right">
+                  <p className={`text-3xl font-bold ${gradeColor(coachingMonthlyAvg[0].grade)}`}>{coachingMonthlyAvg[0].grade}</p>
+                  <p className="text-xs text-gray-500">Monthly Avg</p>
+                </div>
+              )}
+            </div>
+
+            {/* Monthly trend cards */}
+            {coachingMonthlyAvg.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {coachingMonthlyAvg.map(m => (
+                  <div key={m.month} className={`flex-shrink-0 px-3 py-2 rounded-xl border ${gradeBg(m.grade)} text-center min-w-[70px]`}>
+                    <p className={`text-lg font-bold ${gradeColor(m.grade)}`}>{m.grade}</p>
+                    <p className="text-[10px] text-gray-500">{m.month}</p>
+                    <p className="text-[10px] text-gray-600">{m.count} visit{m.count !== 1 ? 's' : ''}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Individual coaching grades */}
+            {detailLoading ? (
+              <p className="text-gray-500 text-sm text-center py-10">Loading...</p>
+            ) : coachingDetails.length === 0 ? (
+              <p className="text-gray-500 text-sm text-center py-10">No coaching grades for this period.</p>
+            ) : (
+              <div className="space-y-3">
+                {coachingDetails.map(g => {
+                  const expanded = expandedGrade === g.id
+                  const tips = (() => { try { return JSON.parse(g.improvement_tips) } catch { return [] } })() as string[]
+                  return (
+                    <div key={g.id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <button
+                        onClick={() => setExpandedGrade(expanded ? null : g.id)}
+                        className="w-full px-5 py-4 text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-white font-semibold text-sm">{g.store_address}</p>
+                            <p className="text-gray-500 text-xs mt-0.5">
+                              {g.employee_coached && `${g.employee_coached} · `}
+                              {new Date(g.graded_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}
+                            </p>
+                          </div>
+                          <span className={`text-2xl font-bold ${gradeColor(g.overall_grade)}`}>{g.overall_grade}</span>
+                        </div>
+                      </button>
+
+                      {expanded && (
+                        <div className="border-t border-gray-800 px-5 py-4 space-y-3">
+                          <p className="text-gray-300 text-sm leading-relaxed">{g.summary}</p>
+
+                          {[
+                            { label: 'Specificity', weight: '25%', grade: g.specificity_grade, feedback: g.specificity_feedback },
+                            { label: 'Actionability', weight: '25%', grade: g.actionability_grade, feedback: g.actionability_feedback },
+                            { label: 'Follow-Up', weight: '20%', grade: g.follow_up_grade, feedback: g.follow_up_feedback },
+                            { label: 'Depth', weight: '20%', grade: g.depth_grade, feedback: g.depth_feedback },
+                            { label: 'Prior Reference', weight: '10%', grade: g.prior_reference_grade, feedback: g.prior_reference_feedback },
+                          ].map(cat => (
+                            <div key={cat.label} className="flex items-start gap-3">
+                              <span className={`text-sm font-bold w-8 text-center flex-shrink-0 ${gradeColor(cat.grade)}`}>{cat.grade}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-gray-400">{cat.label} <span className="text-gray-600">({cat.weight})</span></p>
+                                <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{cat.feedback}</p>
+                              </div>
+                            </div>
+                          ))}
+
+                          {tips.length > 0 && (
+                            <div className="pt-2 border-t border-gray-800">
+                              <p className="text-xs font-bold text-violet-400 uppercase tracking-wide mb-2">How to Improve</p>
+                              {tips.map((tip, i) => (
+                                <p key={i} className="text-xs text-gray-400 leading-relaxed mb-1">• {tip}</p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Metrics Tab (existing content) ── */}
+        {mainTab === 'metrics' && (
+        <>
         {/* Controls */}
         <div className="flex items-center justify-between gap-3">
           {/* Range pills */}
@@ -324,6 +570,8 @@ export default function DmEngagementPage() {
               )
             })}
           </div>
+        )}
+        </>
         )}
       </div>
     </div>

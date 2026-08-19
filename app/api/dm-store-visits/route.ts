@@ -478,6 +478,51 @@ export async function POST(req: NextRequest) {
       }).catch(err => console.error('Quick visit email error:', err))
     }
 
+    // ── AI Coaching Grade (async — don't block submission) ──
+    if (body.visit_type === 'quick_coaching' && c?.employee_name?.trim()) {
+      (async () => {
+        try {
+          const { gradeCoaching } = await import('@/lib/coaching-grader')
+          const freshUser = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+          const grade = await gradeCoaching({
+            visitId: visit.id,
+            dmId: session.id,
+            dmName: session.fullName,
+            dmEmail: freshUser[0]?.email ?? session.email,
+            orgId: session.org_id ?? null,
+            storeAddress: body.store_address,
+            employeeCoachedName: c.employee_name.trim(),
+            coaching1: body.quick_takeaways?.trim() || '',
+            coaching2: c.commitments_gained?.trim() || '',
+            coaching3: c.fu_follow_up_date?.trim() || '',
+            obsData: {
+              greeted_customer: !!c.obs_greeted_customer,
+              offered_mim: !!c.obs_offered_mim,
+              offered_hsi: !!c.obs_offered_hsi,
+              pitched_accessories: !!c.obs_pitched_accessories,
+              open_ended_questions: !!c.obs_open_ended_questions,
+              educated_survey: !!c.obs_educated_survey,
+              primary_issue: c.obs_primary_issue || null,
+            },
+            rpData: { score: c.rp_score || null, notes: c.rp_notes?.trim() || null },
+            kcData: {
+              mim_knowledge: c.kc_mim_knowledge || null,
+              hsi_knowledge: c.kc_hsi_knowledge || null,
+              objection_handling: c.kc_objection_handling || null,
+              gap_notes: c.kc_gap_notes?.trim() || null,
+            },
+            commitments: c.commitments_gained?.trim() || null,
+            followUpDate: c.fu_follow_up_date?.trim() || null,
+          })
+          // Update the visit with the inline grade for immediate display
+          await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS coaching_grade TEXT`).catch(() => {})
+          await query(`UPDATE dm_store_visits SET coaching_grade = $1 WHERE id = $2`, [grade.overall_grade, visit.id])
+        } catch (err) {
+          console.error('Coaching grade error:', err)
+        }
+      })()
+    }
+
     return NextResponse.json({ id: visit.id })
   }
 

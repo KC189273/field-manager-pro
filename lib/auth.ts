@@ -36,7 +36,21 @@ export async function getSession(): Promise<SessionPayload | null> {
   const jar = await cookies()
   const token = jar.get(COOKIE)?.value
   if (!token) return null
-  return verifyToken(token)
+  const session = await verifyToken(token)
+  if (!session) return null
+
+  // Check if user is still active (catches terminated/deactivated users with valid JWTs)
+  try {
+    const { queryOne } = await import('@/lib/db')
+    const user = await queryOne<{ is_active: boolean }>(`SELECT is_active FROM users WHERE id = $1`, [session.id])
+    if (user && !user.is_active) {
+      // Clear the cookie so they don't keep hitting the DB
+      jar.delete(COOKIE)
+      return null
+    }
+  } catch { /* DB error — allow through rather than blocking everyone */ }
+
+  return session
 }
 
 export async function setSessionCookie(token: string): Promise<void> {

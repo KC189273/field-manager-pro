@@ -135,6 +135,10 @@
     {
       "path": "/api/cron/system-health",
       "schedule": "0 12 * * 2,5,0"
+    },
+    {
+      "path": "/api/cron/coaching-checkin",
+      "schedule": "0 15 * * *"
     }
   ]
 }

@@ -54,6 +54,13 @@ export interface AccountSupportContext {
   // Payroll period status
   payroll: { period_start: string; period_end: string; status: string; dm_submitted: boolean } | null
 
+  // Coaching grades (DMs)
+  coaching_grades: {
+    monthly_avg_grade: string | null; monthly_avg_score: number | null; monthly_count: number
+    weakest_category: string | null; weakest_score: number | null
+    trend: string; last_coaching_date: string | null; days_since_last_coaching: number | null
+  } | null
+
   // Barbershop-specific
   barber_profile: { is_listed: boolean; services_count: number; availability_set: boolean } | null
   shop_settings: { has_shop: boolean; shop_code: string | null; hours_set: boolean } | null
@@ -218,6 +225,60 @@ export async function getAccountSupportContext(
     if (o) org = o
   }
 
+  // ── Coaching grades (for DMs) ──
+  let coachingGrades: {
+    monthly_avg_grade: string | null; monthly_avg_score: number | null; monthly_count: number
+    weakest_category: string | null; weakest_score: number | null
+    trend: string; last_coaching_date: string | null
+    days_since_last_coaching: number | null
+  } | null = null
+  if (user && ['manager', 'ops_manager', 'owner', 'developer'].includes(user.role)) {
+    try {
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+      const monthlyStats = await queryOne<{ avg_score: number; count: number }>(`
+        SELECT ROUND(AVG(overall_score))::int as avg_score, COUNT(*)::int as count
+        FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date AND graded_at < $2::date + INTERVAL '1 month'
+      `, [userId, currentMonth]).catch(() => null)
+
+      const weakest = await queryOne<{ category: string; avg_score: number }>(`
+        SELECT category, ROUND(AVG(score))::int as avg_score FROM (
+          SELECT 'specificity' as category, specificity_score as score FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date
+          UNION ALL SELECT 'actionability', actionability_score FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date
+          UNION ALL SELECT 'follow_up', follow_up_score FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date
+          UNION ALL SELECT 'depth', depth_score FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date
+          UNION ALL SELECT 'prior_reference', prior_reference_score FROM coaching_grades WHERE dm_id = $1 AND graded_at >= $2::date
+        ) cats GROUP BY category ORDER BY avg_score ASC LIMIT 1
+      `, [userId, currentMonth]).catch(() => null)
+
+      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString().split('T')[0]
+      const prevStats = await queryOne<{ avg_score: number }>(`
+        SELECT ROUND(AVG(overall_score))::int as avg_score FROM coaching_grades
+        WHERE dm_id = $1 AND graded_at >= $2::date AND graded_at < $2::date + INTERVAL '1 month'
+      `, [userId, prevMonth]).catch(() => null)
+
+      const lastCoaching = await queryOne<{ graded_at: string }>(`
+        SELECT graded_at::text FROM coaching_grades WHERE dm_id = $1 ORDER BY graded_at DESC LIMIT 1
+      `, [userId]).catch(() => null)
+
+      const { scoreToGrade } = await import('@/lib/coaching-grader')
+
+      const daysSince = lastCoaching ? Math.round((Date.now() - new Date(lastCoaching.graded_at).getTime()) / 86400000) : null
+
+      coachingGrades = {
+        monthly_avg_grade: monthlyStats?.avg_score ? scoreToGrade(monthlyStats.avg_score) : null,
+        monthly_avg_score: monthlyStats?.avg_score ?? null,
+        monthly_count: monthlyStats?.count ?? 0,
+        weakest_category: weakest?.category ?? null,
+        weakest_score: weakest?.avg_score ?? null,
+        trend: monthlyStats?.avg_score && prevStats?.avg_score
+          ? monthlyStats.avg_score > prevStats.avg_score ? 'improving' : monthlyStats.avg_score < prevStats.avg_score ? 'declining' : 'consistent'
+          : 'new',
+        last_coaching_date: lastCoaching?.graded_at?.slice(0, 10) ?? null,
+        days_since_last_coaching: daysSince,
+      }
+    } catch { /* coaching grades table may not exist yet */ }
+  }
+
   return {
     user: user ? {
       id: user.id,
@@ -242,6 +303,7 @@ export async function getAccountSupportContext(
     schedule_published: schedulePub,
     pending_time_off: timeOff,
     payroll,
+    coaching_grades: coachingGrades,
     barber_profile: barberProfile,
     shop_settings: shopSettings,
     pending_appointments: pendingAppts,
@@ -253,6 +315,7 @@ function emptyContext(): AccountSupportContext {
   return {
     user: null, team: [], stores: [], active_shift: null,
     schedule_published: false, pending_time_off: [], payroll: null,
+    coaching_grades: null,
     barber_profile: null, shop_settings: null, pending_appointments: 0, org: null,
   }
 }

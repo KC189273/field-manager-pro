@@ -55,7 +55,7 @@ RULES:
 1. You ONLY answer questions covered in the help docs below. If a question isn't covered, offer to escalate immediately.
 2. You NEVER invent features, steps, or behaviors not in the docs.
 3. ONE step at a time. Never dump a wall of instructions. Give one thing to try, then ask if it worked.
-4. When you use the lookup_account tool, explain what you found in plain language. Never show raw data, IDs, or technical fields.
+4. When you use the lookup_account tool, explain what you found in plain language. Never show raw data, IDs, or technical fields. If the user is a DM and asks about coaching grades, the account data includes their monthly average, weakest category, trend, and days since last coaching. Give them personalized tips based on their weakest category.
 5. You can TELL users how to fix things themselves. You CANNOT make changes to their account. If the fix requires someone else to make a change (like a DM or SD), tell them exactly who to ask and what to ask for.
 6. Never discuss billing, pricing, or cancellation — offer to escalate those.
 7. Never share other users' data, even within the same org.
@@ -311,9 +311,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply, escalated: true, resolved: false })
   }
 
-  // Handle resolution
+  // Handle resolution — auto-learn from successful conversations
   if (parsed.resolved) {
     await queryOne(`UPDATE support_conversations SET status = 'resolved', resolved_at = NOW() WHERE id = $1`, [convId])
+
+    // Auto-learn: save the Q&A from successfully resolved conversations (3+ turns)
+    if (turnCount >= 3) {
+      try {
+        const convMessages = await query<{ role: string; body: string }>(`
+          SELECT role, body FROM support_conversation_messages
+          WHERE conversation_id = $1 AND role IN ('user', 'assistant')
+          ORDER BY created_at LIMIT 2
+        `, [convId])
+        const firstQ = convMessages.find(m => m.role === 'user')?.body
+        const firstA = convMessages.find(m => m.role === 'assistant')?.body
+        if (firstQ && firstA && firstQ.length > 10) {
+          const { autoLearnResolved } = await import('@/lib/auto-learn')
+          autoLearnResolved(firstQ, reply, session.fullName)
+        }
+      } catch { /* never block resolution */ }
+    }
+
     return NextResponse.json({ reply, escalated: false, resolved: true })
   }
 

@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUser } from '@/lib/apns'
-import * as fs from 'fs'
-import * as path from 'path'
 
 // POST — developer/owner replies to an escalated conversation
 export async function POST(req: NextRequest) {
@@ -62,42 +60,9 @@ export async function POST(req: NextRequest) {
 
   const originalQuestion = userMessages[0]?.body
   if (originalQuestion) {
-    autoLearn(originalQuestion, message.trim(), conv.user_name)
+    const { autoLearnEscalation } = await import('@/lib/auto-learn')
+    autoLearnEscalation(originalQuestion, message.trim(), conv.user_name)
   }
 
   return NextResponse.json({ ok: true })
-}
-
-// Auto-learn: append answered Q&A to a learned-answers knowledge doc
-function autoLearn(question: string, answer: string, userName: string) {
-  try {
-    const learnedPath = path.join(process.cwd(), 'lib/agents/knowledge/shared/learned-answers.md')
-    const date = new Date().toISOString().split('T')[0]
-
-    const entry = `\n\n## Q: ${question}\n**A:** ${answer}\n*Answered ${date} for ${userName}*\n`
-
-    if (!fs.existsSync(learnedPath)) {
-      const header = `---
-sources: []
-features:
-  - learned-answers
-permissions:
-  - "auto-generated from escalation replies"
-verified: ${date}
----
-# Learned Answers
-
-These answers were provided by the dev team in response to escalated support questions. The AI Assistant uses these to answer similar questions without escalating again.
-`
-      fs.writeFileSync(learnedPath, header + entry)
-    } else {
-      fs.appendFileSync(learnedPath, entry)
-      // Update verified date
-      const content = fs.readFileSync(learnedPath, 'utf-8')
-      const updated = content.replace(/verified: \d{4}-\d{2}-\d{2}/, `verified: ${date}`)
-      fs.writeFileSync(learnedPath, updated)
-    }
-  } catch (err) {
-    console.error('Auto-learn write failed:', err)
-  }
 }

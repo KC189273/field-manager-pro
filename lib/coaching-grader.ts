@@ -97,6 +97,26 @@ export async function gradeCoaching(params: {
   }
   commitments: string | null
   followUpDate: string | null
+  // Remote coaching extra context
+  remoteContext?: {
+    mlbGrade: string | null
+    skillOrWill: string | null
+    saTheme: string | null
+    saCompletedProperly: string | null
+    transactionCount: string | null
+    transactionsDocumented: string | null
+    prevCommitment: string | null
+    prevCompleted: string | null
+    prevResult: string | null
+    strength: string | null
+    learned: string | null
+    behaviorChange: string | null
+    impact: string | null
+    mlbStrength: string | null
+    mlbOpportunity: string | null
+    priorities: string | null
+    mainFocus: string | null
+  }
 }): Promise<CoachingGradeResult> {
   await ensureTable()
 
@@ -142,6 +162,38 @@ export async function gradeCoaching(params: {
   if (params.commitments) checklistSummary += `\nCommitments Gained: ${params.commitments}`
   if (params.followUpDate) checklistSummary += `\nFollow-Up Date: ${params.followUpDate}`
 
+  // Remote coaching specific context
+  let remoteSection = ''
+  if (params.remoteContext) {
+    const rc = params.remoteContext
+    remoteSection = '\n\nREMOTE COACHING SESSION DATA:'
+    if (rc.mlbGrade) remoteSection += `\nStore MLB (Metro Leaderboard) Grade: ${rc.mlbGrade}`
+    if (rc.skillOrWill) remoteSection += `\nIdentified as: ${rc.skillOrWill} issue`
+    if (rc.saTheme) remoteSection += `\nService Analysis Theme: ${rc.saTheme}`
+    if (rc.saCompletedProperly) remoteSection += `\nService Analysis Completed Properly: ${rc.saCompletedProperly}`
+    if (rc.transactionCount) remoteSection += `\nTransaction Count: ${rc.transactionCount}`
+    if (rc.transactionsDocumented) remoteSection += `\nTransactions Documented: ${rc.transactionsDocumented}`
+    if (rc.prevCommitment) remoteSection += `\nPrevious Commitment: ${rc.prevCommitment} (Completed: ${rc.prevCompleted || 'N/A'})`
+    if (rc.prevResult) remoteSection += `\nPrevious Result: ${rc.prevResult}`
+    if (rc.strength) remoteSection += `\nStrength Recognized: ${rc.strength}`
+    if (rc.learned) remoteSection += `\nLearned from Rep: ${rc.learned}`
+    if (rc.behaviorChange) remoteSection += `\nBehavior to Change: ${rc.behaviorChange}`
+    if (rc.impact) remoteSection += `\nConversation Impact: ${rc.impact}`
+    if (rc.mlbStrength) remoteSection += `\nMLB Strength: ${rc.mlbStrength}`
+    if (rc.mlbOpportunity) remoteSection += `\nMLB Opportunity: ${rc.mlbOpportunity}`
+    if (rc.priorities) remoteSection += `\nTop Priorities: ${rc.priorities}`
+    if (rc.mainFocus) remoteSection += `\nMain Store Focus: ${rc.mainFocus}`
+  }
+
+  const mlbGradeContext = params.remoteContext?.mlbGrade
+    ? `\n\nIMPORTANT — MLB GRADE CONTEXT: This store has an MLB grade of "${params.remoteContext.mlbGrade}". Adjust your expectations accordingly:
+- A-grade store: Coaching can be lighter and conversational. Focus on maintaining excellence and stretch goals.
+- B-grade store: Solid but room to grow. Coaching should identify specific areas to push from good to great.
+- C-grade store: Average. Coaching needs to be more structured with clear measurables and accountability.
+- D-grade store: Below expectations. Coaching MUST be highly detailed, specific about root causes, with aggressive commitments and tight follow-up.
+- F-grade store: Critical. Coaching must be extremely thorough — no room for vague or light coaching. Expect specific behavioral changes, daily commitments, and immediate follow-up plans. Grade harshly if the coaching doesn't match the urgency of an F-ranked store.`
+    : ''
+
   const prompt = `You are an expert coaching quality assessor for a wireless retail district manager team. Grade this DM's coaching session.
 
 COACHING SUBMISSION:
@@ -150,8 +202,8 @@ Employee Coached: ${params.employeeCoachedName || 'Not specified'}
 Behaviors / Skills Coached: ${params.coaching1 || '(empty)'}
 Action Items Agreed Upon: ${params.coaching2 || '(empty)'}
 Follow-Up Plan: ${params.coaching3 || '(empty)'}
-${checklistSummary}
-${priorContext}
+${checklistSummary}${remoteSection}
+${priorContext}${mlbGradeContext}
 
 GRADING CRITERIA (weighted):
 1. SPECIFICITY (25%): Did the DM describe specific behaviors they observed? Did they reference concrete examples? Vague coaching like "work on sales" = low score. "I noticed you didn't offer Home Internet to the last 3 customers — here's how to naturally bring it up..." = high score.

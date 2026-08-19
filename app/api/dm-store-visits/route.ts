@@ -526,6 +526,206 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ id: visit.id })
   }
 
+  // ── Remote Coaching ─────────────────────────────────────────────────
+  if (body.visit_type === 'remote_coaching') {
+    if (!body.store_address) return NextResponse.json({ error: 'store_address required' }, { status: 400 })
+    if (!body.rep_name?.trim()) return NextResponse.json({ error: 'rep_name required' }, { status: 400 })
+
+    // Store remote coaching data as JSON in the visit record
+    const remoteData = {
+      rep_name: body.rep_name?.trim(),
+      prev_commitment: body.prev_commitment?.trim() || null,
+      prev_completed: body.prev_completed || 'N/A',
+      prev_result: body.prev_result?.trim() || null,
+      sa_review_time: body.sa_review_time || '2pm',
+      sa_completed_properly: body.sa_completed_properly || null,
+      sa_comments: body.sa_comments?.trim() || null,
+      sa_transaction_count: body.sa_transaction_count || null,
+      sa_transactions_documented: body.sa_transactions_documented || null,
+      sa_theme: body.sa_theme?.trim() || null,
+      cc_strength: body.cc_strength?.trim() || null,
+      cc_learned: body.cc_learned?.trim() || null,
+      cc_skill_or_will: body.cc_skill_or_will || null,
+      cc_coaching_provided: body.cc_coaching_provided?.trim() || null,
+      cc_behavior_change: body.cc_behavior_change?.trim() || null,
+      cc_impact: body.cc_impact?.trim() || null,
+      commit_customer_followup: body.commit_customer_followup?.trim() || null,
+      commit_sales_rest_of_shift: body.commit_sales_rest_of_shift?.trim() || null,
+      mlb_strength: body.mlb_strength?.trim() || null,
+      mlb_opportunity: body.mlb_opportunity?.trim() || null,
+      mlb_current_grade: body.mlb_current_grade || null,
+      mlb_priority_1: body.mlb_priority_1?.trim() || null,
+      mlb_priority_2: body.mlb_priority_2?.trim() || null,
+      mlb_priority_3: body.mlb_priority_3?.trim() || null,
+      mlb_main_focus: body.mlb_main_focus?.trim() || null,
+    }
+
+    await query(`ALTER TABLE dm_store_visits ADD COLUMN IF NOT EXISTS remote_coaching_data JSONB`).catch(() => {})
+
+    const [visit] = await query<{ id: string; submitted_at: string }>(`
+      INSERT INTO dm_store_visits (
+        org_id, submitted_by_id,
+        store_location_id, store_address, employees_working, dm_name,
+        assigned_rdm, reason_for_visit,
+        pre_visit_1, pre_visit_2, pre_visit_3,
+        scorecard_grade, scorecard_1, scorecard_2, scorecard_3,
+        live_interaction_observed,
+        ops_check_1, ops_check_2, ops_check_3, ops_check_4, ops_check_5,
+        coaching_1, coaching_2, coaching_3,
+        impact_1, impact_2, impact_3, impact_4,
+        visit_type, remote_coaching_data
+      ) VALUES (
+        $1, $2,
+        $3, $4, '', $5,
+        $6, 'Remote Coaching',
+        '', '', '',
+        $7, '', '', '',
+        false,
+        false, false, false, false, false,
+        $8, $9, '',
+        $10, $11, '', '',
+        'remote_coaching', $12
+      ) RETURNING id, submitted_at
+    `, [
+      session.org_id ?? null, session.id,
+      body.store_location_id || null, body.store_address, session.fullName,
+      body.assigned_rdm || 'Remote Coaching',
+      remoteData.mlb_current_grade || 'N/A',
+      remoteData.cc_coaching_provided || '',
+      remoteData.commit_sales_rest_of_shift || '',
+      remoteData.cc_impact || '',
+      remoteData.commit_customer_followup || '',
+      JSON.stringify(remoteData),
+    ])
+
+    // Email the remote coaching report
+    const rdmEmail = RDM_EMAILS[body.assigned_rdm || '']
+    if (rdmEmail) {
+      const visitDate = new Date(visit.submitted_at).toLocaleDateString('en-US', {
+        timeZone: 'America/Chicago', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      })
+      const d = remoteData
+      const row = (label: string, value: string | null) => value ? `<tr><td style="padding:6px 10px;font-weight:600;color:#6b7280;width:200px;vertical-align:top;border-bottom:1px solid #e5e7eb">${label}</td><td style="padding:6px 10px;color:#111827;border-bottom:1px solid #e5e7eb">${escapeHtml(value)}</td></tr>` : ''
+      const section = (title: string) => `<div style="background:#f3f4f6;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#7c3aed">${title}</div>`
+
+      const html = `<div style="font-family:sans-serif;max-width:700px;margin:0 auto">
+        <div style="background:#7c3aed;padding:20px 24px;border-radius:8px 8px 0 0">
+          <h1 style="color:white;margin:0;font-size:18px">Remote Coaching Report</h1>
+          <p style="color:#ddd6fe;margin:4px 0 0;font-size:13px">${escapeHtml(body.store_address)} — ${visitDate}</p>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;overflow:hidden">
+          <table style="width:100%;border-collapse:collapse">
+            ${row('Store', body.store_address)}
+            ${row('Rep Coached', d.rep_name)}
+            ${row('Coach', session.fullName)}
+            ${row('RDM', body.assigned_rdm)}
+          </table>
+          ${d.prev_commitment ? `${section('Previous Commitment Follow Up')}
+            <table style="width:100%;border-collapse:collapse">
+              ${row('Previous Commitment', d.prev_commitment)}
+              ${row('Completed', d.prev_completed)}
+              ${row('Result / Follow Up', d.prev_result)}
+            </table>` : ''}
+          ${section('Service Analysis Review')}
+          <table style="width:100%;border-collapse:collapse">
+            ${row('Review Time', d.sa_review_time === '2pm' ? '2 PM' : '5 PM')}
+            ${row('Completed Properly', d.sa_completed_properly)}
+            ${row('Comments', d.sa_comments)}
+            ${row('Transaction Count', d.sa_transaction_count)}
+            ${row('Transactions Documented', d.sa_transactions_documented)}
+            ${row('Theme Identified', d.sa_theme)}
+          </table>
+          ${section('Coaching Conversation')}
+          <table style="width:100%;border-collapse:collapse">
+            ${row('Strength Recognized', d.cc_strength)}
+            ${row('Learned from Rep', d.cc_learned)}
+            ${row('Skill or Will', d.cc_skill_or_will)}
+            ${row('Coaching Provided', d.cc_coaching_provided)}
+            ${row('Behavior to Change', d.cc_behavior_change)}
+            ${row('Impact', d.cc_impact)}
+          </table>
+          ${section('Commitments')}
+          <table style="width:100%;border-collapse:collapse">
+            ${row('Customer Follow Up', d.commit_customer_followup)}
+            ${row('Sales Commitment (Rest of Shift)', d.commit_sales_rest_of_shift)}
+          </table>
+          ${section('MLB / Store Priorities')}
+          <table style="width:100%;border-collapse:collapse">
+            ${row('MLB Strength', d.mlb_strength)}
+            ${row('MLB Opportunity', d.mlb_opportunity)}
+            ${row('Current MLB Grade', d.mlb_current_grade)}
+            ${row('Priority 1', d.mlb_priority_1)}
+            ${row('Priority 2', d.mlb_priority_2)}
+            ${row('Priority 3', d.mlb_priority_3)}
+            ${row('Main Store Focus', d.mlb_main_focus)}
+          </table>
+        </div>
+        <p style="font-size:11px;color:#9ca3af;text-align:center;margin-top:16px">Submitted via Field Manager Pro</p>
+      </div>`
+
+      const freshUser = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+      const dmEmail = freshUser[0]?.email ?? session.email
+
+      resend.emails.send({
+        from: 'Field Manager Pro <noreply@fieldmanagerpro.app>',
+        to: [rdmEmail, dmEmail],
+        subject: `Remote Coaching — ${body.store_address} — ${visitDate}`,
+        html,
+      }).catch(err => console.error('Remote coaching email error:', err))
+    }
+
+    // AI Coaching Grade (async)
+    ;(async () => {
+      try {
+        const { gradeCoaching } = await import('@/lib/coaching-grader')
+        const freshUser = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+        const d = remoteData
+        await gradeCoaching({
+          visitId: visit.id,
+          dmId: session.id,
+          dmName: session.fullName,
+          dmEmail: freshUser[0]?.email ?? session.email,
+          orgId: session.org_id ?? null,
+          storeAddress: body.store_address,
+          employeeCoachedName: d.rep_name,
+          coaching1: d.cc_coaching_provided || '',
+          coaching2: d.commit_sales_rest_of_shift || '',
+          coaching3: d.commit_customer_followup || '',
+          obsData: undefined,
+          rpData: undefined,
+          kcData: undefined,
+          commitments: [d.commit_customer_followup, d.commit_sales_rest_of_shift].filter(Boolean).join('. ') || null,
+          followUpDate: null,
+          // Pass extra context for remote coaching grading
+          remoteContext: {
+            mlbGrade: d.mlb_current_grade,
+            skillOrWill: d.cc_skill_or_will,
+            saTheme: d.sa_theme,
+            saCompletedProperly: d.sa_completed_properly,
+            transactionCount: d.sa_transaction_count,
+            transactionsDocumented: d.sa_transactions_documented,
+            prevCommitment: d.prev_commitment,
+            prevCompleted: d.prev_completed,
+            prevResult: d.prev_result,
+            strength: d.cc_strength,
+            learned: d.cc_learned,
+            behaviorChange: d.cc_behavior_change,
+            impact: d.cc_impact,
+            mlbStrength: d.mlb_strength,
+            mlbOpportunity: d.mlb_opportunity,
+            priorities: [d.mlb_priority_1, d.mlb_priority_2, d.mlb_priority_3].filter(Boolean).join(', '),
+            mainFocus: d.mlb_main_focus,
+          },
+        })
+        await query(`UPDATE dm_store_visits SET coaching_grade = (SELECT overall_grade FROM coaching_grades WHERE visit_id = $1 LIMIT 1) WHERE id = $1`, [visit.id]).catch(() => {})
+      } catch (err) {
+        console.error('Remote coaching grade error:', err)
+      }
+    })()
+
+    return NextResponse.json({ id: visit.id })
+  }
+
   const live = body.live_interaction_observed === true
 
   try {

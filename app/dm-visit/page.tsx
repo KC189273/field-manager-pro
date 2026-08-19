@@ -50,7 +50,7 @@ interface HoursRow {
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
-type Tab = 'new' | 'quick' | 'coaching' | 'dashboard' | 'report' | 'stores'
+type Tab = 'new' | 'quick' | 'remote' | 'coaching' | 'dashboard' | 'report' | 'stores'
 
 const DRAFT_KEY = 'dm-visit-draft'
 const COACHING_DRAFT_KEY = 'dm-coaching-draft'
@@ -155,6 +155,26 @@ export default function DmVisitPage() {
   const [quickError, setQuickError] = useState('')
   const [quickPhotoKeys, setQuickPhotoKeys] = useState<string[]>([])
   const [quickPhotoUploading, setQuickPhotoUploading] = useState(false)
+
+  // Remote Coaching
+  const EMPTY_REMOTE = {
+    store_location_id: '', store_address: '', rep_name: '', assigned_rdm: '',
+    prev_commitment: '', prev_completed: 'N/A' as string, prev_result: '',
+    sa_review_time: '2pm' as string, sa_completed_properly: '' as string, sa_comments: '',
+    sa_transaction_count: '', sa_transactions_documented: '',
+    sa_theme: '',
+    cc_strength: '', cc_learned: '', cc_skill_or_will: '' as string,
+    cc_coaching_provided: '', cc_behavior_change: '', cc_impact: '',
+    commit_customer_followup: '', commit_sales_rest_of_shift: '',
+    mlb_strength: '', mlb_opportunity: '', mlb_current_grade: '',
+    mlb_priority_1: '', mlb_priority_2: '', mlb_priority_3: '',
+    mlb_main_focus: '',
+  }
+  const [remoteForm, setRemoteForm] = useState({ ...EMPTY_REMOTE })
+  const [remoteSubmitting, setRemoteSubmitting] = useState(false)
+  const [remoteSubmitted, setRemoteSubmitted] = useState(false)
+  const [remoteError, setRemoteError] = useState('')
+  const [isFirstRemoteCoaching, setIsFirstRemoteCoaching] = useState(true)
 
   // Dashboard
   const [dashRows, setDashRows] = useState<DashRow[]>([])
@@ -736,6 +756,7 @@ export default function DmVisitPage() {
   const tabs: { id: Tab; label: string }[] = [
     ...(session.role === 'developer' ? [{ id: 'new' as Tab, label: 'New Checklist (dev)' }] : []),
     { id: 'quick', label: 'Quick Visit' },
+    { id: 'remote', label: 'Remote Coaching' },
     ...(session.role === 'developer' ? [{ id: 'coaching' as Tab, label: 'DM Coaching (dev)' }] : []),
     { id: 'dashboard', label: 'Dashboard' },
     { id: 'report', label: 'Download Report' },
@@ -1335,6 +1356,243 @@ export default function DmVisitPage() {
                 <button type="submit" disabled={quickSubmitting}
                   className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-60 text-white font-bold py-3 rounded-xl transition-colors text-sm">
                   {quickSubmitting ? 'Submitting…' : (quickIncludeCoaching ? 'Submit Quick Visit w/ Coaching' : 'Submit Quick Visit')}
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+
+      {/* ── REMOTE COACHING ── */}
+      {tab === 'remote' && (
+        <div className="max-w-xl mx-auto">
+          {remoteSubmitted ? (
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Remote Coaching Submitted</h2>
+              <p className="text-gray-500 text-sm mb-4">AI is grading your coaching — you'll receive a detailed email shortly.</p>
+              <button onClick={() => { setRemoteSubmitted(false); setRemoteForm({ ...EMPTY_REMOTE }) }} className="bg-violet-600 hover:bg-violet-500 text-white font-semibold px-6 py-2.5 rounded-xl text-sm transition-colors">Submit Another</button>
+            </div>
+          ) : (
+            <form onSubmit={async (e) => {
+              e.preventDefault()
+              setRemoteError('')
+              if (!remoteForm.store_address) { setRemoteError('Store is required'); return }
+              if (!remoteForm.rep_name.trim()) { setRemoteError('Rep name is required'); return }
+              if (!remoteForm.cc_coaching_provided.trim()) { setRemoteError('Coaching provided is required'); return }
+              if (!remoteForm.cc_behavior_change.trim()) { setRemoteError('Behavior change is required'); return }
+              if (!remoteForm.commit_sales_rest_of_shift.trim()) { setRemoteError('Sales commitment is required'); return }
+              setRemoteSubmitting(true)
+              try {
+                const res = await fetch('/api/dm-store-visits', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ visit_type: 'remote_coaching', ...remoteForm }),
+                })
+                const data = await res.json()
+                if (!res.ok) { setRemoteError(data.error || 'Submission failed'); return }
+                setRemoteSubmitted(true)
+              } catch { setRemoteError('Network error') }
+              finally { setRemoteSubmitting(false) }
+            }}>
+              <div className="space-y-5">
+                <div>
+                  <p className="text-xs text-violet-400 font-bold uppercase tracking-wider mb-1">Remote Coaching Session</p>
+                  <p className="text-xs text-gray-500">Expected conversation time: ~15 minutes</p>
+                </div>
+
+                {remoteError && <p className="text-sm text-red-400 bg-red-900/20 border border-red-800 rounded-xl px-4 py-2">{remoteError}</p>}
+
+                {/* Store & Rep */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Session Details</div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Store</label>
+                    <select value={remoteForm.store_location_id} onChange={e => {
+                      const loc = locations.find(l => l.id === e.target.value)
+                      setRemoteForm(f => ({ ...f, store_location_id: e.target.value, store_address: loc?.address || '' }))
+                    }} className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500">
+                      <option value="">— Select Store —</option>
+                      {locations.filter(l => l.active).map(l => <option key={l.id} value={l.id}>{l.address}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Rep Being Coached</label>
+                    <input type="text" value={remoteForm.rep_name} onChange={e => setRemoteForm(f => ({ ...f, rep_name: e.target.value }))} placeholder="Full name" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Assigned RDM</label>
+                    <select value={remoteForm.assigned_rdm} onChange={e => setRemoteForm(f => ({ ...f, assigned_rdm: e.target.value }))} className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500">
+                      <option value="">— Select RDM —</option>
+                      {RDM_OPTIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Previous Commitment Follow Up */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Previous Commitment Follow Up</div>
+                  {isFirstRemoteCoaching ? (
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500 flex-1">No prior coaching on record for this rep.</p>
+                      <button type="button" onClick={() => setIsFirstRemoteCoaching(false)} className="text-xs text-violet-400 hover:text-violet-300">Add manually</button>
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-400 mb-1">Previous Commitment</label>
+                        <textarea rows={2} value={remoteForm.prev_commitment} onChange={e => setRemoteForm(f => ({ ...f, prev_commitment: e.target.value }))} placeholder="What was the previous commitment?" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-400 mb-1.5">Completed?</label>
+                        <div className="flex gap-2">
+                          {['Yes', 'Partially', 'No', 'N/A'].map(opt => (
+                            <button key={opt} type="button" onClick={() => setRemoteForm(f => ({ ...f, prev_completed: opt }))}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${remoteForm.prev_completed === opt ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}>{opt}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-gray-400 mb-1">Result / Follow Up</label>
+                        <textarea rows={2} value={remoteForm.prev_result} onChange={e => setRemoteForm(f => ({ ...f, prev_result: e.target.value }))} placeholder="What happened as a result?" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Service Analysis Review */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Service Analysis Review</div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Review Time</label>
+                    <div className="flex gap-2">
+                      {['2pm', '5pm'].map(opt => (
+                        <button key={opt} type="button" onClick={() => setRemoteForm(f => ({ ...f, sa_review_time: opt }))}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${remoteForm.sa_review_time === opt ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}>{opt === '2pm' ? '2 PM' : '5 PM'}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Is the Service Analysis being completed properly?</label>
+                    <div className="flex gap-2">
+                      {['Yes', 'No'].map(opt => (
+                        <button key={opt} type="button" onClick={() => setRemoteForm(f => ({ ...f, sa_completed_properly: opt }))}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${remoteForm.sa_completed_properly === opt ? (opt === 'Yes' ? 'bg-green-700 border-green-600 text-white' : 'bg-red-700 border-red-600 text-white') : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Comments</label>
+                    <textarea rows={2} value={remoteForm.sa_comments} onChange={e => setRemoteForm(f => ({ ...f, sa_comments: e.target.value }))} placeholder="Any notes on the service analysis..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">Transaction Count</label>
+                      <input type="number" value={remoteForm.sa_transaction_count} onChange={e => setRemoteForm(f => ({ ...f, sa_transaction_count: e.target.value }))} placeholder="0" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-400 mb-1"># Documented</label>
+                      <input type="number" value={remoteForm.sa_transactions_documented} onChange={e => setRemoteForm(f => ({ ...f, sa_transactions_documented: e.target.value }))} placeholder="0" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Theme Identified</label>
+                    <textarea rows={2} value={remoteForm.sa_theme} onChange={e => setRemoteForm(f => ({ ...f, sa_theme: e.target.value }))} placeholder="e.g., Failing on bill payments, not offering BTS, stopping after first yes..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                </div>
+
+                {/* Coaching Conversation */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Coaching Conversation</div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">What strength or positive behavior did you recognize?</label>
+                    <textarea rows={2} value={remoteForm.cc_strength} onChange={e => setRemoteForm(f => ({ ...f, cc_strength: e.target.value }))} placeholder="Recognize what's working..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">What did you learn from the rep during the conversation?</label>
+                    <textarea rows={2} value={remoteForm.cc_learned} onChange={e => setRemoteForm(f => ({ ...f, cc_learned: e.target.value }))} placeholder="Insights from the conversation..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Skill or Will?</label>
+                    <div className="flex gap-2">
+                      {['Skill', 'Will'].map(opt => (
+                        <button key={opt} type="button" onClick={() => setRemoteForm(f => ({ ...f, cc_skill_or_will: opt }))}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${remoteForm.cc_skill_or_will === opt ? 'bg-violet-600 border-violet-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">What coaching did you provide?</label>
+                    <textarea rows={3} value={remoteForm.cc_coaching_provided} onChange={e => setRemoteForm(f => ({ ...f, cc_coaching_provided: e.target.value }))} placeholder="Detail the coaching conversation..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">What behavior needs to change on the next customer?</label>
+                    <textarea rows={2} value={remoteForm.cc_behavior_change} onChange={e => setRemoteForm(f => ({ ...f, cc_behavior_change: e.target.value }))} placeholder="Specific behavior change expected..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">What impact did the conversation have?</label>
+                    <textarea rows={2} value={remoteForm.cc_impact} onChange={e => setRemoteForm(f => ({ ...f, cc_impact: e.target.value }))} placeholder="Observable impact from the coaching..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                </div>
+
+                {/* Commitments */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">Commitments</div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Customer Follow Up Commitment</label>
+                    <textarea rows={2} value={remoteForm.commit_customer_followup} onChange={e => setRemoteForm(f => ({ ...f, commit_customer_followup: e.target.value }))} placeholder="e.g., Calling back 3 customers to offer X product..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Sales Commitment for Rest of Shift</label>
+                    <textarea rows={2} value={remoteForm.commit_sales_rest_of_shift} onChange={e => setRemoteForm(f => ({ ...f, commit_sales_rest_of_shift: e.target.value }))} placeholder="e.g., 1 MiM by EOD, 2 voice lines, 1 HSI..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                </div>
+
+                {/* MLB / Store Priorities */}
+                <div className="space-y-3">
+                  <div className="text-xs font-bold text-gray-400 uppercase tracking-wider">MLB / Store Priorities</div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">MLB Strength</label>
+                      <input type="text" value={remoteForm.mlb_strength} onChange={e => setRemoteForm(f => ({ ...f, mlb_strength: e.target.value }))} placeholder="What's strong on the leaderboard" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-400 mb-1">MLB Opportunity</label>
+                      <input type="text" value={remoteForm.mlb_opportunity} onChange={e => setRemoteForm(f => ({ ...f, mlb_opportunity: e.target.value }))} placeholder="Where to improve" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1.5">Current MLB Letter Grade</label>
+                    <div className="flex gap-2">
+                      {['A', 'B', 'C', 'D', 'F'].map(g => (
+                        <button key={g} type="button" onClick={() => setRemoteForm(f => ({ ...f, mlb_current_grade: g }))}
+                          className={`w-10 h-10 rounded-lg text-sm font-bold border transition-colors ${remoteForm.mlb_current_grade === g
+                            ? g === 'A' ? 'bg-green-700 border-green-600 text-white'
+                              : g === 'B' ? 'bg-blue-700 border-blue-600 text-white'
+                              : g === 'C' ? 'bg-amber-700 border-amber-600 text-white'
+                              : g === 'D' ? 'bg-orange-700 border-orange-600 text-white'
+                              : 'bg-red-700 border-red-600 text-white'
+                            : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}>{g}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Top 3 Priorities</label>
+                    <input type="text" value={remoteForm.mlb_priority_1} onChange={e => setRemoteForm(f => ({ ...f, mlb_priority_1: e.target.value }))} placeholder="Priority 1" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 mb-2 focus:outline-none focus:border-violet-500" />
+                    <input type="text" value={remoteForm.mlb_priority_2} onChange={e => setRemoteForm(f => ({ ...f, mlb_priority_2: e.target.value }))} placeholder="Priority 2" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 mb-2 focus:outline-none focus:border-violet-500" />
+                    <input type="text" value={remoteForm.mlb_priority_3} onChange={e => setRemoteForm(f => ({ ...f, mlb_priority_3: e.target.value }))} placeholder="Priority 3" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Main Store Focus</label>
+                    <textarea rows={2} value={remoteForm.mlb_main_focus} onChange={e => setRemoteForm(f => ({ ...f, mlb_main_focus: e.target.value }))} placeholder="The one thing this store needs to focus on..." className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500 resize-none" />
+                  </div>
+                </div>
+
+                <button type="submit" disabled={remoteSubmitting}
+                  className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition-colors">
+                  {remoteSubmitting ? 'Submitting…' : 'Submit Remote Coaching'}
                 </button>
               </div>
             </form>

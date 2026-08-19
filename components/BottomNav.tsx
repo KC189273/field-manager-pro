@@ -466,7 +466,14 @@ export default function BottomNav() {
               {aiStatus === 'resolved' && (
                 <div className="bg-green-900/20 border border-green-800/40 rounded-xl px-4 py-3 text-center">
                   <p className="text-green-300 text-sm font-medium">Glad that worked!</p>
-                  <p className="text-green-400/70 text-xs mt-1">Tap &quot;New&quot; if you need anything else.</p>
+                  <p className="text-green-400/70 text-xs mt-1 mb-2">Tap &quot;New&quot; if you need anything else.</p>
+                  {aiConvId && (
+                    <div className="flex items-center justify-center gap-3 pt-2 border-t border-green-800/30">
+                      <p className="text-xs text-gray-500">Was this helpful?</p>
+                      <button onClick={() => { fetch('/api/support/rate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: aiConvId, rating: 'up' }) }); setAiStatus('new' as typeof aiStatus) }} className="text-green-400 hover:text-green-300 text-lg">👍</button>
+                      <button onClick={() => { fetch('/api/support/rate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: aiConvId, rating: 'down' }) }); setAiStatus('new' as typeof aiStatus) }} className="text-red-400 hover:text-red-300 text-lg">👎</button>
+                    </div>
+                  )}
                 </div>
               )}
               <div ref={aiEndRef} />

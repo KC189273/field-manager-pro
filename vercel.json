@@ -139,6 +139,14 @@
     {
       "path": "/api/cron/coaching-checkin",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/dm-daily-coach",
+      "schedule": "30 13 * * 1-6"
+    },
+    {
+      "path": "/api/cron/coaching-weekly-summary",
+      "schedule": "0 0 * * 1"
     }
   ]
 }

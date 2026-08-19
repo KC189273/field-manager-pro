@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
           // Notify SD if 45+ actual, Owner if 50+ actual
           if (workedHours >= 45) {
-            const sds = await query<{ id: string }>(`SELECT id FROM users WHERE role = 'sales_director' AND is_active = TRUE`)
+            const sds = await query<{ id: string }>(`SELECT id FROM users WHERE role IN ('sales_director', 'owner', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)`)
             for (const sd of sds) push(sd.id, `OT Alert: ${session.fullName} at ${workedHours.toFixed(1)}h${floaterTag}`, body, 'clock').catch(() => {})
           }
           if (workedHours >= 50) {

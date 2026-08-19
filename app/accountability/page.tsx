@@ -1309,6 +1309,13 @@ export default function AccountabilityPage() {
   const [termExporting, setTermExporting] = useState(false)
   const [expandedDocs, setExpandedDocs] = useState<Set<string>>(new Set())
 
+  // Direct termination (developer — no prior docs required)
+  const [directTermOpen, setDirectTermOpen] = useState(false)
+  const [directTermEmpId, setDirectTermEmpId] = useState('')
+  const [directTermReasons, setDirectTermReasons] = useState('')
+  const [directTermSubmitting, setDirectTermSubmitting] = useState(false)
+  const [allActiveUsers, setAllActiveUsers] = useState<Array<{ id: string; full_name: string; role: string }>>([])
+
   // Filters
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
@@ -1438,8 +1445,36 @@ export default function AccountabilityPage() {
     if (session && tab === 'termination') {
       loadTermRequests()
       loadTerminatedEmps()
+      if (session.role === 'developer' && allActiveUsers.length === 0) {
+        fetch('/api/team/users').then(r => r.json()).then(d => {
+          const users = d.users ?? d ?? []
+          setAllActiveUsers(users.filter((u: { is_active: boolean; is_terminated: boolean; role: string }) => u.is_active && !u.is_terminated && u.role !== 'developer'))
+        }).catch(() => {})
+      }
     }
   }, [session, tab, loadTermRequests, loadTerminatedEmps])
+
+  async function handleDirectTermination() {
+    if (!directTermEmpId || !directTermReasons.trim()) return
+    const empName = allActiveUsers.find(u => u.id === directTermEmpId)?.full_name || 'Employee'
+    if (!confirm(`Submit termination request for ${empName}? This will require approval before the notice is sent.`)) return
+    setDirectTermSubmitting(true)
+    setTermError('')
+    try {
+      const res = await fetch('/api/accountability/termination', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: directTermEmpId, reasons: directTermReasons.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setTermError(data.error || 'Failed to submit'); return }
+      setDirectTermOpen(false)
+      setDirectTermEmpId('')
+      setDirectTermReasons('')
+      loadTermRequests()
+    } catch { setTermError('Network error') }
+    finally { setDirectTermSubmitting(false) }
+  }
 
   if (!session) return <div className="min-h-screen bg-gray-950" />
   if (!canViewDash(session.role)) return (
@@ -1697,6 +1732,57 @@ export default function AccountabilityPage() {
                 )}
               </button>
             </div>
+
+            {/* Direct termination — developer only, no prior docs required */}
+            {session.role === 'developer' && (
+              <div className="mb-4">
+                {!directTermOpen ? (
+                  <button
+                    onClick={() => setDirectTermOpen(true)}
+                    className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
+                  >
+                    + Submit Termination (No Prior Docs)
+                  </button>
+                ) : (
+                  <div className="bg-red-900/10 border border-red-800/40 rounded-xl p-4 space-y-3">
+                    <p className="text-xs font-bold text-red-400 uppercase tracking-wide">Direct Termination Request</p>
+                    <p className="text-xs text-gray-400">Submit a termination without prior accountability docs. Requires approval.</p>
+                    <select
+                      value={directTermEmpId}
+                      onChange={e => setDirectTermEmpId(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                    >
+                      <option value="">— Select Employee —</option>
+                      {allActiveUsers.map(u => (
+                        <option key={u.id} value={u.id}>{u.full_name} ({u.role.replace(/_/g, ' ')})</option>
+                      ))}
+                    </select>
+                    <textarea
+                      rows={4}
+                      placeholder="Describe the reasons for termination..."
+                      value={directTermReasons}
+                      onChange={e => setDirectTermReasons(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-red-500 resize-none"
+                    />
+                    <div className="flex gap-3">
+                      <button
+                        onClick={handleDirectTermination}
+                        disabled={directTermSubmitting || !directTermEmpId || !directTermReasons.trim()}
+                        className="flex-1 bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+                      >
+                        {directTermSubmitting ? 'Submitting…' : 'Submit for Approval'}
+                      </button>
+                      <button
+                        onClick={() => { setDirectTermOpen(false); setDirectTermEmpId(''); setDirectTermReasons('') }}
+                        className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* ── Requests sub-tab ── */}
             {termSubTab === 'requests' && (

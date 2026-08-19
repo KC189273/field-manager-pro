@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
     // Escalate to SD
     const sds = await query<{ id: string; email: string; full_name: string }>(`
       SELECT id, email, full_name FROM users
-      WHERE org_id = $1 AND role = 'sales_director' AND is_active = TRUE
+      WHERE org_id = $1 AND role IN ('sales_director', 'owner', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)
     `, [org.id])
 
     const dmList = missedNames.map(n => `<li style="font-size:14px;color:#dc2626;font-weight:600;margin:4px 0">${n}</li>`).join('')

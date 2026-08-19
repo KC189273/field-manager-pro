@@ -145,30 +145,28 @@ export async function POST(req: NextRequest) {
      session.id, session.fullName, session.role, reasons.trim()]
   )
 
-  // Notify all SDs in the org that approval is needed
-  const sds = await query<{ id: string }>(
-    `SELECT id FROM users WHERE org_id = $1 AND role = 'sales_director' AND is_active = TRUE`,
-    [employee.org_id]
-  )
-  if (sds.length) {
+  // Notify SDs (or fallback to owners + ops_managers) that approval is needed
+  const { getSDOrFallback } = await import('@/lib/sd-fallback')
+  const approvers = await getSDOrFallback(employee.org_id)
+  if (approvers.length) {
     sendPushToUsers(
-      sds.map(s => s.id),
+      approvers.map(a => a.id),
       'Termination Request Requires Approval',
       `${session.fullName} has requested termination for ${employee.full_name}. Review and approve or reject in Field Manager Pro.`,
       'accountability'
     ).catch(() => {})
   }
 
-  // Also notify owners
-  const owners = await query<{ id: string }>(
-    `SELECT id FROM users WHERE org_id = $1 AND role IN ('owner', 'developer') AND is_active = TRUE`,
+  // Also notify developers
+  const devs = await query<{ id: string }>(
+    `SELECT id FROM users WHERE org_id = $1 AND role = 'developer' AND is_active = TRUE`,
     [employee.org_id]
   )
-  if (owners.length) {
+  if (devs.length) {
     sendPushToUsers(
-      owners.map(o => o.id),
+      devs.map(d => d.id),
       'Termination Request Submitted',
-      `${session.fullName} has submitted a termination request for ${employee.full_name}. Awaiting SD approval.`,
+      `${session.fullName} has submitted a termination request for ${employee.full_name}.`,
       'accountability'
     ).catch(() => {})
   }

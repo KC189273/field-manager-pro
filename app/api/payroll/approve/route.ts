@@ -90,39 +90,29 @@ export async function POST(req: NextRequest) {
       ON CONFLICT (period_id, dm_id) DO NOTHING
     `, [periodId, session.id])
 
-    // Find primary SD in org (first active sales_director, fallback ops_manager)
-    const sdUser = await queryOne<{ id: string; email: string; full_name: string }>(`
-      SELECT id, email, full_name FROM users
-      WHERE org_id = $1
-        AND role = 'sales_director'
-        AND is_active = TRUE
-      LIMIT 1
-    `, [period.org_id])
+    // Find SD or fallback to owners + ops_managers
+    const { getSDOrFallback } = await import('@/lib/sd-fallback')
+    const reviewers = await getSDOrFallback(period.org_id)
+    const srUser = reviewers[0] ?? null
 
-    const srUser = sdUser ?? await queryOne<{ id: string; email: string; full_name: string }>(`
-      SELECT id, email, full_name FROM users
-      WHERE org_id = $1
-        AND role = 'ops_manager'
-        AND is_active = TRUE
-      LIMIT 1
-    `, [period.org_id])
-
-    if (srUser) {
+    for (const reviewer of reviewers) {
       sendEmail(
-        srUser.email,
+        reviewer.email,
         `Payroll Submitted – ${session.fullName}'s team – ${periodLabel}`,
         emailBlock(
           `${session.fullName} has submitted payroll`,
           'Payroll Review Required',
-          `<p style="font-size:14px;color:#555;margin:0 0 8px;">Hi ${srUser.full_name},</p>
+          `<p style="font-size:14px;color:#555;margin:0 0 8px;">Hi ${reviewer.full_name},</p>
            <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>${session.fullName}</strong> has locked and submitted timecards for <strong>${periodLabel}</strong>.</p>
            <p style="font-size:14px;color:#555;margin:0;">Please download and review their timecard, then mark it approved in Field Manager Pro.</p>`,
           'Review Payroll',
           `${APP_URL}/payroll`
         )
       ).catch(() => {})
+    }
 
-      // Create task for SD
+    // Create task for primary reviewer
+    if (srUser) {
       const dueDate = nextMondayAt8pmCst(period.period_end)
       const weekStart = currentWeekMonday()
 

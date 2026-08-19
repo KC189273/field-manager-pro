@@ -140,7 +140,7 @@ export async function GET(req: NextRequest) {
 
     if (actualOt45.length > 0) {
       const sds = await query<{ id: string }>(`
-        SELECT id FROM users WHERE role = 'sales_director' AND is_active = TRUE
+        SELECT id FROM users WHERE role IN ('sales_director', 'owner', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)
       `)
       for (const sd of sds) {
         for (const a of actualOt45) {

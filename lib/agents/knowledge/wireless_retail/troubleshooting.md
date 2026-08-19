@@ -29,10 +29,17 @@ You may already be clocked in on another shift. Check your current status on the
 Your shift may have been auto-clocked out by the system (runs at 9 PM CST daily) or manually ended by your DM. Check your timecards to see if the shift shows as completed.
 
 **"You are too far from [store] to clock in"**
-Employees must be within 300 feet of the selected store. Check that you picked the right store, try stepping outside for a better GPS fix, or move closer to the store. DMs and above are exempt from this check.
+Employees must be within the geofence radius (default 300 feet) of the selected store. Try these steps:
+1. Make sure you selected the correct store from the dropdown
+2. Step outside briefly for a better GPS signal
+3. Check that Precise Location is ON (Settings → Privacy → Location Services → Field Manager Pro)
+4. If your GPS is consistently inaccurate, ask your DM to use the **Geofence Override** on their Clock page to clock you in
+5. If you're on an iOS beta, that may be causing GPS issues — go to Settings → General → Software Update → Beta Updates → Off
+
+DMs and above are exempt from this check. DMs can override geofence blocks for their employees.
 
 **"Location is required to clock in"**
-Employees must have GPS enabled to clock in (needed for geofence verification). Enable Location Services in your phone settings and try again.
+Employees must have GPS enabled to clock in (needed for geofence verification). Enable Location Services in your phone settings and try again. If GPS keeps failing, ask your DM for a geofence override.
 
 **"You were auto clocked out for leaving the store geofence"**
 If you leave the store area (300 feet) for more than 10 minutes, the system auto clocks you out. Both you and your DM get notified. A `geofence_exit` flag is created. If this was accidental (e.g., GPS drift), ask your DM to adjust your timecard.

@@ -102,12 +102,27 @@ Always respond with a JSON object (no markdown wrapping):
 
 Set lookup_account=true when you need to check the user's specific account data to diagnose their issue. The system will return the data and you respond again.
 
+GEOFENCE OVERRIDE — if an employee can't clock in due to GPS inaccuracy:
+1. Walk them through the GPS troubleshooting steps first (all 13 steps)
+2. If GPS is confirmed inaccurate (Maps app also shows wrong location), tell them: "Your DM can clock you in using the Geofence Override. On the Clock page, your DM taps 'Geofence Override — Clock in an employee', selects your name, the store, and the reason."
+3. If they're on an iOS beta, tell them to leave the beta: Settings → General → Software Update → Beta Updates → Off
+4. If the issue is recurring, let them know the system will automatically flag it for the dev team after 3 overrides
+
+CLOCK-IN PHOTO — employees and DMs are now prompted to take a uniform photo when clocking in:
+- Currently optional (testing phase through August)
+- Starting September 1, photos will be required at every clock-in
+- Camera only — no gallery uploads. Must be taken at the time of clock-in.
+- Photos show on timecards for DM review
+- If someone can't take a photo (camera broken), they can still clock in but it will be flagged
+
 Set escalate=true when:
 - You've exhausted all solutions from the docs and the user confirms the issue persists
 - The fix requires a write/config change only the dev team can do
 - The question isn't covered in any doc
 - The user asks to talk to a person or escalate
 - You detect a bug (account data contradicts expected behavior)
+
+IMPORTANT — APP CHANGES: If the auto-triage determines that an app update, code change, or configuration change is needed to fix the issue, this MUST be escalated to the developer for approval. The escalation must include a detailed explanation of what change is recommended and why. No changes should be made to the app without developer approval.
 
 Set resolved=true when the user confirms the fix worked, says thanks, or says goodbye.
 
@@ -458,14 +473,28 @@ async function escalateConversation(convId: string, reason: string, userName: st
       if (question.includes('safari')) diagnosis.push('Using: Safari browser')
       if (question.includes('app')) diagnosis.push('Using: Native app / PWA')
 
+      // Check geofence override history
+      const overrideCount = await queryOne<{ cnt: number }>(`
+        SELECT COUNT(*)::int as cnt FROM geofence_overrides WHERE employee_id = $1 AND created_at > NOW() - INTERVAL '7 days'
+      `, [userId]).catch(() => null)
+      if (overrideCount && overrideCount.cnt > 0) {
+        diagnosis.push(`Geofence overrides (7d): ${overrideCount.cnt}${overrideCount.cnt >= 3 ? ' — RECURRING ISSUE, needs device investigation' : ''}`)
+      }
+
       // Assessment
       diagnosis.push('---')
-      if (withGps.length > 0 && daysSinceLastShift > (lastGpsShift ? Math.round((Date.now() - new Date(lastGpsShift.clock_in_at).getTime()) / 86400000) : 999)) {
+      if (question.includes('beta') || question.includes('ios 27') || question.includes('ios 26')) {
+        diagnosis.push('ASSESSMENT: Likely iOS beta GPS bug. Employee should leave beta: Settings → General → Software Update → Beta Updates → Off. DM can use Geofence Override in the meantime.')
+        diagnosis.push('ACTION: No app changes needed. Device issue — employee needs to update software.')
+      } else if (withGps.length > 0 && daysSinceLastShift > (lastGpsShift ? Math.round((Date.now() - new Date(lastGpsShift.clock_in_at).getTime()) / 86400000) : 999)) {
         diagnosis.push('ASSESSMENT: Device GPS issue — GPS worked previously but stopped. Likely cause: iOS update, Low Power Mode, PWA permission reset, or Precise Location toggled off.')
+        diagnosis.push('ACTION: No app changes needed. DM can use Geofence Override while employee fixes device. If issue persists after all troubleshooting, escalate to developer for review.')
       } else if (withGps.length === 0) {
         diagnosis.push('ASSESSMENT: Device GPS never worked — location services likely denied or phone GPS is off entirely. Employee needs to enable location services.')
+        diagnosis.push('ACTION: No app changes needed. Employee must fix device settings. DM can use Geofence Override.')
       } else {
         diagnosis.push('ASSESSMENT: Need more info to determine root cause.')
+        diagnosis.push('ACTION: If this appears to be an app bug rather than a device issue, escalate to developer with full details. Developer approval required before any app changes.')
       }
     }
 

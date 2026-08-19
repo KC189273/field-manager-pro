@@ -66,6 +66,34 @@ Owners, Sales Directors, and Developers can configure geofencing in **Settings**
 
 These settings are per-organization and stored in the `organizations` table.
 
+## DM Geofence Override
+If an employee is at the store but GPS is inaccurate (showing them too far away), a DM can override the geofence and clock them in manually:
+1. DM opens the **Clock** page in the app
+2. Taps **"Geofence Override — Clock in an employee"**
+3. Selects the employee, store, and reason for the override
+4. Taps **"Clock In Employee (Override)"**
+
+The employee gets a push notification confirming they're clocked in.
+
+**Reasons available:** GPS inaccurate indoors, phone software update/iOS beta, phone GPS hardware issue, poor cell signal, other.
+
+**Escalation:** If the same employee needs 3+ overrides in 7 days, the developer is automatically notified about a persistent GPS issue, and the DM gets a push notification to check with the employee about their device settings.
+
+**Common GPS issues and fixes:**
+- **iOS beta software** — tell the employee to leave the beta: Settings → General → Software Update → Beta Updates → Off
+- **GPS inaccurate indoors** — have them step outside briefly, or use the override
+- **Location permissions reset after OS update** — delete the app/bookmark from Home Screen, re-add via Safari, re-grant location "Always"
+- **Precise Location toggled off** — Settings → Privacy → Location Services → Field Manager Pro → Precise Location must be ON
+- **Low Power Mode** — turn it off in Settings → Battery
+
+## Clock-in uniform photo
+When clocking in, employees and DMs are prompted to take a photo in uniform with their name tag visible. This uses the front camera only — no gallery uploads allowed.
+- **Currently optional** (testing phase)
+- **Mandatory starting September 1** — missing photos will create a flag and notify the DM
+- Photos appear as thumbnails on the timecard next to each shift
+- DMs and above can tap the thumbnail to view the full photo
+- Photos are automatically deleted from storage after the payroll period is submitted and approved
+
 ## Why does it say "Already clocked in"?
 You have an active shift that hasn't been clocked out. You can only have one active shift at a time. Go to Clock and tap Clock Out first, then clock in again.
 

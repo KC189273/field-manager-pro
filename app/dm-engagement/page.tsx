@@ -251,7 +251,7 @@ export default function DmEngagementPage() {
             {availableMonths.length > 0 && (
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-500 uppercase tracking-wide font-medium">
-                  {new Date(selectedMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                  {new Date(selectedMonth + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                 </p>
                 <select
                   value={selectedMonth}
@@ -260,7 +260,7 @@ export default function DmEngagementPage() {
                 >
                   {availableMonths.map(m => (
                     <option key={m} value={m}>
-                      {new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      {new Date(m + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </option>
                   ))}
                 </select>
@@ -320,7 +320,7 @@ export default function DmEngagementPage() {
                 >
                   {availableMonths.map(m => (
                     <option key={m} value={m}>
-                      {new Date(m + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                      {new Date(m + '-01T12:00:00').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     </option>
                   ))}
                 </select>

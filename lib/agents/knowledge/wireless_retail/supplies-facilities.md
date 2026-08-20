@@ -7,15 +7,14 @@ sources:
 features:
   - supply-requests
   - facility-tickets
-  - auto-escalation
   - photo-required-tickets
 permissions:
-  - "all retail roles submit"
-  - "DMs approve own team"
-  - "ops+ approve any"
+  - "all retail roles submit supply requests"
+  - "DMs approve/reject for their team only"
+  - "DMs mark delivered to close out"
+  - "ops managers can view but take no action"
   - "facility photo required"
-  - "48h auto-escalation"
-verified: 2026-07-22
+verified: 2026-08-19
 ---
 # Supply Requests & Facility Tickets
 
@@ -24,22 +23,28 @@ verified: 2026-07-22
 ### How do I request supplies?
 1. Go to **Supplies** from the nav.
 2. Tap **New Request**.
-3. Enter the item name, quantity, and select an urgency level (1 = low, 2 = medium, 3 = high).
-4. Submit. Your DM is notified.
+3. Enter the item name, quantity, and select an urgency level (Level 1 = within 24 hours, Level 2 = within 72 hours, Level 3 = within 1 week).
+4. Take a photo of what's needed (required).
+5. Submit. Your DM is notified via push and email.
 
 ### What's the supply request lifecycle?
-1. **Pending** — submitted, waiting for DM to order.
-2. **Ordered** — DM confirmed the order is placed.
-3. **Received** — the supplies arrived and were received.
+1. **Pending** — submitted, waiting for DM to review.
+2. **Approved** — DM approved the request. DM handles ordering outside the app.
+3. **Delivered** — DM confirms supplies arrived at the store. Request is closed.
+
+Or: **Rejected** — DM did not approve (reason provided via push notification).
 
 ### Who handles supply requests?
 - **Employees** and **DMs** can submit requests.
-- **DMs** can approve (mark as ordered) for their team's requests only.
-- **Ops managers, SD, Owner, Developer** can approve any request.
-- Only managers and above can mark items as received.
+- **DMs** approve or reject requests for their own team only.
+- **DMs** mark requests as delivered when supplies arrive.
+- **Ops managers** can view supply requests for visibility but do not take action in the app. Ordering is handled outside the app via Google Forms.
 
-### What happens if nobody orders my supplies?
-Supply requests auto-escalate after 48 hours if they're still in "pending" status. The escalation cron runs every 30 minutes and notifies the next level up.
+### My supply request was rejected — why?
+Your DM decided not to approve it. You'll receive a push notification with the reason. If you disagree, talk to your DM directly.
+
+### I submitted a request but haven't heard back
+Check the status in the Supplies tab. If it's still "Pending," your DM hasn't reviewed it yet. Follow up with your DM directly.
 
 ---
 

@@ -190,3 +190,6 @@ Tap "Forgot Password" on the login screen. Enter your email. A reset link will b
 - Use your username, not your email, to log in.
 - If you've forgotten your password, use the Forgot Password link.
 - If your account was deactivated, contact your DM.
+
+**AI Assistant button is in the way**
+You can drag the purple AI Assistant button to any position on the screen. Touch and hold the button, then drag it wherever you want. It will stay there until you change pages. Tap it (without dragging) to open the chat.

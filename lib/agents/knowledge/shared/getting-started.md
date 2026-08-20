@@ -39,3 +39,15 @@ Tap the **More** menu (three dots or hamburger icon) at the bottom of the screen
 
 ## Setting Up Push Notifications
 When you first open the app, you'll be asked to allow push notifications. Say **Yes** — this is how you get alerts for schedule changes, task assignments, appointment requests, and more. You can always adjust specific notification types in Settings.
+
+## AI Assistant
+The purple button at the bottom right of every page is the AI Assistant. Tap it to ask questions, troubleshoot issues, or get strategic advice (DMs).
+
+**If the button is in the way**, you can **drag it** to any position on the screen. Just touch and hold, then drag it wherever you want. Tap it (without dragging) to open the chat.
+
+## Preferred Name vs Legal Name
+Your profile has two name fields:
+- **Preferred Name** — what shows everywhere in the app (timecards, schedules, chat, coaching, etc.)
+- **Legal Name** — only used on payroll exports and official documents
+
+Your DM or admin can update either name for you in the Team section.

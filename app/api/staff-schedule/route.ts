@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       WHERE ss.employee_id = $2
         AND ss.shift_date >= $1
         AND ss.shift_date <= $3
+        AND COALESCE(ss.is_dm_shift, FALSE) = FALSE
         AND EXISTS (
           SELECT 1 FROM scheduled_shifts_publish ssp
           WHERE ssp.store_location_id = ss.store_location_id

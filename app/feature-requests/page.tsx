@@ -94,12 +94,12 @@ export default function FeatureRequestsPage() {
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-1">
-          <h1 className="text-xl font-bold text-white">Feature Requests</h1>
+          <h1 className="text-xl font-bold text-white">App Recommendations</h1>
           <button onClick={() => setShowForm(!showForm)} className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors">
             {showForm ? 'Cancel' : '+ New Request'}
           </button>
         </div>
-        <p className="text-gray-500 text-sm mb-5">Suggest changes or improvements for the app.</p>
+        <p className="text-gray-500 text-sm mb-5">Suggest changes or improvements for the app. Your recommendations go directly to the dev team.</p>
 
         {message && (
           <div className={`mb-4 px-4 py-3 rounded-xl text-sm font-medium ${message.type === 'success' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>

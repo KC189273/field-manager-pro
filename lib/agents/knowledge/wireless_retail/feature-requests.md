@@ -12,11 +12,11 @@ permissions:
   - "only developer can update status"
 verified: 2026-08-19
 ---
-# Feature Requests
+# App Recommendations
 
 ## How do I suggest a change to the app?
 1. Tap **More** in the bottom nav.
-2. Tap **Feature Requests**.
+2. Tap **App Recommendations**.
 3. Tap **+ New Request**.
 4. Fill in:
    - **Title** — short description of what you want changed
@@ -38,7 +38,7 @@ Your request goes through these stages:
 You'll get a push notification whenever the status changes.
 
 ## Can I see my requests?
-Yes. Go to Feature Requests to see all your submissions with their current status. If the dev team added notes, you'll see them when you tap to expand the request.
+Yes. Go to App Recommendations to see all your submissions with their current status. If the dev team added notes, you'll see them when you tap to expand the request.
 
 ## Who can submit feature requests?
 DMs, Ops Managers, Owners, and Developers. Employees should talk to their DM about app suggestions.

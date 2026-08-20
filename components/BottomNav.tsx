@@ -77,6 +77,7 @@ const ALL_FEATURES: Feature[] = [
 
   // ── Help (all roles) ──
   { href: '/help',            label: 'Help & Support',   short: 'Help',      Icon: HelpIcon,           show: () => true },
+  { href: '/feature-requests', label: 'Feature Requests', short: 'Requests',  Icon: HelpIcon,           show: canViewTeam },
 
   // ── Admin ──
   { href: '/super-admin',     label: 'Super Admin',      short: 'Admin',     Icon: GearIcon,           show: r => r === 'developer' },
@@ -111,6 +112,12 @@ export default function BottomNav() {
   const [aiUserName, setAiUserName] = useState('')
   const [aiBubbleDismissed, setAiBubbleDismissed] = useState(false)
   const aiEndRef = useRef<HTMLDivElement>(null)
+
+  // Draggable AI button position
+  const [aiPos, setAiPos] = useState<{ x: number; y: number } | null>(null)
+  const [aiDragging, setAiDragging] = useState(false)
+  const aiDragStart = useRef<{ x: number; y: number; bx: number; by: number } | null>(null)
+  const aiDragMoved = useRef(false)
 
   // Close the More sheet whenever the route changes
   useEffect(() => {
@@ -362,15 +369,42 @@ export default function BottomNav() {
         </div>
       )}
 
-      {/* ── AI Assistant floating button + thought bubble ── */}
+      {/* ── AI Assistant floating button + thought bubble (draggable) ── */}
       {!aiChatOpen && !moreOpen && !aiButtonHidden && (
-        <div className="fixed bottom-20 right-4 z-40 flex flex-col items-end gap-2 transition-all duration-200" style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}>
+        <div
+          className="fixed z-40 flex flex-col items-end gap-2 transition-none touch-none select-none"
+          style={aiPos ? { left: aiPos.x, top: aiPos.y } : { bottom: 80, right: 16, marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
+          onTouchStart={e => {
+            const t = e.touches[0]
+            const el = e.currentTarget
+            const rect = el.getBoundingClientRect()
+            aiDragStart.current = { x: t.clientX, y: t.clientY, bx: rect.left, by: rect.top }
+            aiDragMoved.current = false
+          }}
+          onTouchMove={e => {
+            if (!aiDragStart.current) return
+            const t = e.touches[0]
+            const dx = t.clientX - aiDragStart.current.x
+            const dy = t.clientY - aiDragStart.current.y
+            if (Math.abs(dx) > 5 || Math.abs(dy) > 5) aiDragMoved.current = true
+            if (aiDragMoved.current) {
+              setAiDragging(true)
+              const newX = Math.max(0, Math.min(window.innerWidth - 60, aiDragStart.current.bx + dx))
+              const newY = Math.max(0, Math.min(window.innerHeight - 60, aiDragStart.current.by + dy))
+              setAiPos({ x: newX, y: newY })
+            }
+          }}
+          onTouchEnd={() => {
+            aiDragStart.current = null
+            setAiDragging(false)
+          }}
+        >
           {/* Thought bubble */}
-          {!aiBubbleDismissed && (
+          {!aiBubbleDismissed && !aiDragging && (
             <div className="relative bg-white rounded-2xl pl-4 pr-2 py-2 shadow-lg flex items-center gap-1">
               <p
                 className="text-sm font-medium text-gray-800 cursor-pointer"
-                onClick={() => { setAiChatOpen(true); if (aiStatus === 'resolved' || aiStatus === 'escalated') aiNewConversation() }}
+                onClick={() => { if (!aiDragMoved.current) { setAiChatOpen(true); if (aiStatus === 'resolved' || aiStatus === 'escalated') aiNewConversation() } }}
               >Ask me anything</p>
               <button
                 onClick={(e) => { e.stopPropagation(); setAiBubbleDismissed(true) }}
@@ -386,8 +420,8 @@ export default function BottomNav() {
           )}
           {/* Button */}
           <button
-            onClick={() => { setAiChatOpen(true); if (aiStatus === 'resolved' || aiStatus === 'escalated') aiNewConversation() }}
-            className="bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-lg shadow-violet-900/50 pl-3.5 pr-4 py-2.5 flex items-center gap-2 transition-all active:scale-95"
+            onClick={() => { if (!aiDragMoved.current) { setAiChatOpen(true); if (aiStatus === 'resolved' || aiStatus === 'escalated') aiNewConversation() } }}
+            className={`bg-violet-600 hover:bg-violet-500 text-white rounded-full shadow-lg shadow-violet-900/50 pl-3.5 pr-4 py-2.5 flex items-center gap-2 transition-all ${aiDragging ? 'scale-110 opacity-80' : 'active:scale-95'}`}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />

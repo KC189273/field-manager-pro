@@ -16,6 +16,7 @@ interface User {
   username: string
   email: string
   full_name: string
+  legal_name: string | null
   role: string
   is_active: boolean
   is_floater: boolean
@@ -40,7 +41,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false, isHidden: false }
+const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', legalName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false, isHidden: false }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -156,7 +157,7 @@ export default function TeamPage() {
 
   function openEdit(user: User) {
     setEditUser(user)
-    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
+    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, legalName: user.legal_name ?? user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
     setShowCreate(false)
     setShowTempPw(false)
   }
@@ -193,6 +194,7 @@ export default function TeamPage() {
       body.mustChangePassword = editForm.requirePasswordChange
     }
     if (editForm.fullName !== editUser.full_name) body.fullName = editForm.fullName
+    if (editForm.legalName !== (editUser.legal_name ?? editUser.full_name)) body.legalName = editForm.legalName
     if (editForm.email !== editUser.email) body.email = editForm.email
     if (editForm.role !== editUser.role) body.role = editForm.role
     if (editForm.role !== 'developer' && editForm.role !== 'owner') body.managerId = editForm.managerId || null
@@ -527,9 +529,18 @@ export default function TeamPage() {
               </div>
               <form onSubmit={updateUser} className="px-5 pb-8 pt-3 space-y-3">
                 <h2 className="font-semibold text-white mb-1">Edit — {editUser.full_name}</h2>
-                <input placeholder="Full name" value={editForm.fullName}
-                  onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
-                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Preferred Name (shown in app)</label>
+                  <input placeholder="Preferred name" value={editForm.fullName}
+                    onChange={e => setEditForm(p => ({ ...p, fullName: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Legal Name (used on payroll)</label>
+                  <input placeholder="Legal name" value={editForm.legalName}
+                    onChange={e => setEditForm(p => ({ ...p, legalName: e.target.value }))}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                </div>
                 <input placeholder="Email" type="email" value={editForm.email}
                   onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />

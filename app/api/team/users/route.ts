@@ -41,14 +41,16 @@ export async function GET(req: NextRequest) {
 
   try { await ensureApprovalColumn() } catch {}
   await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_hidden BOOLEAN NOT NULL DEFAULT FALSE`).catch(() => {})
+  await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS legal_name TEXT`).catch(() => {})
+  await query(`UPDATE users SET legal_name = full_name WHERE legal_name IS NULL`).catch(() => {})
 
   const orgFilter = await getOrgFilter(session)
   const withPeers = new URL(req.url).searchParams.get('withPeers') === 'true'
   const hiddenFilter = session.role === 'developer' ? '' : ' AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)'
   const hiddenFilterNoAlias = session.role === 'developer' ? '' : ' AND (is_hidden = FALSE OR is_hidden IS NULL)'
 
-  const userCols = 'u.id, u.username, u.email, u.full_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab, u.is_hidden'
-  const userColsNoAlias = 'id, username, email, full_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab, is_hidden'
+  const userCols = 'u.id, u.username, u.email, u.full_name, u.legal_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab, u.is_hidden'
+  const userColsNoAlias = 'id, username, email, full_name, legal_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab, is_hidden'
 
   if (session.role === 'developer') {
     const params: unknown[] = []
@@ -158,8 +160,8 @@ export async function POST(req: NextRequest) {
   }
 
   const user = await queryOne<{ id: string }>(
-    `INSERT INTO users (username, email, password_hash, role, full_name, manager_id, org_id, created_by, is_active, approval_status, temp_password, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+    `INSERT INTO users (username, email, password_hash, role, full_name, legal_name, manager_id, org_id, created_by, is_active, approval_status, temp_password, must_change_password)
+     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
     [
       username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(),
       finalManagerId, finalOrgId, session.id,
@@ -205,7 +207,8 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab, isHidden } = await req.json()
+  const body = await req.json()
+  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab, isHidden, legalName } = body
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -243,6 +246,7 @@ export async function PATCH(req: NextRequest) {
     await query(`UPDATE users SET must_change_password = FALSE WHERE id = $1`, [userId])
   }
   if (fullName) await query(`UPDATE users SET full_name = $1 WHERE id = $2`, [fullName.trim(), userId])
+  if (legalName !== undefined) await query(`UPDATE users SET legal_name = $1 WHERE id = $2`, [legalName?.trim() || null, userId])
   if (email) await query(`UPDATE users SET email = $1 WHERE id = $2`, [email.trim(), userId])
   if (managerId !== undefined && (session.role === 'developer' || isOwner(session.role) || isManager(session.role))) {
     await query(`UPDATE users SET manager_id = $1 WHERE id = $2`, [managerId || null, userId])

@@ -480,7 +480,7 @@ export async function POST(req: NextRequest) {
   let shiftSql = `
     SELECT
       s.user_id,
-      u.full_name,
+      COALESCE(u.legal_name, u.full_name) AS full_name,
       o.name AS org_name,
       s.clock_in_at::text,
       s.clock_out_at::text,
@@ -507,7 +507,7 @@ export async function POST(req: NextRequest) {
   let pcSql = `
     SELECT
       pc.user_id,
-      u.full_name,
+      COALESCE(u.legal_name, u.full_name) AS full_name,
       o.name AS org_name,
       pc.date::text,
       pc.type,

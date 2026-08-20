@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     WITH weekly_hours AS (
       SELECT
         s.user_id,
-        u.full_name,
+        COALESCE(u.legal_name, u.full_name) AS full_name,
         u.username,
         u.org_id,
         u.manager_id,

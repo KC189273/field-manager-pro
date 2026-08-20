@@ -88,8 +88,8 @@ export async function GET(req: NextRequest) {
   const params: unknown[] = []
 
   let where = history
-    ? `sr.status = 'received'`
-    : `sr.status IN ('pending', 'ordered')`
+    ? `sr.status IN ('delivered', 'received', 'rejected')`
+    : `sr.status IN ('pending', 'approved', 'ordered')`
 
   if (fromDate) { params.push(fromDate); where += ` AND sr.created_at >= $${params.length}` }
   if (toDate)   { params.push(toDate + 'T23:59:59'); where += ` AND sr.created_at <= $${params.length}` }
@@ -252,30 +252,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Notify ops managers, SDs, and owners in the org
-  if (user?.org_id) {
-    const opsRecipients = await query<{ id: string; email: string; full_name: string }>(
-      `SELECT id, email, full_name FROM users WHERE org_id = $1 AND is_active = TRUE
-         AND role IN ('ops_manager', 'sales_director', 'owner', 'developer')`,
-      [user.org_id]
-    )
-    const lvl = urgency === 1 ? 'Level 1 — 24 hrs' : urgency === 2 ? 'Level 2 — 72 hrs' : 'Level 3 — 1 week'
-    for (const r of opsRecipients) {
-      sendPushToUser(r.id, 'New Supply Request', `${session.fullName} needs "${itemName.trim()}" (${lvl})`, 'supply_request').catch(() => {})
-      if (r.email && await isEmailEnabled(r.id)) {
-        sendEmail(
-          r.email,
-          `New Supply Request: ${itemName.trim()}`,
-          supplyRequestEmailHtml(r.full_name, session.fullName, itemName.trim(), quantity?.trim() || '1', urgency, storeAddress, notes?.trim() || null)
-        ).catch(() => {})
-      }
-    }
-  }
+  // Supply requests now go to DM only — ops managers see them in the app but are not notified
 
   return NextResponse.json({ ok: true })
 }
 
-// PATCH /api/supply-requests — DM marks ordered, employee marks received
+// PATCH /api/supply-requests — DM approves/rejects, DM marks delivered
 export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -289,43 +271,57 @@ export async function PATCH(req: NextRequest) {
   }>(`SELECT employee_id, employee_name, manager_id, item_name, status, urgency, org_id FROM supply_requests WHERE id = $1`, [id])
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  if (action === 'ordered') {
+  if (action === 'approved') {
     if (session.role === 'employee') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (session.role === 'manager' && row.manager_id !== session.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    if (row.status !== 'pending') return NextResponse.json({ error: 'Already ordered' }, { status: 400 })
+    if (row.status !== 'pending') return NextResponse.json({ error: 'Already processed' }, { status: 400 })
 
     await query(
-      `UPDATE supply_requests SET status='ordered', ordered_at=NOW(), ordered_by=$1, ordered_by_name=$2, ordered_note=$3, updated_at=NOW() WHERE id=$4`,
+      `UPDATE supply_requests SET status='approved', ordered_at=NOW(), ordered_by=$1, ordered_by_name=$2, ordered_note=$3, updated_at=NOW() WHERE id=$4`,
       [session.id, session.fullName, note?.trim() || null, id]
     )
     sendPushToUser(
       row.employee_id,
-      'Supplies Ordered!',
-      `Your request for "${row.item_name}" has been ordered and is on the way.`,
+      'Supply Request Approved',
+      `Your request for "${row.item_name}" has been approved by ${session.fullName}.`,
       'supply_ordered'
     ).catch(() => {})
 
-  } else if (action === 'received') {
-    const canReceive = row.employee_id === session.id ||
-      ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
-    if (!canReceive) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    if (row.status !== 'ordered') return NextResponse.json({ error: 'Must be ordered first' }, { status: 400 })
+  } else if (action === 'rejected') {
+    if (session.role === 'employee') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (session.role === 'manager' && row.manager_id !== session.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (row.status !== 'pending') return NextResponse.json({ error: 'Already processed' }, { status: 400 })
 
     await query(
-      `UPDATE supply_requests SET status='received', received_at=NOW(), received_by=$1, received_by_name=$2, updated_at=NOW() WHERE id=$3`,
+      `UPDATE supply_requests SET status='rejected', ordered_by=$1, ordered_by_name=$2, ordered_note=$3, updated_at=NOW() WHERE id=$4`,
+      [session.id, session.fullName, note?.trim() || 'Rejected', id]
+    )
+    sendPushToUser(
+      row.employee_id,
+      'Supply Request Rejected',
+      `Your request for "${row.item_name}" was not approved.${note?.trim() ? ' Reason: ' + note.trim() : ''}`,
+      'supply_ordered'
+    ).catch(() => {})
+
+  } else if (action === 'delivered') {
+    const canDeliver = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+    if (!canDeliver) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (session.role === 'manager' && row.manager_id !== session.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    if (row.status !== 'approved') return NextResponse.json({ error: 'Must be approved first' }, { status: 400 })
+
+    await query(
+      `UPDATE supply_requests SET status='delivered', received_at=NOW(), received_by=$1, received_by_name=$2, updated_at=NOW() WHERE id=$3`,
       [session.id, session.fullName, id]
     )
-    if (row.manager_id) {
-      sendPushToUser(
-        row.manager_id,
-        'Supplies Received',
-        `${row.employee_name} confirmed receipt of "${row.item_name}".`,
-        'supply_received'
-      ).catch(() => {})
-    }
+    sendPushToUser(
+      row.employee_id,
+      'Supplies Delivered',
+      `Your "${row.item_name}" has been marked as delivered.`,
+      'supply_received'
+    ).catch(() => {})
 
   } else {
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    return NextResponse.json({ error: 'Invalid action. Use: approved, rejected, delivered' }, { status: 400 })
   }
 
   return NextResponse.json({ ok: true })

@@ -23,7 +23,7 @@ interface SupplyRequest {
   category: string | null
   notes: string | null
   urgency: 1 | 2 | 3
-  status: 'pending' | 'ordered' | 'received'
+  status: 'pending' | 'approved' | 'rejected' | 'delivered' | 'ordered' | 'received'
   ordered_at: string | null
   ordered_by_name: string | null
   ordered_note: string | null
@@ -50,9 +50,12 @@ const URGENCY_BAR: Record<number, string> = { 1: 'bg-red-500', 2: 'bg-orange-500
 const CATEGORIES = ['Cleaning Supplies', 'Product / Inventory', 'Equipment', 'Office / Admin', 'Other']
 
 const STATUS_COLOR: Record<string, string> = {
-  pending:  'text-orange-400 bg-orange-900/30 border-orange-800/50',
-  ordered:  'text-blue-400 bg-blue-900/30 border-blue-800/50',
-  received: 'text-green-400 bg-green-900/30 border-green-800/50',
+  pending:   'text-orange-400 bg-orange-900/30 border-orange-800/50',
+  approved:  'text-blue-400 bg-blue-900/30 border-blue-800/50',
+  rejected:  'text-red-400 bg-red-900/30 border-red-800/50',
+  delivered: 'text-green-400 bg-green-900/30 border-green-800/50',
+  ordered:   'text-blue-400 bg-blue-900/30 border-blue-800/50',
+  received:  'text-green-400 bg-green-900/30 border-green-800/50',
 }
 
 function fmtTs(iso: string | null): string {
@@ -104,18 +107,19 @@ function Countdown({ startIso, urgency, now }: { startIso: string; urgency: numb
 }
 
 function RequestCard({
-  req, session, now, onOrdered, onReceived,
+  req, session, now, onApprove, onReject, onDelivered,
 }: {
   req: SupplyRequest
   session: Session
   now: number
-  onOrdered?: (r: SupplyRequest) => void
-  onReceived?: (id: string) => void
+  onApprove?: (r: SupplyRequest) => void
+  onReject?: (r: SupplyRequest) => void
+  onDelivered?: (id: string) => void
 }) {
-  const canMarkOrdered  = (session.role === 'manager' && req.manager_id === session.id) ||
-    ['ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
-  const canMarkReceived = req.employee_id === session.id ||
-    ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const canApprove = (session.role === 'manager' && req.manager_id === session.id) ||
+    ['owner', 'developer'].includes(session.role)
+  const canDeliver = (session.role === 'manager' && req.manager_id === session.id) ||
+    ['owner', 'developer'].includes(session.role)
 
   return (
     <div className={`bg-gray-900 border rounded-2xl p-4 ${req.order_escalated_at || req.receipt_escalated_at ? 'border-red-800/60' : 'border-gray-800'}`}>
@@ -181,20 +185,28 @@ function RequestCard({
 
       {/* Action buttons */}
       <div className="flex gap-2 mt-3">
-        {req.status === 'pending' && canMarkOrdered && onOrdered && (
+        {req.status === 'pending' && canApprove && onApprove && (
           <button
-            onClick={() => onOrdered(req)}
-            className="flex-1 bg-blue-600 hover:bg-blue-500 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
-          >
-            Mark Ordered
-          </button>
-        )}
-        {req.status === 'ordered' && canMarkReceived && onReceived && (
-          <button
-            onClick={() => onReceived(req.id)}
+            onClick={() => onApprove(req)}
             className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
           >
-            Mark Received
+            Approve
+          </button>
+        )}
+        {req.status === 'pending' && canApprove && onReject && (
+          <button
+            onClick={() => onReject(req)}
+            className="flex-1 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+          >
+            Reject
+          </button>
+        )}
+        {req.status === 'approved' && canDeliver && onDelivered && (
+          <button
+            onClick={() => onDelivered(req.id)}
+            className="flex-1 bg-green-600 hover:bg-green-500 text-white text-sm font-semibold py-2 rounded-xl transition-colors"
+          >
+            Mark Delivered
           </button>
         )}
       </div>
@@ -327,13 +339,13 @@ export default function SupplyRequestsPage() {
     }
   }
 
-  async function markOrdered() {
+  async function markApproved() {
     if (!orderingReq) return
     setOrderSaving(true)
     const res = await fetch('/api/supply-requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: orderingReq.id, action: 'ordered', note: orderNote }),
+      body: JSON.stringify({ id: orderingReq.id, action: 'approved', note: orderNote }),
     })
     setOrderSaving(false)
     if (res.ok) {
@@ -343,12 +355,23 @@ export default function SupplyRequestsPage() {
     }
   }
 
-  async function markReceived(id: string) {
+  async function markRejected(req: SupplyRequest) {
+    const reason = prompt(`Reason for rejecting "${req.item_name}"?`)
+    if (reason === null) return
+    await fetch('/api/supply-requests', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: req.id, action: 'rejected', note: reason }),
+    })
+    await loadRequests()
+  }
+
+  async function markDelivered(id: string) {
     setReceivingId(id)
     await fetch('/api/supply-requests', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, action: 'received' }),
+      body: JSON.stringify({ id, action: 'delivered' }),
     })
     setReceivingId(null)
     await loadRequests()
@@ -395,7 +418,7 @@ export default function SupplyRequestsPage() {
                 {requests.map(r => (
                   <RequestCard
                     key={r.id} req={r} session={session} now={now}
-                    onReceived={receivingId ? undefined : markReceived}
+                    onDelivered={receivingId ? undefined : markDelivered}
                   />
                 ))}
               </div>
@@ -447,7 +470,8 @@ export default function SupplyRequestsPage() {
                       {pending.map(r => (
                         <RequestCard
                           key={r.id} req={r} session={session} now={now}
-                          onOrdered={req => { setOrderingReq(req); setOrderNote('') }}
+                          onApprove={req => { setOrderingReq(req); setOrderNote('') }}
+                        onReject={markRejected}
                         />
                       ))}
                     </div>
@@ -555,8 +579,9 @@ export default function SupplyRequestsPage() {
                     {requests.map(r => (
                       <RequestCard
                         key={r.id} req={r} session={session} now={now}
-                        onOrdered={req => { setOrderingReq(req); setOrderNote('') }}
-                        onReceived={markReceived}
+                        onApprove={req => { setOrderingReq(req); setOrderNote('') }}
+                        onReject={markRejected}
+                        onDelivered={markDelivered}
                       />
                     ))}
                   </div>
@@ -780,15 +805,15 @@ export default function SupplyRequestsPage() {
       {orderingReq && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center" onClick={() => setOrderingReq(null)}>
           <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-1">Mark as Ordered</h2>
+            <h2 className="text-lg font-bold text-white mb-1">Approve Supply Request</h2>
             <p className="text-sm text-gray-400 mb-5">"{orderingReq.item_name}" for {orderingReq.employee_name}</p>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs text-gray-400 mb-1.5">
-                  Order Details <span className="text-gray-600">(where ordered, estimated arrival)</span>
+                  Notes <span className="text-gray-600">(optional)</span>
                 </label>
-                <textarea rows={4}
-                  placeholder="e.g. Ordered from Amazon — arrives Thursday. Order #112-3456789."
+                <textarea rows={3}
+                  placeholder="Any notes about this approval..."
                   value={orderNote} onChange={e => setOrderNote(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-violet-500 resize-none" />
               </div>
@@ -797,9 +822,9 @@ export default function SupplyRequestsPage() {
                   className="flex-1 py-3 rounded-xl border border-gray-700 text-sm text-gray-400 hover:text-white transition-colors">
                   Cancel
                 </button>
-                <button onClick={markOrdered} disabled={orderSaving}
-                  className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
-                  {orderSaving ? 'Saving…' : 'Confirm Ordered'}
+                <button onClick={markApproved} disabled={orderSaving}
+                  className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors">
+                  {orderSaving ? 'Saving…' : 'Approve'}
                 </button>
               </div>
             </div>

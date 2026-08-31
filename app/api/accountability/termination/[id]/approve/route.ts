@@ -23,7 +23,7 @@ export async function POST(
   const termReq = await queryOne<{
     id: string; employee_id: string; employee_name: string; employee_email: string
     org_id: string; requested_by: string; requested_by_name: string; reasons: string
-    status: string; created_at: string
+    status: string; created_at: string; termination_type: string
   }>(`SELECT * FROM termination_requests WHERE id = $1`, [id])
 
   if (!termReq) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -43,8 +43,9 @@ export async function POST(
       `UPDATE termination_requests SET status = 'rejected', approved_by = $1, approved_by_name = $2, approved_at = NOW() WHERE id = $3`,
       [session.id, session.fullName, termReq.id]
     )
-    sendPushToUser(termReq.requested_by, 'Termination Request Rejected',
-      `The termination request for ${termReq.employee_name} has been rejected by ${session.fullName}.`,
+    const rejLabel = termReq.termination_type === 'resignation' ? 'Resignation' : 'Termination'
+    sendPushToUser(termReq.requested_by, `${rejLabel} Request Rejected`,
+      `The ${termReq.termination_type} request for ${termReq.employee_name} has been rejected by ${session.fullName}.`,
       'accountability'
     ).catch(e => console.error('Termination async error:', e))
     return NextResponse.json({ ok: true, action: 'rejected' })
@@ -100,12 +101,17 @@ export async function POST(
     accountabilityDocs,
   }
 
-  // Send to employee
-  sendEmail(
-    termReq.employee_email,
-    `Notice of Employment Termination — ${orgName}`,
-    buildTerminationEmailHtml(emailParams)
-  ).catch(e => console.error('Termination async error:', e))
+  const isResignation = termReq.termination_type === 'resignation'
+  const typeLabel = isResignation ? 'Resignation' : 'Termination'
+
+  // Send to employee — skip for resignations (employee already knows they quit)
+  if (!isResignation) {
+    sendEmail(
+      termReq.employee_email,
+      `Notice of Employment Termination — ${orgName}`,
+      buildTerminationEmailHtml(emailParams)
+    ).catch(e => console.error('Termination async error:', e))
+  }
 
   // Determine who should receive management copies based on the terminated employee's role
   // If terminating a SD or DM, only ops_manager/owner/developer get the email (not other DMs)
@@ -129,7 +135,7 @@ export async function POST(
     if (person.email_ok) {
       sendEmail(
         person.email,
-        `[MANAGEMENT COPY] Termination Notice — ${termReq.employee_name} | ${orgName}`,
+        `[MANAGEMENT COPY] ${typeLabel} Notice — ${termReq.employee_name} | ${orgName}`,
         buildTerminationEmailHtml({ ...emailParams, isCopy: true, copyFor: person.full_name })
       ).catch(e => console.error('Termination async error:', e))
     }
@@ -137,8 +143,8 @@ export async function POST(
     if (person.push_ok) {
       sendPushToUser(
         person.id,
-        'Termination Processed',
-        `${termReq.employee_name} has been terminated. The formal notice has been sent.`,
+        `${typeLabel} Processed`,
+        `${termReq.employee_name} has ${isResignation ? 'resigned' : 'been terminated'}. ${isResignation ? 'Account deactivated.' : 'The formal notice has been sent.'}`,
         'accountability'
       ).catch(e => console.error('Termination async error:', e))
     }

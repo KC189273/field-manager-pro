@@ -64,6 +64,26 @@ Termination is the final step after a Final Warning (or can be initiated directl
 - A termination creates a Word document (.docx) with the employee's full accountability history.
 - The terminated employee is marked `is_active = FALSE` and `is_hidden = TRUE`.
 - They are removed from all active views but their data is preserved.
+- A formal termination notice email is sent to the employee and all management.
+
+## Resignations / Self-Quits
+For employees who resign or self-quit, use the **"+ Submit Resignation / Self-Quit"** button on the Termination tab:
+
+1. Go to **Accountability** → **Termination** tab
+2. Click **"+ Submit Resignation / Self-Quit"**
+3. Select the employee
+4. Enter the last day worked (optional)
+5. Describe the circumstances (resignation letter received, verbal notice, no-show, etc.)
+6. Optionally attach evidence (resignation letter, text screenshot, photo)
+7. Submit for approval
+
+**Key differences from termination:**
+- **No email is sent to the employee** — they already know they quit
+- Management still gets notified (push + email)
+- Same approval flow (SD/Owner/Developer approves)
+- On approval, account is deactivated and hidden just like a termination
+- Shows with green styling and "Resignation" badge in the requests list
+- Any role that can submit terminations can also submit resignations (DM+)
 
 ## What happens during a DM transfer?
 When an employee moves to a different DM, accountability docs can be transferred. The doc's `transferred_to` field is updated so the new DM inherits the documentation history.

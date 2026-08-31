@@ -114,7 +114,8 @@ export async function POST(req: NextRequest) {
   try { await ensureTerminationTables() } catch {}
 
   const body = await req.json()
-  const { employee_id, reasons } = body
+  const { employee_id, reasons, termination_type, attachment_key, last_day_worked } = body
+  const type = termination_type === 'resignation' ? 'resignation' : 'termination'
 
   if (!employee_id || !reasons?.trim()) {
     return NextResponse.json({ error: 'employee_id and reasons are required' }, { status: 400 })
@@ -138,21 +139,23 @@ export async function POST(req: NextRequest) {
 
   const request = await queryOne<{ id: string }>(
     `INSERT INTO termination_requests
-       (employee_id, employee_name, employee_email, org_id, requested_by, requested_by_name, requested_by_role, reasons)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (employee_id, employee_name, employee_email, org_id, requested_by, requested_by_name, requested_by_role, reasons, termination_type, attachment_key, last_day_worked)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
     [employee.id, employee.full_name, employee.email, employee.org_id,
-     session.id, session.fullName, session.role, reasons.trim()]
+     session.id, session.fullName, session.role, reasons.trim(),
+     type, attachment_key || null, last_day_worked || null]
   )
 
   // Notify SDs (or fallback to owners + ops_managers) that approval is needed
+  const typeLabel = type === 'resignation' ? 'Resignation' : 'Termination'
   const { getSDOrFallback } = await import('@/lib/sd-fallback')
   const approvers = await getSDOrFallback(employee.org_id)
   if (approvers.length) {
     sendPushToUsers(
       approvers.map(a => a.id),
-      'Termination Request Requires Approval',
-      `${session.fullName} has requested termination for ${employee.full_name}. Review and approve or reject in Field Manager Pro.`,
+      `${typeLabel} Request Requires Approval`,
+      `${session.fullName} has submitted a ${type} request for ${employee.full_name}. Review and approve or reject in Field Manager Pro.`,
       'accountability'
     ).catch(() => {})
   }
@@ -165,8 +168,8 @@ export async function POST(req: NextRequest) {
   if (devs.length) {
     sendPushToUsers(
       devs.map(d => d.id),
-      'Termination Request Submitted',
-      `${session.fullName} has submitted a termination request for ${employee.full_name}.`,
+      `${typeLabel} Request Submitted`,
+      `${session.fullName} has submitted a ${type} request for ${employee.full_name}.`,
       'accountability'
     ).catch(() => {})
   }
@@ -189,10 +192,10 @@ export async function POST(req: NextRequest) {
     <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
       <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
         <h1 style="color:white;margin:0;font-size:20px;">Field Manager Pro</h1>
-        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">Termination Request — Pending Approval</p>
+        <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">${typeLabel} Request — Pending Approval</p>
       </div>
-      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:0 0 12px 12px;padding:24px;">
-        <p style="font-size:15px;font-weight:700;color:#991b1b;margin:0 0 16px;">A termination request has been submitted and requires Sales Director approval.</p>
+      <div style="background:${type === 'resignation' ? '#f0fdf4' : '#fef2f2'};border:1px solid ${type === 'resignation' ? '#86efac' : '#fca5a5'};border-radius:0 0 12px 12px;padding:24px;">
+        <p style="font-size:15px;font-weight:700;color:${type === 'resignation' ? '#166534' : '#991b1b'};margin:0 0 16px;">A ${type} request has been submitted and requires approval.</p>
         <table style="width:100%;border-collapse:collapse;margin-bottom:20px;">
           <tr><td style="padding:8px 0;font-size:13px;color:#6b7280;width:140px;">Employee</td><td style="padding:8px 0;font-size:14px;font-weight:600;color:#111827;">${employee.full_name}</td></tr>
           <tr><td style="padding:8px 0;font-size:13px;color:#6b7280;">Submitted By</td><td style="padding:8px 0;font-size:14px;color:#374151;">${session.fullName}</td></tr>
@@ -205,7 +208,7 @@ export async function POST(req: NextRequest) {
   for (const person of management) {
     sendEmail(
       person.email,
-      `Termination Request: ${employee.full_name} — Pending Approval`,
+      `${typeLabel} Request: ${employee.full_name} — Pending Approval`,
       emailHtml
     ).catch(() => {})
   }

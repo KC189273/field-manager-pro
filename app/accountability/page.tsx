@@ -66,6 +66,9 @@ interface TerminationRequest {
   approved_by_name: string | null
   created_at: string
   approved_at: string | null
+  termination_type: string
+  attachment_key: string | null
+  last_day_worked: string | null
 }
 
 interface TerminatedEmployee {
@@ -1393,6 +1396,15 @@ export default function AccountabilityPage() {
   const [directTermOpen, setDirectTermOpen] = useState(false)
   const [directTermEmpId, setDirectTermEmpId] = useState('')
   const [directTermReasons, setDirectTermReasons] = useState('')
+
+  // Resignation submission (DM+ can submit)
+  const [resignOpen, setResignOpen] = useState(false)
+  const [resignEmpId, setResignEmpId] = useState('')
+  const [resignReasons, setResignReasons] = useState('')
+  const [resignLastDay, setResignLastDay] = useState('')
+  const [resignAttachKey, setResignAttachKey] = useState('')
+  const [resignUploading, setResignUploading] = useState(false)
+  const [resignSubmitting, setResignSubmitting] = useState(false)
   const [directTermSubmitting, setDirectTermSubmitting] = useState(false)
   const [allActiveUsers, setAllActiveUsers] = useState<Array<{ id: string; full_name: string; role: string }>>([])
 
@@ -1533,6 +1545,55 @@ export default function AccountabilityPage() {
       }
     }
   }, [session, tab, loadTermRequests, loadTerminatedEmps])
+
+  async function handleResignUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setResignUploading(true)
+    try {
+      const key = `resignation-docs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+      const urlRes = await fetch('/api/expenses/upload-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, contentType: file.type }),
+      })
+      if (!urlRes.ok) { setTermError('Upload failed'); return }
+      const { url } = await urlRes.json()
+      await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+      setResignAttachKey(key)
+    } catch { setTermError('Upload failed') }
+    finally { setResignUploading(false) }
+  }
+
+  async function handleResignation() {
+    if (!resignEmpId || !resignReasons.trim()) return
+    const empName = allActiveUsers.find(u => u.id === resignEmpId)?.full_name || 'Employee'
+    if (!confirm(`Submit resignation for ${empName}? This will require approval before the account is deactivated. No email will be sent to the employee.`)) return
+    setResignSubmitting(true)
+    setTermError('')
+    try {
+      const res = await fetch('/api/accountability/termination', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: resignEmpId,
+          reasons: resignReasons.trim(),
+          termination_type: 'resignation',
+          attachment_key: resignAttachKey || null,
+          last_day_worked: resignLastDay || null,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setTermError(data.error || 'Failed to submit'); return }
+      setResignOpen(false)
+      setResignEmpId('')
+      setResignReasons('')
+      setResignLastDay('')
+      setResignAttachKey('')
+      loadTermRequests()
+    } catch { setTermError('Network error') }
+    finally { setResignSubmitting(false) }
+  }
 
   async function handleDirectTermination() {
     if (!directTermEmpId || !directTermReasons.trim()) return
@@ -1813,6 +1874,69 @@ export default function AccountabilityPage() {
               </button>
             </div>
 
+            {/* Resignation submission — DM+ can submit */}
+            <div className="mb-4">
+              {!resignOpen ? (
+                <button
+                  onClick={() => setResignOpen(true)}
+                  className="text-xs font-semibold text-green-400 hover:text-green-300 transition-colors"
+                >
+                  + Submit Resignation / Self-Quit
+                </button>
+              ) : (
+                <div className="bg-green-900/10 border border-green-800/40 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-green-400 uppercase tracking-wide">Resignation / Self-Quit</p>
+                  <p className="text-xs text-gray-400">Record an employee resignation. No email will be sent to the employee. Requires approval to deactivate the account.</p>
+                  <select
+                    value={resignEmpId}
+                    onChange={e => setResignEmpId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="">— Select Employee —</option>
+                    {allActiveUsers.map(u => (
+                      <option key={u.id} value={u.id}>{u.full_name} ({u.role.replace(/_/g, ' ')})</option>
+                    ))}
+                  </select>
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1">Last Day Worked (optional)</label>
+                    <input type="date" value={resignLastDay} onChange={e => setResignLastDay(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                  </div>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe the circumstances (resignation letter received, verbal notice, no-show, etc.)"
+                    value={resignReasons}
+                    onChange={e => setResignReasons(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none"
+                  />
+                  <div>
+                    <label className="block text-[10px] text-gray-500 mb-1">Attach Evidence (optional — resignation letter, screenshot, photo)</label>
+                    <div className="flex items-center gap-2">
+                      <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" onChange={handleResignUpload}
+                        className="text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-800 file:text-gray-300 file:text-xs file:font-semibold hover:file:bg-gray-700" />
+                      {resignUploading && <span className="text-xs text-green-400">Uploading...</span>}
+                      {resignAttachKey && !resignUploading && <span className="text-xs text-green-400">Attached</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleResignation}
+                      disabled={resignSubmitting || !resignEmpId || !resignReasons.trim()}
+                      className="flex-1 bg-green-800 hover:bg-green-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl text-sm transition-colors"
+                    >
+                      {resignSubmitting ? 'Submitting…' : 'Submit for Approval'}
+                    </button>
+                    <button
+                      onClick={() => { setResignOpen(false); setResignEmpId(''); setResignReasons(''); setResignLastDay(''); setResignAttachKey('') }}
+                      className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-3 rounded-xl text-sm transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Direct termination — developer only, no prior docs required */}
             {session.role === 'developer' && (
               <div className="mb-4">
@@ -1886,12 +2010,16 @@ export default function AccountabilityPage() {
                       const isPending = req.status === 'pending_approval'
                       const isApproved = req.status === 'approved'
                       const isActing = termActing === req.id
+                      const isResign = req.termination_type === 'resignation'
                       return (
-                        <div key={req.id} className={`bg-gray-900 border rounded-2xl p-4 ${isPending ? 'border-red-800/60' : 'border-gray-800'}`}>
+                        <div key={req.id} className={`bg-gray-900 border rounded-2xl p-4 ${isPending ? (isResign ? 'border-green-800/60' : 'border-red-800/60') : 'border-gray-800'}`}>
                           <div className="flex items-start justify-between gap-3 mb-3">
                             <div>
                               <p className="text-sm font-bold text-white">{req.employee_name}</p>
-                              <p className="text-xs text-gray-500">{req.employee_email}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <p className="text-xs text-gray-500">{req.employee_email}</p>
+                                {isResign && <span className="text-[9px] bg-green-900/40 text-green-400 px-1.5 py-0.5 rounded">Resignation</span>}
+                              </div>
                             </div>
                             <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border shrink-0 ${isPending ? 'bg-red-900/30 border-red-700/50 text-red-400' : isApproved ? 'bg-green-900/20 border-green-700/40 text-green-400' : 'bg-gray-700/30 border-gray-600/40 text-gray-400'}`}>
                               {isPending ? 'Pending Approval' : isApproved ? 'Approved' : 'Rejected'}
@@ -1914,15 +2042,17 @@ export default function AccountabilityPage() {
                               </div>
                             )}
                           </div>
-                          <div className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2.5 mb-3">
-                            <p className="text-xs text-gray-500 mb-1">Reason(s) for Termination</p>
+                          <div className={`${isResign ? 'bg-green-900/10 border-green-800/30' : 'bg-red-900/10 border-red-800/30'} border rounded-xl px-3 py-2.5 mb-3`}>
+                            <p className="text-xs text-gray-500 mb-1">{isResign ? 'Resignation Details' : 'Reason(s) for Termination'}</p>
                             <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">{req.reasons}</p>
+                            {req.last_day_worked && <p className="text-xs text-gray-500 mt-1">Last day worked: {req.last_day_worked}</p>}
+                            {req.attachment_key && <p className="text-xs text-cyan-400 mt-1">Evidence attached</p>}
                           </div>
                           {isPending && ['sales_director','owner','developer'].includes(session.role) && (
                             <div className="flex gap-2">
                               <button onClick={() => handleTermAction(req.id, 'approve')} disabled={isActing}
-                                className="flex-1 bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
-                                {isActing ? 'Processing…' : 'Approve & Send Termination Notice'}
+                                className={`flex-1 ${isResign ? 'bg-green-800 hover:bg-green-700' : 'bg-red-800 hover:bg-red-700'} disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors`}>
+                                {isActing ? 'Processing…' : isResign ? 'Approve & Deactivate Account' : 'Approve & Send Termination Notice'}
                               </button>
                               <button onClick={() => handleTermAction(req.id, 'reject')} disabled={isActing}
                                 className="px-4 bg-gray-800 hover:bg-gray-700 border border-gray-700 disabled:opacity-50 text-gray-400 font-semibold py-2.5 rounded-xl text-sm transition-colors">

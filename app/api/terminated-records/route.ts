@@ -3,7 +3,7 @@ import { getSession, type Role } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import ExcelJS from 'exceljs'
 
-const ALLOWED: Role[] = ['owner', 'sales_director', 'ops_manager', 'developer']
+const ALLOWED: Role[] = ['owner', 'sales_director', 'ops_field_leader', 'ops_manager', 'developer']
 const CST = 'America/Chicago'
 
 function fmtTime(iso: string) {

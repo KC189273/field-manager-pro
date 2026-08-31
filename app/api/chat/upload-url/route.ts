@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { getReceiptUploadUrl } from '@/lib/s3'
 import { randomUUID } from 'crypto'
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 export async function POST(req: NextRequest) {
   const session = await getSession()

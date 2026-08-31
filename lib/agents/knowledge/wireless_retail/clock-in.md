@@ -23,7 +23,7 @@ permissions:
   - "DMs and above are exempt from geofence check"
   - "owners, SDs, and developers can configure geofence settings in Settings"
   - "late clock-in flag has no grace period"
-verified: 2026-08-07
+verified: 2026-08-31
 ---
 # Clock In / Clock Out
 
@@ -35,7 +35,7 @@ verified: 2026-08-07
 
 **Geofencing:** You must be within **300 feet** of the store you selected to clock in. If you're too far away, you'll see a message showing how far you are. Move closer and try again. GPS must be enabled — if location can't be determined, clock-in is blocked.
 
-> DMs, SDs, owners, and ops managers are **not** subject to the geofence check.
+> DMs, SDs, owners, field leaders, and ops managers are **not** subject to the geofence check.
 
 ## How do I clock out?
 1. Tap **Clock** from the bottom nav.

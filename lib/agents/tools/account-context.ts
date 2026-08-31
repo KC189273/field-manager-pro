@@ -104,7 +104,7 @@ export async function getAccountSupportContext(
 
   // ── Team (for DMs) ──
   let team: AccountSupportContext['team'] = []
-  if (user && (user.role === 'manager' || user.role === 'ops_manager' || user.role === 'sales_director' || user.role === 'owner' || user.role === 'developer')) {
+  if (user && (user.role === 'manager' || user.role === 'ops_manager' || user.role === 'ops_field_leader' || user.role === 'sales_director' || user.role === 'owner' || user.role === 'developer')) {
     team = await query<{ id: string; full_name: string; role: string; is_floater: boolean; is_active: boolean }>(`
       SELECT id, full_name, role, COALESCE(is_floater, false) as is_floater, is_active
       FROM users WHERE manager_id = $1 AND role = 'employee'
@@ -232,7 +232,7 @@ export async function getAccountSupportContext(
     trend: string; last_coaching_date: string | null
     days_since_last_coaching: number | null
   } | null = null
-  if (user && ['manager', 'ops_manager', 'owner', 'developer'].includes(user.role)) {
+  if (user && ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'developer'].includes(user.role)) {
     try {
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
       const monthlyStats = await queryOne<{ avg_score: number; count: number }>(`

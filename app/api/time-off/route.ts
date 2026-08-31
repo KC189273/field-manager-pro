@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   const allMode = searchParams.get('all') === 'true'
 
   // All team requests — DM+ only
-  if (allMode && ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)) {
+  if (allMode && ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)) {
     const orgFilter = await getOrgFilter(session)
     const params: unknown[] = []
     let where = ''
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
 
   // Approved time-off for employees who currently report to this manager
   // This ensures new DMs see approved PTO even if it was approved by the previous DM
-  const isManager = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const isManager = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
   const teamApproved = isManager ? await query(`
     SELECT tor.id, tor.start_date::text, tor.end_date::text, tor.reason,
            tor.status, tor.notes, tor.created_at::text,

@@ -13,7 +13,7 @@ permissions:
   - "45h projected to SD"
   - "50h projected to owner"
   - "salary employees exempt"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Overtime Alerts
 
@@ -34,7 +34,7 @@ Floater OT alerts go to ALL DMs (not just the assigned DM), since floaters work 
 ## Who gets OT notifications?
 | Threshold | Who is notified |
 |-----------|----------------|
-| 40h actual | DM + ops managers + SD + owner (email + push) |
+| 40h actual | DM + field leaders + ops managers + SD + owner (email + push) |
 | 45h projected | DM (push), SD if actual is 45+ |
 | 50h projected | DM (push), Owner if actual is 50+ |
 

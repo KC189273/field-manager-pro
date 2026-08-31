@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import NavBar from '@/components/NavBar'
 import { downloadBlob } from '@/lib/download'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
   id: string
@@ -80,10 +80,10 @@ function fmtDatetime(iso: string): string {
 }
 
 const canSrApprove = (role: Role) =>
-  ['sales_director', 'ops_manager', 'developer', 'owner'].includes(role)
+  ['sales_director', 'ops_field_leader', 'ops_manager', 'developer', 'owner'].includes(role)
 
 const canDownload = (role: Role) =>
-  ['sales_director', 'ops_manager', 'owner', 'developer'].includes(role)
+  ['sales_director', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(role)
 
 export default function PayrollPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -201,6 +201,22 @@ export default function PayrollPage() {
       }
       const blob = await res.blob()
       await downloadBlob(blob, `FMP_ADP_Payroll_${from}_to_${to}.csv`)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  async function downloadDetailedExcel() {
+    setDownloading(true)
+    try {
+      const res = await fetch(`/api/payroll/download?from=${from}&to=${to}&detailed=true`)
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        showMsg(d.error ?? 'No data for selected period', 'error')
+        return
+      }
+      const blob = await res.blob()
+      await downloadBlob(blob, `Payroll_Detailed_${from}_to_${to}.xlsx`)
     } finally {
       setDownloading(false)
     }
@@ -745,16 +761,28 @@ export default function PayrollPage() {
                           />
                         </div>
                       </div>
-                      <button
-                        onClick={downloadFullCsv}
-                        disabled={downloading}
-                        className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                        </svg>
-                        {downloading ? 'Downloading…' : 'Download Full ADP CSV'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={downloadFullCsv}
+                          disabled={downloading}
+                          className="flex-1 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                          </svg>
+                          {downloading ? 'Downloading…' : 'ADP CSV'}
+                        </button>
+                        <button
+                          onClick={downloadDetailedExcel}
+                          disabled={downloading}
+                          className="flex-1 py-3 rounded-xl bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white font-semibold text-sm transition-colors flex items-center justify-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          {downloading ? 'Downloading…' : 'Detailed Excel'}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

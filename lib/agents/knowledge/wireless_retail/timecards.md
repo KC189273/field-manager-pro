@@ -12,7 +12,7 @@ permissions:
   - "DMs view/edit team but not own"
   - "SD+ edit any including locked"
   - "floaters filtered by manager_id"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Timecards
 
@@ -63,4 +63,4 @@ A shift marked "⚠ Corrected" was edited after the original clock-in/out. The e
 See the **Floater Timecards** help doc for the full explanation. In short: timecards are filtered by `manager_id`. If the floater is assigned to a different DM, you won't see their timecard. The SD needs to change the floater's manager assignment on the Team page.
 
 ## DM Edit Activity (SD and above)
-The timecards page includes a collapsible **DM Edit Activity** section visible to SD, owner, ops manager, and developer. It shows how many time corrections and manual entries each DM made during the selected week, including net hours added or removed.
+The timecards page includes a collapsible **DM Edit Activity** section visible to SD, owner, field leader, ops manager, and developer. It shows how many time corrections and manual entries each DM made during the selected week, including net hours added or removed.

@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const canApprove = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'developer'
+  const canApprove = isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager' || session.role === 'developer'
   if (!canApprove) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { userId, action } = await req.json()

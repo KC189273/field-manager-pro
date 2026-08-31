@@ -12,7 +12,7 @@ export async function POST(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // DM (manager), SD, owner, developer can mark conversation complete
-  if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -83,7 +83,7 @@ export async function POST(
   const ccRecipients = await query<{ email: string; full_name: string }>(
     `SELECT email, full_name FROM users
      WHERE org_id = $1 AND is_active = TRUE
-       AND role IN ('ops_manager', 'owner')`,
+       AND role IN ('ops_manager', 'ops_field_leader', 'owner')`,
     [doc.org_id]
   )
   const ccEmails = ccRecipients.map(r => r.email)

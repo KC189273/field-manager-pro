@@ -11,7 +11,7 @@ const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
 // ─── Roles allowed to author accountability docs ──────────────────────────────
 const AUTHOR_ROLES = ['manager', 'sales_director', 'owner', 'developer']
-const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'developer']
+const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'ops_field_leader', 'developer']
 
 // ─── Table setup ─────────────────────────────────────────────────────────────
 let ensured = false
@@ -34,7 +34,7 @@ async function ensureTable() {
       author_role           TEXT NOT NULL,
       author_email          TEXT NOT NULL,
 
-      level                 TEXT NOT NULL CHECK (level IN ('verbal','written','final')),
+      level                 TEXT NOT NULL CHECK (level IN ('verbal','written','final','documented_conversation')),
       title                 TEXT NOT NULL,
       incident_date         DATE NOT NULL,
       notes                 TEXT NOT NULL,
@@ -119,6 +119,9 @@ async function ensureTable() {
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS email_sent_at TIMESTAMPTZ`).catch(() => {})
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS transferred_to UUID`).catch(() => {})
   await query(`ALTER TABLE accountability_docs ADD COLUMN IF NOT EXISTS transferred_to_name TEXT`).catch(() => {})
+  // Migrate: add documented_conversation to level CHECK
+  await query(`ALTER TABLE accountability_docs DROP CONSTRAINT IF EXISTS accountability_docs_level_check`).catch(() => {})
+  await query(`ALTER TABLE accountability_docs ADD CONSTRAINT accountability_docs_level_check CHECK (level IN ('verbal','written','final','documented_conversation'))`).catch(() => {})
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -176,16 +179,19 @@ async function auditLog(docId: string, action: string, actorId?: string, actorNa
 
 // ─── Email builders ───────────────────────────────────────────────────────────
 function levelLabel(level: string): string {
+  if (level === 'documented_conversation') return 'Documented Conversation'
   if (level === 'verbal') return 'Verbal Notice'
   if (level === 'written') return 'Written Notice — 2nd Level'
   return 'Final Written Notice — 3rd Level'
 }
 function levelShort(level: string): string {
+  if (level === 'documented_conversation') return 'DOCUMENTED CONVERSATION'
   if (level === 'verbal') return 'VERBAL'
   if (level === 'written') return 'WRITTEN — 2ND LEVEL'
   return 'FINAL — 3RD LEVEL'
 }
 function levelColor(level: string): string {
+  if (level === 'documented_conversation') return '#0e7490'
   if (level === 'verbal') return '#b45309'
   if (level === 'written') return '#c2410c'
   return '#991b1b'
@@ -388,6 +394,134 @@ function buildFormalDocHtml(params: {
 </html>`
 }
 
+// ─── Documented Conversation email builder ───────────────────────────────────
+function buildDocConvoHtml(params: {
+  refNumber: string; topic: string; subjectName: string; subjectRole: string
+  authorName: string; authorRole: string; notes: string; docDate: string
+  isRetainedCopy?: boolean
+}): string {
+  const { refNumber, topic, subjectName, subjectRole, authorName, authorRole, notes, docDate, isRetainedCopy } = params
+  const authorRoleLabel = authorRole === 'manager' ? 'District Manager'
+    : authorRole === 'sales_director' ? 'Sales Director'
+    : authorRole === 'ops_manager' ? 'Ops Manager'
+    : authorRole === 'ops_field_leader' ? 'Field Leader' : authorRole
+  const subjectRoleLabel = subjectRole === 'employee' ? 'Team Member'
+    : subjectRole === 'manager' ? 'District Manager' : subjectRole
+
+  const copyBanner = isRetainedCopy
+    ? `<div style="background:#1a3a1a;padding:10px 40px;text-align:center;"><p style="color:#86efac;font-size:11px;font-family:'Arial',sans-serif;letter-spacing:2px;text-transform:uppercase;margin:0;">RETAINED COPY — FOR YOUR RECORDS</p></div>`
+    : ''
+
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#e5e7eb;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#e5e7eb;padding:32px 0;">
+<tr><td align="center">
+<table width="680" cellpadding="0" cellspacing="0" style="max-width:680px;background:#ffffff;border:1px solid #d1d5db;">
+
+  <tr><td style="background:#0f172a;padding:28px 40px;text-align:center;">
+    <p style="color:#94a3b8;font-size:10px;letter-spacing:3px;text-transform:uppercase;margin:0 0 6px;font-family:'Arial',sans-serif;">FIELD MANAGER PRO</p>
+    <h1 style="color:#f1f5f9;font-size:18px;letter-spacing:2px;text-transform:uppercase;margin:0;font-family:'Arial',sans-serif;font-weight:bold;">DOCUMENTED CONVERSATION</h1>
+  </td></tr>
+
+  ${copyBanner ? `<tr><td>${copyBanner}</td></tr>` : ''}
+
+  <tr><td style="background:#f8fafc;border-bottom:1px solid #e2e8f0;padding:14px 40px;">
+    <table width="100%" cellpadding="0" cellspacing="0">
+    <tr>
+      <td style="font-family:'Arial',sans-serif;">
+        <span style="font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;">Reference Number</span><br>
+        <strong style="font-size:20px;color:#0f172a;letter-spacing:1px;">${refNumber}</strong>
+      </td>
+      <td align="right">
+        <span style="background:#0e7490;color:#ffffff;padding:6px 14px;font-size:10px;font-weight:bold;font-family:'Arial',sans-serif;letter-spacing:1.5px;text-transform:uppercase;">DOCUMENTED CONVERSATION</span>
+      </td>
+    </tr>
+    </table>
+  </td></tr>
+
+  <tr><td style="padding:30px 40px;">
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;margin-bottom:28px;font-family:'Arial',sans-serif;">
+      <tr style="background:#f8fafc;">
+        <td style="padding:10px 14px;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;width:170px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">Employee</td>
+        <td style="padding:10px 14px;font-size:13px;color:#0f172a;border-bottom:1px solid #e2e8f0;"><strong>${subjectName}</strong> <span style="color:#94a3b8;font-size:11px;">(${subjectRoleLabel})</span></td>
+      </tr>
+      <tr>
+        <td style="padding:10px 14px;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;">Documented By</td>
+        <td style="padding:10px 14px;font-size:13px;color:#0f172a;border-bottom:1px solid #e2e8f0;">${authorName} <span style="color:#94a3b8;font-size:11px;">(${authorRoleLabel})</span></td>
+      </tr>
+      <tr style="background:#f8fafc;">
+        <td style="padding:10px 14px;font-size:10px;color:#94a3b8;text-transform:uppercase;letter-spacing:1px;border-right:1px solid #e2e8f0;">Date</td>
+        <td style="padding:10px 14px;font-size:13px;color:#0f172a;">${docDate}</td>
+      </tr>
+    </table>
+
+    <h2 style="font-size:17px;color:#0f172a;margin:0 0 22px;padding-bottom:10px;border-bottom:2px solid #0e7490;font-family:'Arial',sans-serif;">${topic}</h2>
+
+    <div style="margin-bottom:24px;">
+      <h3 style="font-size:10px;color:#94a3b8;font-family:'Arial',sans-serif;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px;border-bottom:1px solid #e2e8f0;padding-bottom:6px;">Conversation Details</h3>
+      <div style="background:#f0fdfa;border-left:4px solid #0e7490;padding:14px 16px;font-size:13px;color:#1e293b;line-height:1.75;font-family:'Georgia',serif;">${notes.replace(/\n/g, '<br>')}</div>
+    </div>
+
+    <div style="margin-top:20px;padding:14px 16px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:4px;">
+      <p style="font-size:12px;color:#0e7490;margin:0;line-height:1.6;font-family:'Arial',sans-serif;">
+        This is a documented conversation for record-keeping purposes. It is not a formal disciplinary action.
+        If you have questions, please speak with your manager.
+      </p>
+    </div>
+
+  </td></tr>
+
+  <tr><td style="background:#f1f5f9;border-top:1px solid #e2e8f0;padding:18px 40px;">
+    <p style="font-size:10px;color:#94a3b8;font-family:'Arial',sans-serif;margin:0;line-height:1.7;">
+      This document was generated by Field Manager Pro on <strong>${docDate}</strong>.<br>
+      Reference: <strong>${refNumber}</strong> &nbsp;|&nbsp; This document is permanently on file.<br>
+      Confidential — For authorized personnel only. &copy; ${new Date().getFullYear()} Field Manager Pro.
+    </p>
+  </td></tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`
+}
+
+// ─── Pattern detection: 3 documented conversations in 30 days ────────────────
+async function checkDocConvoPattern(subjectId: string, subjectName: string, authorId: string, authorName: string, orgId: string) {
+  const rows = await query<{ cnt: string }>(
+    `SELECT COUNT(*)::text AS cnt FROM accountability_docs
+     WHERE subject_id = $1 AND level = 'documented_conversation'
+       AND created_at >= NOW() - INTERVAL '30 days'`,
+    [subjectId]
+  )
+  const count = parseInt(rows[0]?.cnt ?? '0')
+  if (count >= 3) {
+    // Notify DM
+    sendPushToUser(authorId, 'Pattern Detected — Consider Escalation',
+      `${subjectName} has ${count} documented conversations in the last 30 days. Consider escalating to a Verbal Notice.`,
+      'accountability'
+    ).catch(() => {})
+
+    // Notify leadership (owners, ops managers, developers)
+    const leaders = await query<{ id: string }>(
+      `SELECT id FROM users WHERE org_id = $1 AND is_active = TRUE AND role IN ('owner','ops_manager','ops_field_leader','developer')`,
+      [orgId]
+    )
+    if (leaders.length) {
+      sendPushToUsers(
+        leaders.map(l => l.id),
+        'Accountability Pattern Alert',
+        `${subjectName} has ${count} documented conversations in 30 days (by ${authorName}). Escalation to Verbal Notice recommended.`,
+        'accountability'
+      ).catch(() => {})
+    }
+  }
+}
+
 // ─── Send all emails for an approved doc ─────────────────────────────────────
 async function sendApprovedDocEmails(doc: {
   id: string; ref_number: string; level: string; title: string
@@ -500,7 +634,7 @@ export async function GET(req: NextRequest) {
     } else if (orgFilter.filterByOrg && orgFilter.orgId) {
       subjects = await query<UserRow>(
         `SELECT id, full_name, role FROM users
-         WHERE org_id = $1 AND is_active = TRUE AND role IN ('employee','manager','ops_manager')
+         WHERE org_id = $1 AND is_active = TRUE AND role IN ('employee','manager','ops_manager','ops_field_leader')
          ORDER BY full_name`,
         [orgFilter.orgId]
       )
@@ -648,11 +782,111 @@ export async function POST(req: NextRequest) {
   try {
   const body = await req.json()
   const {
-    subjectId, level, title, incidentDate, notes, expectations,
+    subjectId, subjectIds, level, title, incidentDate, notes, expectations,
     priorConvos, linkedVerbalIds, reminderAcknowledged, testMode,
   } = body
   const isTestMode = session.role === 'developer' && testMode === true
 
+  // ─── Documented Conversation: separate flow with multi-employee support ────
+  if (level === 'documented_conversation') {
+    const ids: string[] = Array.isArray(subjectIds) && subjectIds.length ? subjectIds : (subjectId ? [subjectId] : [])
+    if (!ids.length || !title?.trim() || !notes?.trim()) {
+      return NextResponse.json({ error: 'Employee(s), topic, and conversation details are required.' }, { status: 400 })
+    }
+
+    const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
+    const authorEmail = freshAuthor?.email ?? session.email
+    const orgId = session.org_id
+    if (!orgId) return NextResponse.json({ error: 'Org not found' }, { status: 400 })
+
+    const results: Array<{ id: string; refNumber: string; subjectName: string }> = []
+
+    for (const sid of ids) {
+      const subject = await queryOne<{ id: string; full_name: string; role: string; email: string; org_id: string; manager_id: string | null }>(
+        `SELECT id, full_name, role, email, org_id, manager_id FROM users WHERE id = $1 AND is_active = TRUE`,
+        [sid]
+      )
+      if (!subject) continue
+
+      // Authorization: DMs can only document direct reports
+      if (session.role === 'manager' && subject.manager_id !== session.id) continue
+      if (session.role === 'sales_director' && (subject.role !== 'manager' || subject.manager_id !== session.id)) continue
+
+      let refNumber = await generateRefNumber(orgId)
+      let doc: { id: string; created_at: string } | undefined
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          const rows = await query<{ id: string; created_at: string }>(
+            `INSERT INTO accountability_docs
+              (ref_number, org_id, subject_id, subject_name, subject_role, subject_email,
+               author_id, author_name, author_role, author_email,
+               level, title, incident_date, notes, expectations,
+               status, ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+             RETURNING id, created_at`,
+            [
+              refNumber, orgId,
+              subject.id, subject.full_name, subject.role, subject.email,
+              session.id, session.fullName, session.role, authorEmail,
+              'documented_conversation', title.trim(),
+              new Date().toISOString().slice(0, 10), notes.trim(), '',
+              'approved', null, 'acknowledged', true,
+              new Date().toISOString(), session.id, session.fullName,
+            ]
+          )
+          doc = rows[0]
+          break
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : ''
+          if (attempt < 4 && msg.includes('ref_number')) {
+            refNumber = await generateRefNumber(orgId)
+            continue
+          }
+          throw err
+        }
+      }
+      if (!doc) continue
+
+      await auditLog(doc.id, 'submitted', session.id, session.fullName, 'Documented Conversation')
+
+      results.push({ id: doc.id, refNumber, subjectName: subject.full_name })
+
+      if (!isTestMode) {
+        const docDate = new Date(doc.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+
+        // Email to employee — full text
+        sendEmail(
+          subject.email,
+          `Documented Conversation — ${title.trim()} | Ref: ${refNumber}`,
+          buildDocConvoHtml({ refNumber, topic: title.trim(), subjectName: subject.full_name, subjectRole: subject.role, authorName: session.fullName, authorRole: session.role, notes: notes.trim(), docDate })
+        ).catch(() => {})
+
+        // Retained copy to author
+        sendEmail(
+          authorEmail,
+          `[RETAINED COPY] Documented Conversation — ${subject.full_name} | Ref: ${refNumber}`,
+          buildDocConvoHtml({ refNumber, topic: title.trim(), subjectName: subject.full_name, subjectRole: subject.role, authorName: session.fullName, authorRole: session.role, notes: notes.trim(), docDate, isRetainedCopy: true })
+        ).catch(() => {})
+
+        // Push to employee
+        sendPushToUser(subject.id, 'Documented Conversation',
+          `${session.fullName} has documented a conversation with you: ${title.trim()}`,
+          'accountability'
+        ).catch(() => {})
+
+        // Pattern detection
+        checkDocConvoPattern(subject.id, subject.full_name, session.id, session.fullName, orgId).catch(() => {})
+      }
+    }
+
+    if (!results.length) {
+      return NextResponse.json({ error: 'No valid employees found.' }, { status: 400 })
+    }
+
+    return NextResponse.json({ ok: true, id: results[0].id, refNumber: results[0].refNumber, count: results.length })
+  }
+
+  // ─── Standard accountability flow (verbal / written / final) ───────────────
   if (!subjectId || !level || !title || !incidentDate || !notes || !expectations) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }

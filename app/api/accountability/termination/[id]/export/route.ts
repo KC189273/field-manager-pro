@@ -29,6 +29,7 @@ function roleLabel(role: string) {
   if (role === 'sales_director') return 'Sales Director'
   if (role === 'owner') return 'Owner'
   if (role === 'ops_manager') return 'Ops Manager'
+  if (role === 'ops_field_leader') return 'Field Leader'
   return role
 }
 function actionLabel(action: string) {
@@ -91,7 +92,7 @@ export async function GET(
 ) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

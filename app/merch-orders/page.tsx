@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface MerchOrder {
@@ -80,7 +80,7 @@ function OrderCard({
   session: Session
   onOrder?: (o: MerchOrder) => void
 }) {
-  const canMarkOrdered = ['ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const canMarkOrdered = ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
@@ -188,7 +188,7 @@ export default function MerchOrdersPage() {
   const [orderSaving,  setOrderSaving]  = useState(false)
 
   const isOpsPlus = (role: string) =>
-    ['ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
+    ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 
   const loadOrders = useCallback(async () => {
     if (!session) return

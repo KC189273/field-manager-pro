@@ -4,7 +4,7 @@ import { getReceiptUploadUrl, getReceiptViewUrl } from '@/lib/s3'
 import { query, queryOne } from '@/lib/db'
 
 const canUploadForOthers = (role: string) =>
-  role === 'developer' || isOwner(role as never) || role === 'ops_manager'
+  role === 'developer' || isOwner(role as never) || role === 'ops_field_leader' || role === 'ops_manager'
 
 // GET /api/team/users/avatar?view=true  → current user's avatar view URL
 // GET /api/team/users/avatar?userId=xxx&ext=jpg  → signed S3 PUT URL + avatar key

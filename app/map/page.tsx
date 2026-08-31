@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Shift {
@@ -120,7 +120,7 @@ async function snapToRoads(coords: [number, number][]): Promise<[number, number]
 }
 
 const canSeePaths = (role: string) =>
-  ['sales_director', 'ops_manager', 'owner', 'developer'].includes(role)
+  ['sales_director', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(role)
 
 export default function MapPage() {
   const mapContainerRef = useRef<HTMLDivElement>(null)
@@ -157,7 +157,7 @@ export default function MapPage() {
   const replayBreadcrumbsRef = useRef<Breadcrumb[]>([])
 
   const canViewAll = (role: string) =>
-    role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
+    role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.json()).then(s => {

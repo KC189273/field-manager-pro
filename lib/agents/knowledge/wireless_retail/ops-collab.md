@@ -9,7 +9,7 @@ features:
 permissions:
   - "gives DMs org-wide visibility for supplies/facilities/merch"
   - "removes submit ability"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Ops Collab Flag — "What does 'Ops Collab' mean on my profile?"
 
@@ -17,7 +17,7 @@ verified: 2026-07-22
 A DM sees "Ops Collab" on their Team page profile, or an admin toggled this flag and wants to know what it does.
 
 ## Why It Exists
-The `is_ops_collab` flag gives a DM (manager role) elevated visibility for operational features — specifically supply requests, facility tickets, and merch orders. Normally a DM only sees requests from their own team. With ops collab enabled, they see requests across the entire org, similar to an ops manager.
+The `is_ops_collab` flag gives a DM (manager role) elevated visibility for operational features — specifically supply requests, facility tickets, and merch orders. Normally a DM only sees requests from their own team. With ops collab enabled, they see requests across the entire org, similar to a field leader / ops manager.
 
 ## What Changes When Ops Collab is ON
 
@@ -26,7 +26,7 @@ The `is_ops_collab` flag gives a DM (manager role) elevated visibility for opera
 | **Supply Requests** | Sees own team's requests only | Sees all org requests |
 | **Facility Tickets** | Sees own team's tickets only | Sees all org tickets |
 | **Merch Orders** | Sees own team's orders only | Sees all org orders |
-| **Who can submit** | Can submit supply/facility/merch | Cannot submit (becomes a reviewer, like ops manager) |
+| **Who can submit** | Can submit supply/facility/merch | Cannot submit (becomes a reviewer, like field leader / ops manager) |
 
 Note: with ops collab ON, the DM loses the ability to submit new supply requests and merch orders themselves — they become a reviewer/approver for the whole org instead.
 

@@ -210,11 +210,11 @@ export async function GET(req: NextRequest) {
     outstanding
   )
 
-  // Collect recipients: managers + ops_managers + owners + developer — respecting notification preferences
+  // Collect recipients: managers + ops_field_leaders + ops_managers + owners + developer — respecting notification preferences
   const recipients = await query<{ email: string }>(
     `SELECT u.email FROM users u
      LEFT JOIN notification_preferences np ON np.user_id = u.id
-     WHERE u.role IN ('manager','ops_manager','owner','sales_director') AND u.is_active = TRUE
+     WHERE u.role IN ('manager','ops_field_leader','ops_manager','owner','sales_director') AND u.is_active = TRUE
        AND COALESCE(np.weekly_report, TRUE) = TRUE
        AND COALESCE(np.email_enabled, TRUE) = TRUE`
   )

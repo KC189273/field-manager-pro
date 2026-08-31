@@ -4,7 +4,7 @@ import { query } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 
 const canAccess = (role: string) =>
-  role === 'ops_manager' || role === 'sales_director' || role === 'owner' || role === 'developer'
+  role === 'ops_field_leader' || role === 'ops_manager' || role === 'sales_director' || role === 'owner' || role === 'developer'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()

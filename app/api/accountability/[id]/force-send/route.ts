@@ -82,7 +82,7 @@ export async function POST(
   const ccRecipients = await query<{ email: string; full_name: string }>(
     `SELECT email, full_name FROM users
      WHERE org_id = $1 AND is_active = TRUE
-       AND role IN ('ops_manager', 'owner')`,
+       AND role IN ('ops_manager', 'ops_field_leader', 'owner')`,
     [doc.org_id]
   )
   const ccEmails = ccRecipients.map(r => r.email)

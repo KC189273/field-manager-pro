@@ -56,7 +56,7 @@ export async function GET(req: Request) {
       `SELECT u.id, u.email, u.full_name, u.role FROM users u
        LEFT JOIN notification_preferences np ON np.user_id = u.id
        WHERE u.org_id = $1 AND u.is_active = TRUE
-         AND u.role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')
+         AND u.role IN ('manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer')
          AND COALESCE(np.termination_docs, TRUE) = TRUE
          AND COALESCE(np.email_enabled, TRUE) = TRUE`,
       [t.org_id]

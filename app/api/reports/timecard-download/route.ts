@@ -7,7 +7,7 @@ import ExcelJS from 'exceljs'
 
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
-const canDownload = (role: Role) => isOwner(role) || role === 'ops_manager' || role === 'developer' || role === 'manager'
+const canDownload = (role: Role) => isOwner(role) || role === 'ops_field_leader' || role === 'ops_manager' || role === 'developer' || role === 'manager'
 
 interface ShiftRow {
   user_id: string

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const allowed = session.role === 'developer' || isOwner(session.role) || session.role === 'ops_manager'
+  const allowed = session.role === 'developer' || isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager'
   if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const formData = await req.formData()
@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
   // Load managers in this org for name lookup
   const managers = await query<{ id: string; full_name: string }>(
-    `SELECT id, full_name FROM users WHERE role IN ('manager','ops_manager','owner','sales_director') AND org_id ${targetOrgId ? '= $1' : 'IS NULL'}`,
+    `SELECT id, full_name FROM users WHERE role IN ('manager','ops_field_leader','ops_manager','owner','sales_director') AND org_id ${targetOrgId ? '= $1' : 'IS NULL'}`,
     targetOrgId ? [targetOrgId] : []
   )
 

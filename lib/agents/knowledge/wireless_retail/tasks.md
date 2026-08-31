@@ -14,7 +14,7 @@ permissions:
   - "DMs+ create/assign/delete"
   - "employees complete"
   - "multi-assignee creates separate tasks"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Tasks
 
@@ -50,4 +50,4 @@ All retail roles can see the Tasks page:
 - **SD, Owner, Developer** see all tasks across the org.
 
 ## Can I delete a task?
-Yes. DMs, ops managers, SD, owners, and developers can delete tasks. You can delete a single task or select multiple tasks and bulk-delete them. For recurring tasks, you can delete just one instance or the entire series. Employees cannot delete tasks.
+Yes. DMs, field leaders, ops managers, SD, owners, and developers can delete tasks. You can delete a single task or select multiple tasks and bulk-delete them. For recurring tasks, you can delete just one instance or the entire series. Employees cannot delete tasks.

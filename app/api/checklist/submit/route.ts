@@ -180,7 +180,7 @@ export async function POST(req: NextRequest) {
     const freshEmail = await query<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
     dm = { id: session.id, full_name: session.fullName, email: freshEmail[0]?.email ?? session.email }
   } else {
-    // ops_manager / owner / developer — use the store's assigned DM
+    // ops_field_leader / ops_manager / owner / developer — use the store's assigned DM
     const dmRows = await query<{ id: string; full_name: string; email: string }>(
       `SELECT u.id, u.full_name, u.email
        FROM dm_manager_stores ms

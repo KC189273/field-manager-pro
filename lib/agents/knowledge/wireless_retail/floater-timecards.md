@@ -9,7 +9,7 @@ features:
 permissions:
   - "timecards filtered by manager_id only"
   - "OT watch includes floaters across all DMs"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Floater Timecards — Why Can't I See a Floater's Timecard?
 
@@ -46,6 +46,7 @@ The floater's timecards will now appear under that DM's timecard view immediatel
 |------|---------------------------|
 | Employee | Their own timecards only |
 | DM (manager) | Timecards for employees where `manager_id` = their ID |
+| Field Leader | All timecards in their org |
 | Ops Manager | All timecards in their org |
 | Sales Director | All timecards in their org |
 | Owner | All timecards in their org |

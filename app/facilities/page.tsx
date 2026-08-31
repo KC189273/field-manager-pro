@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Ticket {
@@ -52,7 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 const canManage = (role: string) =>
-  ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
+  ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 
 export default function FacilitiesPage() {
   const [session, setSession] = useState<Session | null>(null)

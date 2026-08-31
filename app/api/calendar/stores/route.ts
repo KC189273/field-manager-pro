@@ -4,7 +4,7 @@ import { query } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
-const CAN_ACCESS = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CAN_ACCESS = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 // GET /api/calendar/stores?managerId=<uuid>
 // Returns active stores assigned to a given manager.

@@ -9,7 +9,7 @@ features:
 permissions:
   - "all retail roles can start/end own breaks"
   - "managers+ can manually add/edit breaks"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Breaks
 
@@ -34,7 +34,7 @@ You tried to end a break but you don't have one active. This can happen if the b
 You tried to start a break but you're not clocked in. Clock in first, then start your break.
 
 ## Can my DM edit my breaks?
-Yes. DMs (managers) and above can manually add or edit breaks on your shift. This is done from the Timecards page by tapping on your shift and editing the break times. Only managers, ops managers, SD, owners, and developers can do this — employees cannot edit their own breaks.
+Yes. DMs (managers) and above can manually add or edit breaks on your shift. This is done from the Timecards page by tapping on your shift and editing the break times. Only managers, field leaders, ops managers, SD, owners, and developers can do this — employees cannot edit their own breaks.
 
 ## How is break time calculated on my timecard?
 Your timecard shows:

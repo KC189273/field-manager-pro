@@ -88,7 +88,7 @@ export async function GET() {
   )
 
   // Breadcrumbs only for DM (manager) shifts, and only for higher roles
-  const canSeePaths = ['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)
+  const canSeePaths = ['sales_director', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(session.role)
   const dmShiftIds = canSeePaths
     ? employees.filter(e => e.user_role === 'manager').map(e => e.shift_id)
     : []

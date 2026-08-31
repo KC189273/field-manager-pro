@@ -12,12 +12,12 @@ permissions:
   - "manager+ submit"
   - "SD/owner/dev approve"
   - "denial requires note"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Expenses
 
 ## Who can submit expenses?
-All roles except employees. DMs (managers), ops managers, sales directors, owners, and developers can submit expenses.
+All roles except employees. DMs (managers), field leaders, ops managers, sales directors, owners, and developers can submit expenses.
 
 ## How do I submit an expense?
 1. Go to **Expenses** from the nav.
@@ -29,7 +29,7 @@ All roles except employees. DMs (managers), ops managers, sales directors, owner
 7. Submit.
 
 ## Who approves expenses?
-Sales Directors, Owners, and Developers can approve expenses. DMs and ops managers can submit but cannot approve.
+Sales Directors, Owners, and Developers can approve expenses. DMs, field leaders, and ops managers can submit but cannot approve.
 
 ## How do I approve an expense? (SD/Owner)
 1. Go to Expenses.

@@ -25,7 +25,7 @@ interface TaskRow {
   require_photo: boolean
 }
 
-const canCreate = (role: string) => isOwner(role as never) || role === 'developer' || role === 'manager' || role === 'ops_manager'
+const canCreate = (role: string) => isOwner(role as never) || role === 'developer' || role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager'
 
 let ensured = false
 async function ensureColumns() {

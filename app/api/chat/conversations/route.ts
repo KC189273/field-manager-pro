@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getReceiptViewUrl } from '@/lib/s3'
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 let ensured = false
 async function ensureTables() {

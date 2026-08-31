@@ -66,7 +66,7 @@ export async function GET() {
       ORDER BY l.address
     `, [...params, session.fullName])
   } else {
-    // ops_manager, owner, sales_director, developer — all stores
+    // ops_field_leader, ops_manager, owner, sales_director, developer — all stores
     let orgWhere = ''
     if (orgFilter.filterByOrg) {
       if (orgFilter.orgId) {

@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
       // Alert leadership
       const leaders = await query<{ id: string }>(`
-        SELECT id FROM users WHERE role IN ('owner', 'ops_manager', 'developer') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)
+        SELECT id FROM users WHERE role IN ('owner', 'ops_field_leader', 'ops_manager', 'developer') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)
       `)
       for (const leader of leaders) {
         sendPushToUser(

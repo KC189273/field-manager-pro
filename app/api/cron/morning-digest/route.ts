@@ -277,7 +277,7 @@ export async function GET() {
     const leaders = await query<{ id: string; email: string }>(
       `SELECT u.id, u.email FROM users u
        LEFT JOIN notification_preferences np ON np.user_id = u.id
-       WHERE u.org_id = $1 AND u.role IN ('ops_manager', 'owner', 'sales_director', 'developer')
+       WHERE u.org_id = $1 AND u.role IN ('ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer')
          AND u.is_active = TRUE AND u.email IS NOT NULL AND u.email != ''
          AND COALESCE(np.email_enabled, true) = true
          AND COALESCE(np.morning_digest, true) = true`,

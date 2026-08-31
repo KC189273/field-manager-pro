@@ -5,7 +5,7 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
 export const dynamic = 'force-dynamic'
 
-const CAN_VIEW_TEAM = ['ops_manager', 'owner', 'developer', 'sales_director']
+const CAN_VIEW_TEAM = ['ops_manager', 'ops_field_leader', 'owner', 'developer', 'sales_director']
 
 // GET /api/calendar/team-members
 // Returns list of managers (and sales_directors) available for team calendar view

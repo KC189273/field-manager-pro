@@ -25,7 +25,7 @@ function levelLabel(level: string) {
   return 'Final Written Notice — 3rd Level'
 }
 
-const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'developer']
+const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'ops_field_leader', 'developer']
 
 export async function GET(
   _req: NextRequest,

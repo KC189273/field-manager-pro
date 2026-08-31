@@ -13,7 +13,7 @@ sources:
 features:
   - all-error-messages
 permissions:
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Troubleshooting — Wireless Retail
 
@@ -122,7 +122,7 @@ DMs cannot adjust their own timecards. Contact the Sales Director.
 ## Supply Requests
 
 **Supply request stuck in "pending"**
-If nobody orders your supplies within 48 hours, the system auto-escalates to the next level. If it's been longer, contact your DM or ops manager directly.
+If nobody orders your supplies within 48 hours, the system auto-escalates to the next level. If it's been longer, contact your DM or field leader/ops manager directly.
 
 ## Facility Tickets
 
@@ -154,7 +154,7 @@ When rejecting a doc, you must include a reason explaining what needs to change.
 ## Calendar
 
 **"Your role does not have a personal calendar"**
-Only DMs and Sales Directors have their own calendar. Ops managers, owners, and developers can create events but must select whose calendar to add them to. See calendar-access.md for details.
+Only DMs and Sales Directors have their own calendar. Field leaders, ops managers, owners, and developers can create events but must select whose calendar to add them to. See calendar-access.md for details.
 
 ## Expenses
 

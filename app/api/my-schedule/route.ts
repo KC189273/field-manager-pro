@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const weekEndStr = weekEnd.toISOString().split('T')[0]
 
   // Employee's own shifts — DMs see all (published or not), employees need published
-  const isDm = ['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)
+  const isDm = ['manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)
   const shifts = await query<{
     shift_date: string
     start_time: string

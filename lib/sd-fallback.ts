@@ -16,10 +16,10 @@ export async function getSDOrFallback(orgId: string | null | undefined): Promise
 
   if (sds.length > 0) return sds
 
-  // Fallback: all active owners + ops_managers
+  // Fallback: all active owners + ops_managers + field leaders
   return query<{ id: string; email: string; full_name: string; role: string }>(`
     SELECT id, email, full_name, role FROM users
-    WHERE org_id = $1 AND role IN ('owner', 'ops_manager') AND is_active = TRUE
+    WHERE org_id = $1 AND role IN ('owner', 'ops_manager', 'ops_field_leader') AND is_active = TRUE
       AND (is_hidden = FALSE OR is_hidden IS NULL)
   `, [orgId])
 }

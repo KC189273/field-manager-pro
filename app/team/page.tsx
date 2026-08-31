@@ -8,7 +8,7 @@ interface Org { id: string; name: string }
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface User {
@@ -34,6 +34,7 @@ interface User {
 const ROLE_LABELS: Record<string, string> = {
   employee: 'Employee',
   manager: 'DM',
+  ops_field_leader: 'Field Leader',
   ops_manager: 'Ops Manager',
   owner: 'Owner',
   sales_director: 'Sales Director',
@@ -84,16 +85,16 @@ export default function TeamPage() {
   const isDev = session?.role === 'developer'
   const isOwner = session?.role === 'owner' || session?.role === 'sales_director'
   const isDevOrOwner = isDev || isOwner
-  const canManageAll = isDevOrOwner || session?.role === 'ops_manager'
-  const canBulkImport = isDev || isOwner || session?.role === 'ops_manager'
-  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
+  const canManageAll = isDevOrOwner || session?.role === 'ops_field_leader' || session?.role === 'ops_manager'
+  const canBulkImport = isDev || isOwner || session?.role === 'ops_field_leader' || session?.role === 'ops_manager'
+  const managers = users.filter(u => u.role === 'manager' || u.role === 'ops_field_leader' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
   const employees = users.filter(u => u.role === 'employee')
 
   const pendingUsers = users.filter(u => u.approval_status === 'pending')
   const visibleUsers = showTerminated
     ? users.filter(u => u.approval_status !== 'pending')
     : users.filter(u => u.approval_status !== 'pending' && !u.is_hidden && u.is_active !== false)
-  const activeMgrs = visibleUsers.filter(u => u.role === 'manager' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
+  const activeMgrs = visibleUsers.filter(u => u.role === 'manager' || u.role === 'ops_field_leader' || u.role === 'ops_manager' || u.role === 'owner' || u.role === 'sales_director')
   const activeEmps = visibleUsers.filter(u => u.role === 'employee')
   const allUsersOrdered = [...activeMgrs, ...activeEmps]
   const terminatedCount = users.filter(u => u.is_hidden && u.is_active === false).length
@@ -337,7 +338,7 @@ export default function TeamPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-white">Team</h1>
           <div className="flex items-center gap-3">
-          {session && ['owner', 'sales_director', 'ops_manager', 'developer'].includes(session.role) && (
+          {session && ['owner', 'sales_director', 'ops_field_leader', 'ops_manager', 'developer'].includes(session.role) && (
             <a
               href="/terminated-records"
               className="text-xs font-semibold text-violet-400 hover:text-violet-300 transition-colors"
@@ -492,6 +493,7 @@ export default function TeamPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                 <option value="employee">Employee</option>
                 <option value="manager">DM</option>
+                {(isDev || isOwner) && <option value="ops_field_leader">Field Leader</option>}
                 {(isDev || isOwner) && <option value="ops_manager">Ops Manager</option>}
                 {(isDev || isOwner) && <option value="sales_director">Sales Director</option>}
                 {isDev && <option value="owner">Owner</option>}
@@ -581,11 +583,12 @@ export default function TeamPage() {
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
                     <option value="employee">Employee</option>
                     <option value="manager">DM</option>
+                    <option value="ops_field_leader">Field Leader</option>
                     <option value="ops_manager">Ops Manager</option>
                     {(isDev || isOwner) && <option value="sales_director">Sales Director</option>}
                     {isDev && <option value="owner">Owner</option>}
                   </select>
-                  {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_manager') && (
+                  {editForm.role !== editUser.role && (editForm.role === 'manager' || editForm.role === 'ops_field_leader' || editForm.role === 'ops_manager') && (
                     <p className="text-xs text-amber-400 mt-1">This user will need to sign out and back in to see their new access.</p>
                   )}
                 </div>
@@ -894,10 +897,12 @@ export default function TeamPage() {
                     Org Chart
                   </button>
                 </div>
+                {session?.role !== 'ops_field_leader' && (
                 <button onClick={() => { setForm({ ...emptyForm, role: 'employee' }); setShowCreate(true); setEditUser(null) }}
                   className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
                   + Add User
                 </button>
+                )}
               </div>
             </div>
 
@@ -1076,6 +1081,7 @@ const ROLE_COLORS: Record<string, string> = {
   developer: 'text-red-400 bg-red-900/30',
   owner: 'text-amber-400 bg-amber-900/30',
   sales_director: 'text-orange-400 bg-orange-900/30',
+  ops_field_leader: 'text-teal-400 bg-teal-900/30',
   ops_manager: 'text-blue-400 bg-blue-900/30',
   manager: 'text-violet-400 bg-violet-900/30',
   employee: 'text-gray-400 bg-gray-800',
@@ -1103,7 +1109,7 @@ function OrgChart({ users, onSelect }: { users: User[]; onSelect: (u: User) => v
   // Developers are platform admins — exclude from the field team hierarchy
   const chartUsers = users.filter(u => u.role !== 'developer')
   const userIds = new Set(chartUsers.map(u => u.id))
-  const roleOrder: Record<string, number> = { owner: 0, sales_director: 1, ops_manager: 2, manager: 3, employee: 4 }
+  const roleOrder: Record<string, number> = { owner: 0, sales_director: 1, ops_manager: 2, ops_field_leader: 3, manager: 4, employee: 5 }
   const roots = chartUsers
     .filter(u => !u.manager_id || !userIds.has(u.manager_id))
     .sort((a, b) => (roleOrder[a.role] ?? 5) - (roleOrder[b.role] ?? 5) || a.full_name.localeCompare(b.full_name))

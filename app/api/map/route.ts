@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'ops_field_leader' || session.role === 'developer'
   const isDM = session.role === 'manager'
 
   if (userId && userId !== session.id && !canViewAll && !isDM) {
@@ -122,7 +122,7 @@ export async function GET(req: NextRequest) {
   )
 
   // Fetch breadcrumbs only for DM (manager) shifts, and only for roles that can see paths
-  const canSeePaths = ['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)
+  const canSeePaths = ['sales_director', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(session.role)
   const dmShiftIds = canSeePaths
     ? (shifts as { id: string; user_role: string }[])
         .filter(s => s.user_role === 'manager')

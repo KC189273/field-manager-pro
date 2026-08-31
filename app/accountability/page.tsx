@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'sales_director' | 'ops_manager' | 'owner' | 'developer'
+type Role = 'employee' | 'manager' | 'sales_director' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'developer'
 
 interface Session {
   id: string
@@ -90,11 +90,13 @@ interface Author  { id: string; full_name: string; role: string }
 interface PriorConvo { convo_date: string; notes: string }
 
 const LEVEL_COLORS: Record<string, string> = {
+  documented_conversation: 'bg-cyan-700/20 text-cyan-400 border-cyan-700/30',
   verbal:  'bg-amber-700/20 text-amber-400 border-amber-700/30',
   written: 'bg-orange-700/20 text-orange-400 border-orange-700/30',
   final:   'bg-red-800/20 text-red-400 border-red-800/30',
 }
 const LEVEL_LABELS: Record<string, string> = {
+  documented_conversation: 'Doc. Conversation',
   verbal:  'Verbal',
   written: 'Written — 2nd',
   final:   'Final — 3rd',
@@ -123,7 +125,7 @@ const ACK_LABELS: Record<string, string> = {
 }
 
 function canViewDash(role: Role) {
-  return ['employee','manager','sales_director','ops_manager','owner','developer'].includes(role)
+  return ['employee','manager','sales_director','ops_field_leader','ops_manager','owner','developer'].includes(role)
 }
 function canApprove(role: Role) {
   return ['sales_director','owner','developer'].includes(role)
@@ -182,13 +184,15 @@ function EmployeeNoticeCard({ doc, onAcknowledged }: {
     setAcking(false)
   }
 
+  const isDocConvo = doc.level === 'documented_conversation'
   const levelColors: Record<string, string> = {
+    documented_conversation: 'bg-cyan-700/20 text-cyan-400 border-cyan-700/30',
     verbal: 'bg-amber-700/20 text-amber-400 border-amber-700/30',
     written: 'bg-orange-700/20 text-orange-400 border-orange-700/30',
     final: 'bg-red-800/20 text-red-400 border-red-800/30',
   }
   const levelLabels: Record<string, string> = {
-    verbal: 'Verbal', written: 'Written — 2nd', final: 'Final — 3rd',
+    documented_conversation: 'Doc. Conversation', verbal: 'Verbal', written: 'Written — 2nd', final: 'Final — 3rd',
   }
 
   return (
@@ -200,7 +204,11 @@ function EmployeeNoticeCard({ doc, onAcknowledged }: {
           </span>
           <span className="text-xs text-gray-500 font-mono">{doc.ref_number}</span>
         </div>
-        {done ? (
+        {isDocConvo ? (
+          <span className="flex items-center gap-1 text-[10px] font-semibold text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-0.5 rounded-full shrink-0">
+            On Record
+          </span>
+        ) : done ? (
           <span className="flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/20 px-2 py-0.5 rounded-full shrink-0">
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
             Acknowledged
@@ -213,9 +221,13 @@ function EmployeeNoticeCard({ doc, onAcknowledged }: {
       </div>
       <p className="text-sm font-semibold text-white mb-1">{doc.title}</p>
       <p className="text-xs text-gray-500 mb-3">
-        Issued by {doc.author_name} · {new Date(doc.incident_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        {isDocConvo ? 'Documented by' : 'Issued by'} {doc.author_name} · {new Date(doc.incident_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
       </p>
-      {done ? (
+      {isDocConvo ? (
+        <p className="text-xs text-cyan-500/70">
+          This is a documented conversation for record-keeping purposes.
+        </p>
+      ) : done ? (
         doc.ack_at && (
           <p className="text-xs text-green-500/70">
             Acknowledged {new Date(doc.ack_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -271,7 +283,10 @@ function DocCard({ doc, onClick }: { doc: Doc; onClick: () => void }) {
           )}
         </div>
         <div className="flex flex-col items-end gap-1">
-          {doc.status === 'approved' && (doc.conversation_status === 'pending' || doc.conversation_status === 'escalated') && (
+          {doc.level === 'documented_conversation' && doc.status === 'approved' && (
+            <span className="text-[10px] font-semibold text-cyan-400">On Record</span>
+          )}
+          {doc.level !== 'documented_conversation' && doc.status === 'approved' && (doc.conversation_status === 'pending' || doc.conversation_status === 'escalated') && (
             <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded border ${
               doc.conversation_status === 'escalated'
                 ? 'bg-red-900/30 border-red-700/50 text-red-400'
@@ -280,12 +295,12 @@ function DocCard({ doc, onClick }: { doc: Doc; onClick: () => void }) {
               {doc.conversation_status === 'escalated' ? 'Convo Overdue' : 'Voice Convo Required'}
             </span>
           )}
-          {doc.status === 'approved' && !doc.conversation_status && (
+          {doc.level !== 'documented_conversation' && doc.status === 'approved' && !doc.conversation_status && (
             <span className={`text-[10px] font-semibold ${ACK_COLORS[doc.ack_status]}`}>
               {ACK_LABELS[doc.ack_status]}
             </span>
           )}
-          {doc.status === 'approved' && (doc.conversation_status === 'complete' || doc.conversation_status === 'bypassed') && (
+          {doc.level !== 'documented_conversation' && doc.status === 'approved' && (doc.conversation_status === 'complete' || doc.conversation_status === 'bypassed') && (
             <span className={`text-[10px] font-semibold ${ACK_COLORS[doc.ack_status]}`}>
               {ACK_LABELS[doc.ack_status]}
             </span>
@@ -486,12 +501,17 @@ function DetailModal({
                 <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded border ${STATUS_COLORS[doc.status]}`}>
                   {STATUS_LABELS[doc.status] ?? doc.status}
                 </span>
-                {doc.status === 'approved' && !doc.conversation_status && (
+                {doc.level === 'documented_conversation' && doc.status === 'approved' && (
+                  <span className="text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded border border-cyan-700/40 text-cyan-400">
+                    On Record
+                  </span>
+                )}
+                {doc.level !== 'documented_conversation' && doc.status === 'approved' && !doc.conversation_status && (
                   <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded border border-gray-700 ${ACK_COLORS[doc.ack_status]}`}>
                     {ACK_LABELS[doc.ack_status]}
                   </span>
                 )}
-                {doc.status === 'approved' && (doc.conversation_status === 'complete' || doc.conversation_status === 'bypassed') && (
+                {doc.level !== 'documented_conversation' && doc.status === 'approved' && (doc.conversation_status === 'complete' || doc.conversation_status === 'bypassed') && (
                   <span className={`text-[10px] font-semibold uppercase tracking-wider px-2.5 py-1 rounded border border-gray-700 ${ACK_COLORS[doc.ack_status]}`}>
                     {ACK_LABELS[doc.ack_status]}
                   </span>
@@ -797,7 +817,7 @@ function DetailModal({
                   </div>
 
                   {/* DM: mark conversation complete */}
-                  {(session.role === 'manager' || session.role === 'ops_manager') && doc.author_id === session.id && (
+                  {(session.role === 'manager' || session.role === 'ops_field_leader' || session.role === 'ops_manager') && doc.author_id === session.id && (
                     <button
                       onClick={handleConversationComplete}
                       disabled={completingConvo}
@@ -841,7 +861,7 @@ function DetailModal({
 
               {/* Termination — written or final warning approved, DM/SD/Owner can initiate */}
               {['written', 'final'].includes(doc.level) && doc.status === 'approved' &&
-               ['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role) && (
+               ['manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role) && (
                 <div className="pt-2 border-t border-gray-800">
                   {!terminationOpen ? (
                     <button
@@ -934,8 +954,9 @@ function SubmitForm({ session, subjects, onSuccess }: {
   onSuccess: (refNumber: string) => void
 }) {
   const [subjectId, setSubjectId] = useState('')
+  const [subjectIds, setSubjectIds] = useState<string[]>([])
   const [subjectSearch, setSubjectSearch] = useState('')
-  const [level, setLevel] = useState<'verbal' | 'written' | 'final'>('verbal')
+  const [level, setLevel] = useState<'documented_conversation' | 'verbal' | 'written' | 'final'>('verbal')
   const [title, setTitle] = useState('')
   const [incidentDate, setIncidentDate] = useState('')
   const [notes, setNotes] = useState('')
@@ -958,6 +979,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
       if (saved) {
         const d = JSON.parse(saved)
         if (d.subjectId)       setSubjectId(d.subjectId)
+        if (d.subjectIds)      setSubjectIds(d.subjectIds)
         if (d.subjectSearch)   setSubjectSearch(d.subjectSearch)
         if (d.level)           setLevel(d.level)
         if (d.title)           setTitle(d.title)
@@ -977,11 +999,11 @@ function SubmitForm({ session, subjects, onSuccess }: {
     if (!subjectId && !title && !notes && !expectations) return
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify({
-        subjectId, subjectSearch, level, title, incidentDate,
+        subjectId, subjectIds, subjectSearch, level, title, incidentDate,
         notes, expectations, priorConvos, linkedVerbalIds,
       }))
     } catch { /* ignore */ }
-  }, [subjectId, subjectSearch, level, title, incidentDate, notes, expectations, priorConvos, linkedVerbalIds, DRAFT_KEY])
+  }, [subjectId, subjectIds, subjectSearch, level, title, incidentDate, notes, expectations, priorConvos, linkedVerbalIds, DRAFT_KEY])
 
   // Load available verbals for the selected subject (for linking)
   useEffect(() => {
@@ -1005,32 +1027,46 @@ function SubmitForm({ session, subjects, onSuccess }: {
     setLinkedVerbalIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
   }
 
+  const isDocConvo = level === 'documented_conversation'
+
   async function handleSubmit() {
-    if (!subjectId || !title.trim() || !incidentDate || !notes.trim() || !expectations.trim()) {
-      setError('Please fill in all required fields.'); return
-    }
-    if (!reminderAcknowledged) {
-      setError('You must acknowledge the documentation reminder before submitting.'); return
+    if (isDocConvo) {
+      if (!subjectIds.length || !title.trim() || !notes.trim()) {
+        setError('Please select at least one employee, enter a topic, and add conversation details.'); return
+      }
+    } else {
+      if (!subjectId || !title.trim() || !incidentDate || !notes.trim() || !expectations.trim()) {
+        setError('Please fill in all required fields.'); return
+      }
+      if (!reminderAcknowledged) {
+        setError('You must acknowledge the documentation reminder before submitting.'); return
+      }
     }
     setSubmitting(true)
     setError('')
     try {
+      const payload = isDocConvo
+        ? {
+            subjectIds, level, title: title.trim(), notes: notes.trim(),
+            testMode: session.role === 'developer' ? testMode : false,
+          }
+        : {
+            subjectId, level, title: title.trim(), incidentDate,
+            notes: notes.trim(), expectations: expectations.trim(),
+            priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
+            linkedVerbalIds,
+            reminderAcknowledged,
+            testMode: session.role === 'developer' ? testMode : false,
+          }
       const res = await fetch('/api/accountability', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          subjectId, level, title: title.trim(), incidentDate,
-          notes: notes.trim(), expectations: expectations.trim(),
-          priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
-          linkedVerbalIds,
-          reminderAcknowledged,
-          testMode: session.role === 'developer' ? testMode : false,
-        }),
+        body: JSON.stringify(payload),
       })
       const data = await res.json()
       if (res.ok) {
         try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
-        onSuccess(data.refNumber)
+        onSuccess(data.count > 1 ? `${data.refNumber} (+${data.count - 1} more)` : data.refNumber)
       } else {
         setError(data.error ?? 'Submission failed. Please try again.')
         setSubmitting(false)
@@ -1058,7 +1094,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
           </div>
           <button type="button" onClick={() => {
             try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
-            setSubjectId(''); setSubjectSearch(''); setLevel('verbal')
+            setSubjectId(''); setSubjectIds([]); setSubjectSearch(''); setLevel('verbal')
             setTitle(''); setIncidentDate(''); setNotes(''); setExpectations('')
             setPriorConvos([]); setLinkedVerbalIds([]); setReminderAcknowledged(false)
             setHasDraft(false)
@@ -1068,10 +1104,44 @@ function SubmitForm({ session, subjects, onSuccess }: {
         </div>
       )}
 
-      {/* Subject */}
+      {/* Level */}
+      <div>
+        <label className={labelCls}>Type <span className="text-red-400">*</span></label>
+        <div className="grid grid-cols-2 gap-2">
+          {([
+            { key: 'documented_conversation' as const, label: 'Documented\nConversation', active: 'bg-cyan-700/30 border-cyan-600 text-cyan-300' },
+            { key: 'verbal' as const, label: 'Verbal', active: 'bg-amber-700/30 border-amber-600 text-amber-300' },
+            { key: 'written' as const, label: 'Written\n2nd Level', active: 'bg-orange-700/30 border-orange-600 text-orange-300' },
+            { key: 'final' as const, label: 'Final\n3rd Level', active: 'bg-red-900/40 border-red-700 text-red-300' },
+          ]).map(l => (
+            <button
+              key={l.key}
+              type="button"
+              onClick={() => setLevel(l.key)}
+              className={`py-3 px-2 rounded-xl border text-xs font-bold uppercase tracking-wide transition-colors whitespace-pre-line ${
+                level === l.key ? l.active : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        {isDocConvo && (
+          <p className="text-xs text-cyan-400 mt-2">
+            For conversations that don't rise to the level of a formal notice. No approval required.
+          </p>
+        )}
+        {(level === 'written' || level === 'final') && (
+          <p className="text-xs text-amber-400 mt-2">
+            ⚠ {level === 'written' ? 'Written' : 'Final'} notices require Sales Director and Owner approval before being sent.
+          </p>
+        )}
+      </div>
+
+      {/* Subject — multi-select for doc convos, single for formal */}
       <div>
         <label className={labelCls}>
-          {session.role === 'manager' ? 'Employee' : (session.role === 'developer' || session.role === 'owner') ? 'Subject' : 'District Manager'} <span className="text-red-400">*</span>
+          {isDocConvo ? 'Employee(s)' : session.role === 'manager' ? 'Employee' : (session.role === 'developer' || session.role === 'owner') ? 'Subject' : 'District Manager'} <span className="text-red-400">*</span>
         </label>
         <input
           type="text"
@@ -1080,65 +1150,65 @@ function SubmitForm({ session, subjects, onSuccess }: {
           onChange={e => setSubjectSearch(e.target.value)}
           className={`${inputCls} mb-2`}
         />
-        <select value={subjectId} onChange={e => { setSubjectId(e.target.value); setLinkedVerbalIds([]) }} className={inputCls}>
-          <option value="">Select…</option>
-          {subjects
-            .filter(s => s.full_name.toLowerCase().includes(subjectSearch.toLowerCase()))
-            .map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
-        </select>
+        {isDocConvo ? (
+          <>
+            <div className="space-y-1 max-h-48 overflow-y-auto bg-gray-800 border border-gray-700 rounded-xl p-2">
+              {subjects
+                .filter(s => s.full_name.toLowerCase().includes(subjectSearch.toLowerCase()))
+                .map(s => (
+                  <label key={s.id} className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ${subjectIds.includes(s.id) ? 'bg-cyan-900/30 border border-cyan-700/40' : 'hover:bg-gray-700/50 border border-transparent'}`}>
+                    <input
+                      type="checkbox"
+                      checked={subjectIds.includes(s.id)}
+                      onChange={() => setSubjectIds(ids => ids.includes(s.id) ? ids.filter(x => x !== s.id) : [...ids, s.id])}
+                      className="accent-cyan-500 w-4 h-4 shrink-0"
+                    />
+                    <span className="text-sm text-white">{s.full_name}</span>
+                  </label>
+                ))}
+              {subjects.filter(s => s.full_name.toLowerCase().includes(subjectSearch.toLowerCase())).length === 0 && (
+                <p className="text-xs text-gray-500 text-center py-2">No matches</p>
+              )}
+            </div>
+            {subjectIds.length > 0 && (
+              <p className="text-xs text-cyan-400 mt-1.5">{subjectIds.length} employee{subjectIds.length > 1 ? 's' : ''} selected — each will receive an individual document.</p>
+            )}
+          </>
+        ) : (
+          <select value={subjectId} onChange={e => { setSubjectId(e.target.value); setLinkedVerbalIds([]) }} className={inputCls}>
+            <option value="">Select…</option>
+            {subjects
+              .filter(s => s.full_name.toLowerCase().includes(subjectSearch.toLowerCase()))
+              .map(s => <option key={s.id} value={s.id}>{s.full_name}</option>)}
+          </select>
+        )}
         {subjects.length === 0 && (
           <p className="text-xs text-amber-400 mt-1">No direct reports found in your account.</p>
         )}
       </div>
 
-      {/* Level */}
+      {/* Title / Topic */}
       <div>
-        <label className={labelCls}>Notice Level <span className="text-red-400">*</span></label>
-        <div className="grid grid-cols-3 gap-2">
-          {(['verbal', 'written', 'final'] as const).map(l => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => setLevel(l)}
-              className={`py-3 px-2 rounded-xl border text-xs font-bold uppercase tracking-wide transition-colors ${
-                level === l
-                  ? l === 'verbal' ? 'bg-amber-700/30 border-amber-600 text-amber-300'
-                    : l === 'written' ? 'bg-orange-700/30 border-orange-600 text-orange-300'
-                    : 'bg-red-900/40 border-red-700 text-red-300'
-                  : 'bg-gray-800 border-gray-700 text-gray-500 hover:border-gray-600'
-              }`}
-            >
-              {l === 'verbal' ? 'Verbal' : l === 'written' ? 'Written\n2nd Level' : 'Final\n3rd Level'}
-            </button>
-          ))}
-        </div>
-        {level !== 'verbal' && (
-          <p className="text-xs text-amber-400 mt-2">
-            ⚠ {level === 'written' ? 'Written' : 'Final'} notices require Sales Director and Owner approval before being sent.
-          </p>
-        )}
-      </div>
-
-      {/* Title */}
-      <div>
-        <label className={labelCls}>Document Title <span className="text-red-400">*</span></label>
+        <label className={labelCls}>{isDocConvo ? 'Topic' : 'Document Title'} <span className="text-red-400">*</span></label>
         <input
           type="text"
-          placeholder="e.g. Attendance Policy Violation, Customer Service Standards"
+          placeholder={isDocConvo ? 'e.g. Discussed punctuality, Reviewed sales expectations' : 'e.g. Attendance Policy Violation, Customer Service Standards'}
           value={title}
           onChange={e => setTitle(e.target.value)}
           className={inputCls}
         />
       </div>
 
-      {/* Incident date */}
-      <div>
-        <label className={labelCls}>Date of Conversation / Incident <span className="text-red-400">*</span></label>
-        <input type="date" value={incidentDate} onChange={e => setIncidentDate(e.target.value)} className={inputCls} />
-      </div>
+      {/* Incident date — not shown for doc convos (auto-set to today) */}
+      {!isDocConvo && (
+        <div>
+          <label className={labelCls}>Date of Conversation / Incident <span className="text-red-400">*</span></label>
+          <input type="date" value={incidentDate} onChange={e => setIncidentDate(e.target.value)} className={inputCls} />
+        </div>
+      )}
 
-      {/* Prior conversations (written/final) */}
-      {level !== 'verbal' && (
+      {/* Prior conversations (written/final only) */}
+      {!isDocConvo && level !== 'verbal' && (
         <div>
           <div className="flex items-center justify-between mb-2">
             <label className={labelCls + ' mb-0'}>Prior Conversations on Record</label>
@@ -1176,7 +1246,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
       )}
 
       {/* Link prior verbals */}
-      {level !== 'verbal' && subjectId && availableVerbals.length > 0 && (
+      {!isDocConvo && level !== 'verbal' && subjectId && availableVerbals.length > 0 && (
         <div>
           <label className={labelCls}>Link Related Prior Records <span className="text-gray-600 normal-case font-normal">(optional)</span></label>
           <div className="space-y-2">
@@ -1198,31 +1268,39 @@ function SubmitForm({ session, subjects, onSuccess }: {
         </div>
       )}
 
-      {/* Notes */}
+      {/* Notes / Conversation Details */}
       <div>
-        <label className={labelCls}>Summary of Discussion <span className="text-red-400">*</span></label>
-        <p className="text-xs text-gray-600 mb-1.5">Document specifically what happened, what was said, and the full context of this conversation.</p>
+        <label className={labelCls}>{isDocConvo ? 'Conversation Details' : 'Summary of Discussion'} <span className="text-red-400">*</span></label>
+        <p className="text-xs text-gray-600 mb-1.5">
+          {isDocConvo
+            ? 'Document what was discussed, any concerns raised, and key takeaways from the conversation.'
+            : 'Document specifically what happened, what was said, and the full context of this conversation.'}
+        </p>
         <textarea
           rows={6}
-          placeholder="Describe the incident or behavior, the conversation that took place, what was communicated to the employee, and any relevant context…"
+          placeholder={isDocConvo
+            ? 'Describe the conversation — what was discussed, what was communicated, and any follow-up items…'
+            : 'Describe the incident or behavior, the conversation that took place, what was communicated to the employee, and any relevant context…'}
           value={notes}
           onChange={e => setNotes(e.target.value)}
           className={inputCls + ' resize-none'}
         />
       </div>
 
-      {/* Expectations */}
-      <div>
-        <label className={labelCls}>Clear Expectations Moving Forward <span className="text-red-400">*</span></label>
-        <p className="text-xs text-gray-600 mb-1.5">State clearly and specifically what is expected going forward and any agreed-upon action plan.</p>
-        <textarea
-          rows={4}
-          placeholder="List the specific expectations, behaviors, or improvements required, and any deadlines or follow-up dates…"
-          value={expectations}
-          onChange={e => setExpectations(e.target.value)}
-          className={inputCls + ' resize-none'}
-        />
-      </div>
+      {/* Expectations — not shown for doc convos */}
+      {!isDocConvo && (
+        <div>
+          <label className={labelCls}>Clear Expectations Moving Forward <span className="text-red-400">*</span></label>
+          <p className="text-xs text-gray-600 mb-1.5">State clearly and specifically what is expected going forward and any agreed-upon action plan.</p>
+          <textarea
+            rows={4}
+            placeholder="List the specific expectations, behaviors, or improvements required, and any deadlines or follow-up dates…"
+            value={expectations}
+            onChange={e => setExpectations(e.target.value)}
+            className={inputCls + ' resize-none'}
+          />
+        </div>
+      )}
 
       {/* Developer test mode toggle */}
       {session.role === 'developer' && (
@@ -1242,20 +1320,22 @@ function SubmitForm({ session, subjects, onSuccess }: {
         </div>
       )}
 
-      {/* Reminder checkbox */}
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
-        <label className="flex items-start gap-3 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={reminderAcknowledged}
-            onChange={e => setReminderAcknowledged(e.target.checked)}
-            className="accent-violet-500 w-4 h-4 mt-0.5 shrink-0"
-          />
-          <p className="text-xs text-gray-300 leading-relaxed">
-            <strong className="text-white">Documentation Reminder:</strong> I understand that I am required to retain a copy of this accountability document on file for a minimum of one year, and that this document is permanently on record and cannot be altered or deleted once submitted.
-          </p>
-        </label>
-      </div>
+      {/* Reminder checkbox — not shown for doc convos */}
+      {!isDocConvo && (
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={reminderAcknowledged}
+              onChange={e => setReminderAcknowledged(e.target.checked)}
+              className="accent-violet-500 w-4 h-4 mt-0.5 shrink-0"
+            />
+            <p className="text-xs text-gray-300 leading-relaxed">
+              <strong className="text-white">Documentation Reminder:</strong> I understand that I am required to retain a copy of this accountability document on file for a minimum of one year, and that this document is permanently on record and cannot be altered or deleted once submitted.
+            </p>
+          </label>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-900/30 border border-red-700 text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>
@@ -1263,10 +1343,10 @@ function SubmitForm({ session, subjects, onSuccess }: {
 
       <button
         onClick={handleSubmit}
-        disabled={submitting || !subjectId || !title.trim() || !incidentDate || !notes.trim() || !expectations.trim() || !reminderAcknowledged}
-        className="w-full bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors text-sm"
+        disabled={submitting || (isDocConvo ? (!subjectIds.length || !title.trim() || !notes.trim()) : (!subjectId || !title.trim() || !incidentDate || !notes.trim() || !expectations.trim() || !reminderAcknowledged))}
+        className={`w-full ${isDocConvo ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-violet-600 hover:bg-violet-500'} disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors text-sm`}
       >
-        {submitting ? 'Submitting…' : level === 'verbal' ? 'Submit & Send Notice' : 'Submit for Approval'}
+        {submitting ? 'Submitting…' : isDocConvo ? `Submit Documented Conversation${subjectIds.length > 1 ? ` (${subjectIds.length} employees)` : ''}` : level === 'verbal' ? 'Submit & Send Notice' : 'Submit for Approval'}
       </button>
 
       {level !== 'verbal' && (
@@ -1492,7 +1572,7 @@ export default function AccountabilityPage() {
   if (canSubmit(session.role)) tabs.push({ key: 'submit', label: 'New Document' })
   if (session.role === 'manager') tabs.push({ key: 'my-records', label: 'My Records' })
   if (canApprove(session.role)) tabs.push({ key: 'pending', label: 'Pending Approval', badge: pendingApproval.length })
-  if (['sales_director','ops_manager','owner','developer'].includes(session.role)) {
+  if (['sales_director','ops_field_leader','ops_manager','owner','developer'].includes(session.role)) {
     tabs.push({ key: 'all-records', label: 'All Records' })
     tabs.push({ key: 'dm-records', label: 'DM Records' })
   }

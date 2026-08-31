@@ -23,7 +23,7 @@ export async function sendEmail(
 
 export function welcomeEmailHtml(fullName: string, username: string, password: string, role: string): string {
   const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
-  const roleLabel = role === 'manager' ? 'DM' : role === 'ops_manager' ? 'Ops Manager' : role === 'owner' ? 'Owner' : role === 'sales_director' ? 'Sales Director' : 'Employee'
+  const roleLabel = role === 'manager' ? 'DM' : role === 'ops_manager' ? 'Ops Manager' : role === 'ops_field_leader' ? 'Field Leader' : role === 'owner' ? 'Owner' : role === 'sales_director' ? 'Sales Director' : 'Employee'
   return `
     <div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
       <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">

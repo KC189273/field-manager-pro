@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface SwapRequest {
@@ -279,7 +279,7 @@ export default function ShiftSwapsPage() {
 
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
-  const isManager = session.role === 'manager' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
+  const isManager = session.role === 'manager' || session.role === 'ops_field_leader' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
 
   // Segment swaps
   const needsMyResponse = swaps.filter(s => s.status === 'pending_target' && s.target_id === session.id)

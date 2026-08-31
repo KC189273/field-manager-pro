@@ -13,9 +13,9 @@ features:
   - ai-coaching-grades
 permissions:
   - "manager+ can submit"
-  - "ops_manager+ can submit remote coaching"
+  - "ops_field_leader+ can submit remote coaching"
   - "SD+ view all visits"
-verified: 2026-08-19
+verified: 2026-08-31
 ---
 # DM Store Visits
 
@@ -45,7 +45,7 @@ Three types:
 
 ## Who can see store visits?
 - **DMs** can see their own visits.
-- **Ops Manager, SD, Owner, Developer** can see all visits across the org.
+- **Field Leader, Ops Manager, SD, Owner, Developer** can see all visits across the org.
 - **Employees** cannot see DM Store Visits.
 
 There is a visit dashboard showing visit counts and types over time, visible to SD and above.

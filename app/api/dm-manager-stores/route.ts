@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner, type Role } from '@/lib/auth'
 import { query } from '@/lib/db'
 
-const canManage = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
+const canManage = (role: Role) => role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role) || role === 'developer'
 
 // Also auto-create dm_store_visits table if needed
 let ensured = false

@@ -12,7 +12,7 @@ permissions:
   - "manager+ view"
   - "employees cannot see"
   - "auto-created on late/OT"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Flags
 
@@ -33,7 +33,7 @@ DMs and above can create flags manually to document performance issues or other 
 |------|---------|
 | Employee | Cannot see the Flags page |
 | DM (manager) | Flags for their direct reports |
-| Ops Manager | All flags in the org |
+| Field Leader / Ops Manager | All flags in the org |
 | SD, Owner, Developer | All flags |
 
 ## Can flags be resolved?

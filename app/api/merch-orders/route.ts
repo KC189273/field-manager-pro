@@ -73,7 +73,7 @@ export async function GET(req: NextRequest) {
   const fromDate   = searchParams.get('from')
   const toDate     = searchParams.get('to')
 
-  const isOpsPlus = ['ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const isOpsPlus = ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
   const orgFilter  = await getOrgFilter(session)
 
   // Check if DM is an ops collaborator
@@ -143,7 +143,7 @@ export async function GET(req: NextRequest) {
     if (user?.org_id) {
       opsMgrs = await query<{ id: string; full_name: string }>(
         `SELECT id, full_name FROM users
-         WHERE org_id = $1 AND role IN ('ops_manager', 'owner', 'sales_director') AND is_active = TRUE
+         WHERE org_id = $1 AND role IN ('ops_field_leader', 'ops_manager', 'owner', 'sales_director') AND is_active = TRUE
          ORDER BY full_name`,
         [user.org_id]
       )
@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
     if (user?.org_id) {
       opsMgrs = await query<{ id: string; full_name: string }>(
         `SELECT id, full_name FROM users
-         WHERE org_id = $1 AND role IN ('ops_manager', 'owner', 'sales_director') AND is_active = TRUE
+         WHERE org_id = $1 AND role IN ('ops_field_leader', 'ops_manager', 'owner', 'sales_director') AND is_active = TRUE
          ORDER BY full_name`,
         [user.org_id]
       )
@@ -292,7 +292,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  if (!['ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role))
+  if (!['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role))
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { id, note } = await req.json()

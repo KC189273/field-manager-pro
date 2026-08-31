@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 export async function GET() {
   const session = await getSession()
@@ -12,7 +12,7 @@ export async function GET() {
   const users = await query<{ id: string; full_name: string; role: string }>(
     `SELECT id, full_name, role FROM users
      WHERE is_active = TRUE
-       AND role IN ('manager', 'ops_manager', 'owner', 'sales_director', 'developer')
+       AND role IN ('manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer')
        AND org_id = $1
        AND id != $2
      ORDER BY full_name ASC`,

@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 
-const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'developer']
+const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'ops_field_leader', 'developer']
 
 export async function GET(
   _req: NextRequest,
@@ -84,7 +84,7 @@ export async function PATCH(
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // Only the DM author can revise and resubmit
-  if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

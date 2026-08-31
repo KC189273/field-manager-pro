@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 const COOKIE = 'fmp-session'
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 
-export type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
+export type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
 
 export interface SessionPayload {
   id: string
@@ -39,12 +39,16 @@ export async function getSession(): Promise<SessionPayload | null> {
   const session = await verifyToken(token)
   if (!session) return null
 
-  // Check if user is still active (catches terminated/deactivated users with valid JWTs)
+  // Check if user is still active or role has changed (catches terminated users and stale role JWTs)
   try {
     const { queryOne } = await import('@/lib/db')
-    const user = await queryOne<{ is_active: boolean }>(`SELECT is_active FROM users WHERE id = $1`, [session.id])
+    const user = await queryOne<{ is_active: boolean; role: string }>(`SELECT is_active, role FROM users WHERE id = $1`, [session.id])
     if (user && !user.is_active) {
-      // Clear the cookie so they don't keep hitting the DB
+      jar.delete(COOKIE)
+      return null
+    }
+    if (user && user.role !== session.role) {
+      // Role changed in DB — clear stale JWT so user re-authenticates with correct role
       jar.delete(COOKIE)
       return null
     }
@@ -70,7 +74,7 @@ export async function clearSessionCookie(): Promise<void> {
 }
 
 export function isManager(role: Role): boolean {
-  return role === 'manager' || role === 'ops_manager'
+  return role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager'
 }
 
 export function isDeveloper(role: Role): boolean {
@@ -78,7 +82,7 @@ export function isDeveloper(role: Role): boolean {
 }
 
 export function isOwner(role: Role): boolean {
-  return role === 'owner' || role === 'sales_director'
+  return role === 'owner' || role === 'sales_director' || role === 'ops_manager'
 }
 
 export function canManageTime(role: Role): boolean {

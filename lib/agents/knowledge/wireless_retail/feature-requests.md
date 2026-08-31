@@ -8,9 +8,9 @@ features:
 permissions:
   - "DMs+ can submit feature requests"
   - "DMs see only their own requests"
-  - "ops_manager/owner/developer see all requests"
+  - "ops_field_leader/ops_manager/owner/developer see all requests"
   - "only developer can update status"
-verified: 2026-08-19
+verified: 2026-08-31
 ---
 # App Recommendations
 
@@ -41,4 +41,4 @@ You'll get a push notification whenever the status changes.
 Yes. Go to App Recommendations to see all your submissions with their current status. If the dev team added notes, you'll see them when you tap to expand the request.
 
 ## Who can submit feature requests?
-DMs, Ops Managers, Owners, and Developers. Employees should talk to their DM about app suggestions.
+DMs, Field Leaders, Ops Managers, Owners, and Developers. Employees should talk to their DM about app suggestions.

@@ -6,7 +6,7 @@ import { getReceiptViewUrl } from '@/lib/s3'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))

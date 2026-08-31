@@ -135,7 +135,7 @@ export async function POST(req: NextRequest) {
 
   // ── SR Approve: SD approves one DM's timecards ──
   if (type === 'sr_approve') {
-    const allowed = ['sales_director', 'ops_manager', 'developer', 'owner'].includes(session.role)
+    const allowed = ['sales_director', 'ops_field_leader', 'ops_manager', 'developer', 'owner'].includes(session.role)
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -167,7 +167,7 @@ export async function POST(req: NextRequest) {
 
   // ── Final: SD submits final payroll approval for entire org ──
   if (type === 'final') {
-    const allowed = ['sales_director', 'ops_manager', 'developer', 'owner'].includes(session.role)
+    const allowed = ['sales_director', 'ops_field_leader', 'ops_manager', 'developer', 'owner'].includes(session.role)
     if (!allowed) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -246,7 +246,7 @@ export async function POST(req: NextRequest) {
 
   // ── DM Time Approve: SD approves a DM's personal hours ──
   if (type === 'dm_time_approve') {
-    const allowed = ['sales_director', 'ops_manager', 'developer', 'owner'].includes(session.role)
+    const allowed = ['sales_director', 'ops_field_leader', 'ops_manager', 'developer', 'owner'].includes(session.role)
     if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (!dmId) return NextResponse.json({ error: 'dmId required' }, { status: 400 })
 

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
   id: string
@@ -425,7 +425,7 @@ export default function TimeOffPage() {
             </div>
 
             {/* All Requests — DM+ */}
-            {['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) && (
+            {['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) && (
               <div>
                 <button
                   onClick={() => { loadAll() }}

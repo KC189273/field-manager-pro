@@ -64,7 +64,7 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const canManage = ['owner', 'sales_director', 'ops_manager', 'developer', 'manager'].includes(session.role)
+  const canManage = ['owner', 'sales_director', 'ops_manager', 'ops_field_leader', 'developer', 'manager'].includes(session.role)
   if (!canManage) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { storeId, hours } = await req.json()

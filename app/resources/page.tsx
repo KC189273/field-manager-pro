@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 type ResourceType = 'announcement' | 'document' | 'link' | 'contact'
 
 interface Session {
@@ -32,7 +32,7 @@ interface Resource {
   created_at: string
 }
 
-const CAN_MANAGE: Role[] = ['owner', 'ops_manager', 'developer', 'sales_director']
+const CAN_MANAGE: Role[] = ['owner', 'ops_field_leader', 'ops_manager', 'developer', 'sales_director']
 
 const TYPE_OPTS: { key: ResourceType; label: string; icon: string }[] = [
   { key: 'announcement', label: 'Announcement', icon: '📢' },

@@ -5,7 +5,7 @@ import { getReceiptViewUrl } from '@/lib/s3'
 
 export const dynamic = 'force-dynamic'
 
-const CAN_ACCESS = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CAN_ACCESS = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 // GET /api/calendar/attachment-url?id=<attachmentId>
 // Returns a presigned view URL for a calendar attachment
@@ -67,7 +67,7 @@ export async function DELETE(req: NextRequest) {
   )
   if (!row) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const elevated = ['ops_manager', 'owner', 'developer', 'sales_director'].includes(session.role)
+  const elevated = ['ops_manager', 'ops_field_leader', 'owner', 'developer', 'sales_director'].includes(session.role)
   if (row.created_by !== session.id && !elevated) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }

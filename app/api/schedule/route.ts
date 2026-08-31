@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   const weekStart = searchParams.get('week') // YYYY-MM-DD
   const userId = searchParams.get('userId') ?? session.id
 
-  if (userId !== session.id && session.role !== 'manager' && session.role !== 'ops_manager' && session.role !== 'developer') {
+  if (userId !== session.id && session.role !== 'manager' && session.role !== 'ops_field_leader' && session.role !== 'ops_manager' && session.role !== 'developer') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
     const html = scheduleSubmittedHtml(session.fullName, formatWeekRange(weekDate), dayNames)
 
     const recipients = await query<{ email: string }>(
-      `SELECT email FROM users WHERE role IN ('manager','ops_manager') AND is_active = TRUE AND (org_id = (SELECT org_id FROM users WHERE id = $1) OR org_id IS NULL)`,
+      `SELECT email FROM users WHERE role IN ('manager','ops_field_leader','ops_manager') AND is_active = TRUE AND (org_id = (SELECT org_id FROM users WHERE id = $1) OR org_id IS NULL)`,
       [session.id]
     )
     const devConfig = await queryOne<{ value: string }>(

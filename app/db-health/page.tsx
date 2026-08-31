@@ -132,7 +132,7 @@ export default function DbHealthPage() {
       return r.json()
     }).then(d => {
       if (!d) return
-      if (!['developer', 'owner', 'ops_manager', 'sales_director'].includes(d.role)) { router.replace('/dashboard'); return }
+      if (!['developer', 'owner', 'ops_field_leader', 'ops_manager', 'sales_director'].includes(d.role)) { router.replace('/dashboard'); return }
       setSession(d)
     })
   }, [router])

@@ -5,7 +5,7 @@ import { getReceiptViewUrl } from '@/lib/s3'
 import { sendPushToUser } from '@/lib/apns'
 
 const canManage = (role: string) =>
-  isOwner(role as never) || role === 'developer' || role === 'ops_manager' || role === 'manager'
+  isOwner(role as never) || role === 'developer' || role === 'ops_manager' || role === 'ops_field_leader' || role === 'manager'
 
 // GET /api/facility-tickets/[id] — single ticket with update timeline
 export async function GET(

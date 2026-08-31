@@ -4,7 +4,7 @@ import { query, queryOne } from '@/lib/db'
 import { sendPushToUser } from '@/lib/apns'
 import { getReceiptViewUrl } from '@/lib/s3'
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 let replyColEnsured = false
 async function ensureReplyCol() {
@@ -123,7 +123,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   `, [id, session.id]).catch(() => {})
 
   // For group chats, return who has muted (visible to manager+ only)
-  const MANAGER_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+  const MANAGER_ROLES = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
   let mutedBy: string[] = []
   if (MANAGER_ROLES.includes(session.role)) {
     const conv = await queryOne<{ type: string }>(

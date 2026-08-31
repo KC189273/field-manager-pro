@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 
 /**
  * Combined NavBar status endpoint — replaces 3 separate calls

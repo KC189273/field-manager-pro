@@ -5,7 +5,7 @@ import { sendEmail, taskReminderHtml } from '@/lib/notifications'
 import { sendPushToUser, isEmailEnabled } from '@/lib/apns'
 
 const canRemind = (role: string) =>
-  role === 'manager' || role === 'ops_manager' || role === 'owner' ||
+  role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' ||
   role === 'sales_director' || role === 'developer'
 
 export async function POST(req: NextRequest) {

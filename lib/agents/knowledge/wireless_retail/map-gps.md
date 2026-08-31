@@ -10,7 +10,7 @@ features:
   - store-visit-detection
 permissions:
   - "SD/owner/developer only"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Live Map & GPS Tracking
 
@@ -18,7 +18,7 @@ verified: 2026-07-22
 A real-time map showing the GPS locations of all currently clocked-in employees. It refreshes every 10 seconds.
 
 ## Who can see the Live Map?
-Only **Sales Directors, Owners, and Developers**. DMs, ops managers, and employees cannot see the Live Map.
+Only **Sales Directors, Owners, and Developers**. DMs, field leaders, ops managers, and employees cannot see the Live Map.
 
 If you don't see "Map" in your nav, it's because your role doesn't have access.
 

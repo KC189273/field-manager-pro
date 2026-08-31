@@ -311,7 +311,7 @@ ${dataContext}`
           `SELECT u.email FROM users u
            JOIN notification_preferences np ON np.user_id = u.id
            WHERE u.org_id = $1 AND u.is_active = TRUE
-             AND u.role IN ('ops_manager', 'owner', 'sales_director', 'developer')
+             AND u.role IN ('ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer')
              AND np.dm_focus_emails = TRUE
              AND COALESCE(np.email_enabled, TRUE) = TRUE`,
           [orgId]

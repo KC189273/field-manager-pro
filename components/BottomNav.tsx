@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
 
 const STORAGE_KEY = 'fmp_pinned_tabs_v2'
 const ROLE_CACHE_KEY = 'fmp_role_cache'
@@ -20,10 +20,10 @@ const BARBERSHOP_ROLES: Role[] = ['customer', 'barber', 'shop_owner']
 function isBarbershop(role: Role) { return BARBERSHOP_ROLES.includes(role) }
 function isRetail(role: Role) { return !isBarbershop(role) }
 function canViewTeam(role: Role) {
-  return ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
+  return ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 }
 function isOpsPlus(role: Role) {
-  return ['ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
+  return ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 }
 
 type IconFC = React.FC<{ className?: string }>
@@ -65,8 +65,10 @@ const ALL_FEATURES: Feature[] = [
   { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isRetail },
   { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isRetail },
   { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: isRetail },
+  { href: '/store-locations',  label: 'Store Locations',  short: 'Stores',    Icon: StoreIcon,          show: r => r === 'owner' || r === 'sales_director' || r === 'developer' },
   { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: isRetail },
-  { href: '/db-health',       label: 'App Health',        short: 'Health',    Icon: GearIcon,           show: r => r === 'developer' || r === 'ops_manager' || r === 'sales_director' || r === 'owner' },
+  { href: '/employee-record', label: 'Employee Record',   short: 'Records',   Icon: AccountabilityIcon, show: r => r === 'ops_manager' || r === 'owner' || r === 'sales_director' || r === 'developer' },
+  { href: '/db-health',       label: 'App Health',        short: 'Health',    Icon: GearIcon,           show: r => r === 'developer' || r === 'ops_field_leader' || r === 'ops_manager' || r === 'sales_director' || r === 'owner' },
 
   // ── Barbershop features ──
   { href: '/book',             label: 'Book',             short: 'Book',      Icon: CalendarIcon,       show: r => r === 'customer' },
@@ -89,6 +91,7 @@ const ALL_FEATURES: Feature[] = [
 const DEFAULT_PINNED_TABS: Record<Role, string[]> = {
   employee:       ['/dashboard', '/clock', '/my-schedule', '/checklist'],
   manager:        ['/dashboard', '/clock', '/tasks', '/staff-schedule'],
+  ops_field_leader: ['/dashboard', '/clock', '/map', '/team'],
   ops_manager:    ['/dashboard', '/clock', '/map', '/team'],
   owner:          ['/dashboard', '/clock', '/payroll', '/team'],
   sales_director: ['/dashboard', '/clock', '/map', '/team'],

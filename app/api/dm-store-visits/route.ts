@@ -9,7 +9,7 @@ import { getReceiptViewUrl } from '@/lib/s3'
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
 const canAccess = (role: Role) => role !== 'employee'
-const canViewAll = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
+const canViewAll = (role: Role) => role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role) || role === 'developer'
 
 let ensured = false
 async function ensureQuickColumns() {

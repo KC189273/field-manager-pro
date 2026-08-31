@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface SupplyRequest {
@@ -254,7 +254,7 @@ export default function SupplyRequestsPage() {
   // Receiving
   const [receivingId, setReceivingId] = useState<string | null>(null)
 
-  const isOpsPlus = (role: string) => ['ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
+  const isOpsPlus = (role: string) => ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 
   const loadRequests = useCallback(async () => {
     if (!session) return

@@ -35,7 +35,7 @@ async function ensureTerminationTables() {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   // DM, SD, Owner, Developer can initiate termination
-  if (!['manager', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -176,8 +176,8 @@ export async function POST(req: NextRequest) {
   const terminatedUserRole = await queryOne<{ role: string }>(`SELECT role FROM users WHERE id = $1`, [employee.id]).catch(() => null)
   const isLeadershipTerm = terminatedUserRole && ['sales_director', 'manager'].includes(terminatedUserRole.role)
   const mgmtRoleFilter = isLeadershipTerm
-    ? `AND role IN ('ops_manager', 'owner', 'developer')`
-    : `AND role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`
+    ? `AND role IN ('ops_manager', 'ops_field_leader', 'owner', 'developer')`
+    : `AND role IN ('manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer')`
   const management = await query<{ email: string; full_name: string }>(
     `SELECT email, full_name FROM users
      WHERE org_id = $1 AND is_active = TRUE

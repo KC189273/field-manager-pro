@@ -12,7 +12,7 @@ const GANTT_SPAN  = GANTT_END - GANTT_START
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Store {
@@ -145,7 +145,7 @@ export default function StaffSchedulePage() {
 
   const isEmployee = session?.role === 'employee'
   const canEdit = !!session && !isEmployee
-  const canUnpublish = session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer' || session?.role === 'manager'
+  const canUnpublish = session?.role === 'ops_field_leader' || session?.role === 'ops_manager' || session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer' || session?.role === 'manager'
   const scheduleIsLocked = false
 
   // Scheduling window: max 3 weeks ahead for managers
@@ -683,7 +683,7 @@ export default function StaffSchedulePage() {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
   }
 
-  const isOpsPlus = session.role === 'ops_manager' || session.role === 'owner' ||
+  const isOpsPlus = session.role === 'ops_field_leader' || session.role === 'ops_manager' || session.role === 'owner' ||
     session.role === 'sales_director' || session.role === 'developer'
 
   return (

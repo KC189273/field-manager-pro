@@ -7,10 +7,10 @@ features:
   - timecard-export
   - certification-letter
 permissions:
-  - "owner, ops_manager, sales_director, developer can access"
+  - "owner, ops_manager, ops_field_leader, sales_director, developer can access"
   - "DMs and employees cannot access"
   - "no need to reactivate terminated employees"
-verified: 2026-08-19
+verified: 2026-08-31
 ---
 # Terminated Employee Records
 
@@ -36,4 +36,4 @@ No. The export works regardless of account status. You do not need to toggle is_
 Yes. Every export is logged with who downloaded it, when, which employee, and how many shifts/hours. This is for compliance purposes.
 
 ## Who can access this?
-Owners, Sales Directors, Ops Managers, and Developers. DMs and employees cannot access terminated records.
+Owners, Sales Directors, Field Leaders, Ops Managers, and Developers. DMs and employees cannot access terminated records.

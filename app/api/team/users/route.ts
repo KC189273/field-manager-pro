@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ users: await addAvatarUrls(users as Record<string, unknown>[]) })
   }
 
-  if (isOwner(session.role) || session.role === 'ops_manager') {
+  if (isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager') {
     const params: unknown[] = []
     const orgClause = appendOrgFilter(orgFilter, params, 'u')
     const users = await query(
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer')) {
+  if (!session || (!isManager(session.role) && session.role !== 'developer') || session.role === 'ops_field_leader') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -119,9 +119,9 @@ export async function POST(req: NextRequest) {
 
   // Managers can only create employees; developer can create any non-developer; owner/sales_director can create managers
   const allowedRoles = session.role === 'developer'
-    ? ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
+    ? ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director']
     : isOwner(session.role)
-    ? ['employee', 'manager', 'ops_manager', 'sales_director']
+    ? ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'sales_director']
     : session.role === 'ops_manager'
     ? ['employee', 'manager']
     : ['employee']
@@ -176,7 +176,7 @@ export async function POST(req: NextRequest) {
     // Notify approvers in the org via push
     const approvers = await query<{ id: string }>(
       `SELECT id FROM users
-       WHERE role IN ('owner', 'sales_director', 'ops_manager', 'developer')
+       WHERE role IN ('owner', 'sales_director', 'ops_field_leader', 'ops_manager', 'developer')
          AND is_active = TRUE
          AND (org_id = $1 OR ($1 IS NULL AND org_id IS NULL))`,
       [finalOrgId]
@@ -223,7 +223,7 @@ export async function PATCH(req: NextRequest) {
 
   // Role change validation
   if (role !== undefined) {
-    const allowedRoles = ['employee', 'manager', 'ops_manager', 'owner', 'sales_director']
+    const allowedRoles = ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director']
     if (!allowedRoles.includes(role)) {
       return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
     }
@@ -267,7 +267,7 @@ export async function PATCH(req: NextRequest) {
   if (isFloater !== undefined) {
     await query(`UPDATE users SET is_floater = $1 WHERE id = $2`, [!!isFloater, userId])
   }
-  if (isOpsCollab !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_manager')) {
+  if (isOpsCollab !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager')) {
     await query(`UPDATE users SET is_ops_collab = $1 WHERE id = $2`, [!!isOpsCollab, userId])
   }
 

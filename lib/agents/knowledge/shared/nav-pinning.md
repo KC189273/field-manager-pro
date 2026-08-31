@@ -7,7 +7,7 @@ features:
 permissions:
   - "max 4 pins"
   - "saved per device"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Navigation Tab Pinning — "How do I customize my bottom tabs?"
 

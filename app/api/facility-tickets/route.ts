@@ -229,7 +229,7 @@ export async function POST(req: NextRequest) {
     `SELECT id, email, full_name FROM users
      WHERE is_active = TRUE
        AND (
-         (role IN ('sales_director', 'owner', 'developer', 'ops_manager') AND (org_id = $1 OR role = 'developer'))
+         (role IN ('sales_director', 'owner', 'developer', 'ops_manager', 'ops_field_leader') AND (org_id = $1 OR role = 'developer'))
          OR (role = 'manager' AND is_ops_collab = TRUE AND org_id = $1)
        )`,
     [orgId]

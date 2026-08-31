@@ -5,7 +5,7 @@ import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import ExcelJS from 'exceljs'
 
 const canAccess = (role: Role) => role !== 'employee'
-const canViewAll = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
+const canViewAll = (role: Role) => role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role) || role === 'developer'
 
 const CST = 'America/Chicago'
 function fmtDate(iso: string) {

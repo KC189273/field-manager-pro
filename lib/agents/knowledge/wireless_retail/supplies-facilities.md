@@ -12,9 +12,9 @@ permissions:
   - "all retail roles submit supply requests"
   - "DMs approve/reject for their team only"
   - "DMs mark delivered to close out"
-  - "ops managers can view but take no action"
+  - "field leaders/ops managers can view but take no action"
   - "facility photo required"
-verified: 2026-08-19
+verified: 2026-08-31
 ---
 # Supply Requests & Facility Tickets
 
@@ -38,7 +38,7 @@ Or: **Rejected** — DM did not approve (reason provided via push notification).
 - **Employees** and **DMs** can submit requests.
 - **DMs** approve or reject requests for their own team only.
 - **DMs** mark requests as delivered when supplies arrive.
-- **Ops managers** can view supply requests for visibility but do not take action in the app. Ordering is handled outside the app via Google Forms.
+- **Field leaders / Ops managers** can view supply requests for visibility but do not take action in the app. Ordering is handled outside the app via Google Forms.
 
 ### My supply request was rejected — why?
 Your DM decided not to approve it. You'll receive a push notification with the reason. If you disagree, talk to your DM directly.

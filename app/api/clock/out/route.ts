@@ -136,7 +136,7 @@ export async function POST(req: NextRequest) {
 
           // Notify SD if 45+ actual, Owner if 50+ actual
           if (workedHours >= 45) {
-            const sds = await query<{ id: string }>(`SELECT id FROM users WHERE role IN ('sales_director', 'owner', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)`)
+            const sds = await query<{ id: string }>(`SELECT id FROM users WHERE role IN ('sales_director', 'owner', 'ops_manager', 'ops_field_leader') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)`)
             for (const sd of sds) push(sd.id, `OT Alert: ${session.fullName} at ${workedHours.toFixed(1)}h${floaterTag}`, body, 'clock').catch(() => {})
           }
           if (workedHours >= 50) {
@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
     const notifyUsers = await query<{ id: string }>(
       `SELECT u.id FROM users u
        LEFT JOIN notification_preferences np ON np.user_id = u.id
-       WHERE u.role IN ('ops_manager','owner','sales_director','developer') AND u.is_active = TRUE AND u.org_id = $1
+       WHERE u.role IN ('ops_field_leader','ops_manager','owner','sales_director','developer') AND u.is_active = TRUE AND u.org_id = $1
          AND COALESCE(np.dm_clockout_alerts, TRUE) = TRUE
          AND COALESCE(np.push_enabled, TRUE) = TRUE`,
       [session.org_id]
@@ -232,7 +232,7 @@ export async function POST(req: NextRequest) {
          WHERE is_active = TRUE
            AND (
              id = (SELECT manager_id FROM users WHERE id = $1)
-             OR (role IN ('ops_manager', 'owner', 'sales_director') AND org_id = (SELECT org_id FROM users WHERE id = $1))
+             OR (role IN ('ops_field_leader', 'ops_manager', 'owner', 'sales_director') AND org_id = (SELECT org_id FROM users WHERE id = $1))
            )`,
         [session.id]
       )

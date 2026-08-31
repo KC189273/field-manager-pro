@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
   id: string
@@ -144,7 +144,7 @@ function grossSeconds(shift: Shift, nowMs: number): number {
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 const canManage = (role: Role) =>
-  role === 'manager' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
+  role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
 const canDownloadRole = (role: Role) => role === 'owner' || role === 'sales_director' || role === 'developer' || role === 'manager'
 
@@ -682,7 +682,7 @@ function TimecardsPage() {
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const isMgr = canManage(session.role)
-  const isOpsPlus = session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
+  const isOpsPlus = session.role === 'ops_field_leader' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer'
   const selectedUser = teamUsers.find(u => u.id === selectedUserId)
 
   // Role filter map for fast lookup

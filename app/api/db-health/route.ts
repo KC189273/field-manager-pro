@@ -35,7 +35,7 @@ async function ensureTable() {
 // GET — returns current health + historical snapshots
 export async function GET() {
   const session = await getSession()
-  if (!session || !['developer', 'owner', 'ops_manager', 'sales_director'].includes(session.role)) {
+  if (!session || !['developer', 'owner', 'ops_manager', 'ops_field_leader', 'sales_director'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

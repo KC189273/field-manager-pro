@@ -7,9 +7,9 @@ import { getReceiptViewUrl } from '@/lib/s3'
 export const dynamic = 'force-dynamic'
 
 // Roles that can manage (create/edit/delete) resources
-const CAN_MANAGE = ['owner', 'ops_manager', 'developer', 'sales_director']
+const CAN_MANAGE = ['owner', 'ops_field_leader', 'ops_manager', 'developer', 'sales_director']
 // All roles can read
-const CAN_READ = ['employee', 'manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CAN_READ = ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 
 let ensured = false
 async function ensureTable() {

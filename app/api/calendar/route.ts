@@ -7,11 +7,11 @@ import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 export const dynamic = 'force-dynamic'
 
 // Roles allowed to use the calendar system at all
-const CAN_ACCESS = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CAN_ACCESS = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 // Roles that have their own personal calendar
 const HAS_OWN_CALENDAR = ['manager', 'sales_director']
 // Roles that can view/edit other users' (DM) calendars
-const CAN_VIEW_TEAM = ['ops_manager', 'owner', 'developer', 'sales_director']
+const CAN_VIEW_TEAM = ['ops_manager', 'ops_field_leader', 'owner', 'developer', 'sales_director']
 
 const CAT_LABELS: Record<string, string> = {
   travel: 'Travel', meeting: 'Meeting', store_visit: 'Store Visit',

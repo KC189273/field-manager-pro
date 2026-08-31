@@ -4,7 +4,7 @@ import { query } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 
 const canViewDashboard = (role: string) =>
-  role === 'manager' || role === 'ops_manager' || role === 'owner' ||
+  role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' ||
   role === 'sales_director' || role === 'developer'
 
 export async function GET(req: NextRequest) {

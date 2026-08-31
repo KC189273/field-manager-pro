@@ -3,7 +3,7 @@ import { getSession, isOwner } from '@/lib/auth'
 import { query } from '@/lib/db'
 
 const canAssign = (role: string) =>
-  role === 'manager' || role === 'ops_manager' || isOwner(role as never) || role === 'developer'
+  role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role as never) || role === 'developer'
 
 // GET /api/tasks/store-employees
 // No params → returns stores accessible to the current user
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         [session.id]
       )
     } else {
-      // ops_manager, owner, sales_director — all stores in their org
+      // ops_field_leader, ops_manager, owner, sales_director — all stores in their org
       stores = await query<{ id: string; address: string }>(
         `SELECT DISTINCT sl.id, sl.address
          FROM dm_store_locations sl

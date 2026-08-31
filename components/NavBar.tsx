@@ -14,11 +14,11 @@ interface Notification {
 }
 
 interface NavBarProps {
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
   fullName: string
 }
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 
 const NOTIFICATION_PATHS: Record<string, string> = {
   chat_message: '/chat',
@@ -83,6 +83,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/resources':        'Resources',
   '/service-analysis': 'Service Analysis',
   '/commissions':      'Commissions Estimator',
+  '/store-locations':  'Store Locations',
   '/settings':         'Settings',
   '/feature-requests': 'App Recommendations',
   '/dm-schedule':      'DM Schedule',

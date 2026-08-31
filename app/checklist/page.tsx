@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 type Tab = 'submit' | 'dashboard'
 type FormView = 'landing' | 'form' | 'success'
 
@@ -101,7 +101,7 @@ const CLOSING_ITEMS: ChecklistItemDef[] = [
 ]
 
 const canViewDashboard = (role: Role) =>
-  role === 'manager' || role === 'ops_manager' || role === 'owner' ||
+  role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' ||
   role === 'sales_director' || role === 'developer'
 
 function todayLocal(): string {

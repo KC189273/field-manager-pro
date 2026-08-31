@@ -12,15 +12,15 @@ features:
   - document-upload
 permissions:
   - "calendar: manager+ access"
-  - "resources: all read, ops+ manage"
-verified: 2026-07-22
+  - "resources: all read, ops_field_leader+ manage"
+verified: 2026-08-31
 ---
 # Calendar & Resources
 
 ## Calendar
 
 ### Who can access the Calendar?
-Managers, ops managers, SD, owners, and developers. Employees do not have access to the Calendar.
+Managers, field leaders, ops managers, SD, owners, and developers. Employees do not have access to the Calendar.
 
 ### How do I create a calendar event?
 1. Go to **Calendar** from the nav.
@@ -50,7 +50,7 @@ A shared library for your organization containing documents, links, announcement
 All retail roles (employees, DMs, and above) can view the Resources page.
 
 ### Who can add or manage Resources?
-Only **ops managers, sales directors, owners, and developers** can upload documents, add links, or manage content. DMs and employees have read-only access.
+Only **field leaders, ops managers, sales directors, owners, and developers** can upload documents, add links, or manage content. DMs and employees have read-only access.
 
 ### What types of content can be shared?
 - **Documents**: upload PDFs, Word docs, images, etc.

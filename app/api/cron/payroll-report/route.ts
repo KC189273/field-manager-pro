@@ -549,7 +549,7 @@ export async function GET(req: NextRequest) {
   const owners = await query<{ email: string; org_id: string | null }>(`
     SELECT u.email, u.org_id FROM users u
     LEFT JOIN notification_preferences np ON np.user_id = u.id
-    WHERE u.role IN ('owner','sales_director','ops_manager') AND u.is_active = TRUE
+    WHERE u.role IN ('owner','sales_director','ops_field_leader','ops_manager') AND u.is_active = TRUE
       AND COALESCE(np.payroll_report, TRUE) = TRUE
       AND COALESCE(np.email_enabled, TRUE) = TRUE
   `)

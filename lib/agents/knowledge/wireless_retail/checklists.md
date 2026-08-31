@@ -12,7 +12,7 @@ permissions:
   - "all retail roles can submit"
   - "opening requires inventory photo"
   - "closing requires sales floor + cash drawer photos"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Opening & Closing Checklists
 
@@ -50,7 +50,7 @@ Yes. There is a comment field on the checklist submission where you can note any
 
 ## Who can view past submissions?
 - **DMs** see all submissions from their team's stores.
-- **SD, Owner, Ops Manager, Developer** see all submissions across the org.
+- **SD, Owner, Field Leader, Ops Manager, Developer** see all submissions across the org.
 - **Employees** see their own submissions.
 
 To view past submissions, go to Checklist and look at the submissions list. Tap any submission to see the full details including photos and metrics.

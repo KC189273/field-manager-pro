@@ -112,8 +112,8 @@ export async function POST(
   const terminatedRole = await queryOne<{ role: string }>(`SELECT role FROM users WHERE id = $1`, [termReq.employee_id])
   const isLeadershipTermination = terminatedRole && ['sales_director', 'manager'].includes(terminatedRole.role)
   const ccRoleFilter = isLeadershipTermination
-    ? `AND u.role IN ('ops_manager', 'owner', 'developer')`
-    : `AND u.role IN ('manager', 'ops_manager', 'sales_director', 'owner', 'developer')`
+    ? `AND u.role IN ('ops_manager', 'ops_field_leader', 'owner', 'developer')`
+    : `AND u.role IN ('manager', 'ops_manager', 'ops_field_leader', 'sales_director', 'owner', 'developer')`
 
   const ccRecipients = await query<{ id: string; email: string; full_name: string; role: string; email_ok: boolean; push_ok: boolean }>(
     `SELECT u.id, u.email, u.full_name, u.role,

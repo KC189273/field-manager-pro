@@ -91,7 +91,7 @@ export async function GET() {
   // Notify SDs per org of which DMs were assigned the task
   for (const [orgId, dmNames] of Object.entries(remindedByOrg)) {
     const sds = await query<{ email: string; full_name: string }>(
-      `SELECT email, full_name FROM users WHERE org_id = $1 AND role IN ('sales_director', 'owner', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)`,
+      `SELECT email, full_name FROM users WHERE org_id = $1 AND role IN ('sales_director', 'owner', 'ops_field_leader', 'ops_manager') AND is_active = TRUE AND (is_hidden = FALSE OR is_hidden IS NULL)`,
       [orgId]
     )
     const dmList = dmNames.map(n => `<li style="font-size:14px;color:#374151;padding:4px 0;">${n}</li>`).join('')

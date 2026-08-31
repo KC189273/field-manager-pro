@@ -44,7 +44,7 @@ export async function GET() {
     if (shift.org_id) {
       const opsManagers = await query<{ id: string }>(
         `SELECT id FROM users
-         WHERE org_id = $1 AND role IN ('ops_manager', 'owner', 'sales_director') AND is_active = TRUE`,
+         WHERE org_id = $1 AND role IN ('ops_field_leader', 'ops_manager', 'owner', 'sales_director') AND is_active = TRUE`,
         [shift.org_id]
       )
       for (const u of opsManagers) {

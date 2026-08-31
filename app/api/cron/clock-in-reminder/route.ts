@@ -39,7 +39,7 @@ export async function GET() {
     const notClockedIn = await query<{ id: string }>(`
       SELECT u.id
       FROM users u
-      WHERE u.role IN ('manager', 'ops_manager', 'owner', 'sales_director')
+      WHERE u.role IN ('manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director')
         AND u.is_active = TRUE
         AND NOT EXISTS (
           SELECT 1 FROM shifts s
@@ -168,7 +168,7 @@ export async function GET() {
     const stillClockedIn = await query<{ id: string }>(`
       SELECT u.id
       FROM users u
-      WHERE u.role IN ('manager', 'ops_manager', 'owner', 'sales_director')
+      WHERE u.role IN ('manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director')
         AND u.is_active = TRUE
         AND EXISTS (
           SELECT 1 FROM shifts s

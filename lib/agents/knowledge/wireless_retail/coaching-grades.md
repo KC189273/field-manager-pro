@@ -11,9 +11,9 @@ features:
   - remote-coaching
 permissions:
   - "DMs see only their own grades"
-  - "ops_manager/owner/developer see all DMs"
+  - "ops_field_leader/ops_manager/owner/developer see all DMs"
   - "grades are automatic — no one manually assigns them"
-verified: 2026-08-19
+verified: 2026-08-31
 ---
 # AI Coaching Grades
 
@@ -38,7 +38,7 @@ Grades range from A+ (best) to F (worst). Your monthly average rolls up from all
 - **DM Engagement → Coaching Performance** — monthly dashboard with all your grades, trend, and history
 
 ## Where do leadership see grades?
-Owners, ops managers, and developers go to **DM Engagement → Coaching Performance** to see:
+Owners, field leaders, ops managers, and developers go to **DM Engagement → Coaching Performance** to see:
 - All DMs listed with their current month average grade and trend arrow
 - Click into any DM to see every coaching submission with the full AI feedback
 - Month dropdown to view historical data

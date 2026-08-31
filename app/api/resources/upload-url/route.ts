@@ -4,7 +4,7 @@ import { getReceiptUploadUrl } from '@/lib/s3'
 
 export const dynamic = 'force-dynamic'
 
-const CAN_MANAGE = ['owner', 'ops_manager', 'developer', 'sales_director']
+const CAN_MANAGE = ['owner', 'ops_field_leader', 'ops_manager', 'developer', 'sales_director']
 
 // POST /api/resources/upload-url
 // Returns presigned S3 upload URL for resource documents

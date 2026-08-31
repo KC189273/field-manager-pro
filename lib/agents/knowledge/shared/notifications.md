@@ -9,7 +9,7 @@ features:
 permissions:
   - "25 toggle types"
   - "role-filtered preferences"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Notifications
 
@@ -58,7 +58,7 @@ Go to **Settings** from the nav. Scroll down to the notification toggles. Each t
    - **Android**: Settings > Apps > Field Manager Pro > Notifications > Enable
 
 ## Email Notifications
-Most alert types also send companion emails. Toggle individual types in Settings to control which emails you receive.
+Most alert types also send companion emails to DMs, Ops Field Leaders, and Ops Managers. Toggle individual types in Settings to control which emails you receive.
 
 ## I'm getting too many notifications
 Go to Settings and turn off the specific notification types you don't need. You can keep push on but turn off individual event types (e.g., turn off "Supply Requests" if you don't handle supplies).

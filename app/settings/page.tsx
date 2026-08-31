@@ -7,7 +7,7 @@ import { registerForPushNotifications } from '@/lib/push-client'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Prefs {
@@ -48,20 +48,20 @@ interface PrefDef {
   group: string
 }
 
-const MGR_PLUS: Session['role'][] = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const MGR_PLUS: Session['role'][] = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 const ALL_ROLES: Session['role'][] = ['employee', ...MGR_PLUS]
 
 const PREF_DEFS: PrefDef[] = [
   // Daily & Weekly Reports
-  { key: 'eod_recap', label: 'DM End-of-Day Recaps', description: 'AI-generated daily recap when each DM clocks out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'eod_recap', label: 'DM End-of-Day Recaps', description: 'AI-generated daily recap when each DM clocks out.', roles: ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
   { key: 'morning_digest', label: 'Morning Digest', description: 'Daily morning summary email.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
   { key: 'weekly_report', label: 'Weekly Report', description: 'End-of-week summary report.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
-  { key: 'weekly_coaching', label: 'Weekly Coaching Insights', description: 'AI coaching insights email sent Sundays.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'weekly_coaching', label: 'Weekly Coaching Insights', description: 'AI coaching insights email sent Sundays.', roles: ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
   { key: 'ops_alerts', label: 'App Health / Ops Alerts', description: 'Daily ops check email and health push notifications.', roles: ['developer'], group: 'Reports' },
   { key: 'db_health_report', label: 'DB Health Report', description: 'Monthly database health report with cleanup actions.', roles: ['developer'], group: 'Reports' },
-  { key: 'payroll_report', label: 'Payroll Report', description: 'Weekly payroll Excel spreadsheet email.', roles: ['owner', 'sales_director', 'ops_manager', 'developer'], group: 'Reports' },
+  { key: 'payroll_report', label: 'Payroll Report', description: 'Weekly payroll Excel spreadsheet email.', roles: ['owner', 'sales_director', 'ops_field_leader', 'ops_manager', 'developer'], group: 'Reports' },
   { key: 'monthly_expense_report', label: 'Monthly Expense Report', description: 'Monthly expense Excel spreadsheet email.', roles: ['owner', 'sales_director', 'developer'], group: 'Reports' },
-  { key: 'dm_focus_emails', label: 'DM Tomorrow\'s Focus', description: 'Get a copy of the AI coaching suggestions sent to each DM after they clock out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
+  { key: 'dm_focus_emails', label: 'DM Tomorrow\'s Focus', description: 'Get a copy of the AI coaching suggestions sent to each DM after they clock out.', roles: ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'], group: 'Reports' },
 
   // Tasks & Assignments
   { key: 'task_assigned', label: 'Task Assigned', description: 'When a task is assigned to me.', roles: ALL_ROLES, group: 'Tasks' },
@@ -73,13 +73,13 @@ const PREF_DEFS: PrefDef[] = [
   { key: 'time_off_request', label: 'Time Off Requests', description: 'Submissions and approval decisions.', roles: ALL_ROLES, group: 'Schedule' },
   { key: 'shift_swaps', label: 'Shift Swaps', description: 'Swap requests and approvals.', roles: ALL_ROLES, group: 'Schedule' },
   { key: 'clock_events', label: 'Clock Events', description: 'Clock reminders, auto-clockout, OT warnings.', roles: ALL_ROLES, group: 'Schedule' },
-  { key: 'dm_clockout_alerts', label: 'DM Clock-Out Alerts', description: 'Push notification when a DM clocks out.', roles: ['ops_manager', 'owner', 'sales_director', 'developer'], group: 'Schedule' },
+  { key: 'dm_clockout_alerts', label: 'DM Clock-Out Alerts', description: 'Push notification when a DM clocks out.', roles: ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'], group: 'Schedule' },
 
   // Operations
   { key: 'checklist_submitted', label: 'Checklists', description: 'Opening/closing checklist submissions.', roles: ['manager'], group: 'Operations' },
   { key: 'accountability_docs', label: 'Accountability Docs', description: 'New docs, approvals, escalations.', roles: MGR_PLUS, group: 'Operations' },
   { key: 'flag_created', label: 'Overtime Flags', description: 'When employees hit overtime thresholds.', roles: MGR_PLUS, group: 'Operations' },
-  { key: 'expense_submitted', label: 'Expenses', description: 'Expense submissions for approval.', roles: ['owner', 'sales_director', 'ops_manager'], group: 'Operations' },
+  { key: 'expense_submitted', label: 'Expenses', description: 'Expense submissions for approval.', roles: ['owner', 'sales_director', 'ops_field_leader', 'ops_manager'], group: 'Operations' },
   { key: 'supply_requests', label: 'Supply Requests', description: 'Supply orders and escalations.', roles: MGR_PLUS, group: 'Operations' },
   { key: 'facility_tickets', label: 'Facility Tickets', description: 'Maintenance requests and updates.', roles: MGR_PLUS, group: 'Operations' },
   { key: 'payroll_alerts', label: 'Payroll', description: 'Payroll reminders and approval requests.', roles: ['owner', 'sales_director', 'developer'], group: 'Operations' },

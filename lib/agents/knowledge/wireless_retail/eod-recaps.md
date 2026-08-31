@@ -8,7 +8,7 @@ features:
 permissions:
   - "generated on DM clock-out"
   - "ops+ can toggle notification preference"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # AI End-of-Day Recaps
 
@@ -26,7 +26,7 @@ The system analyzes GPS breadcrumbs from the DM's shift:
 
 ## Who receives the EOD Recap?
 - The **DM** who clocked out receives it directly.
-- **Ops managers, SD, Owner, Developer** can receive copies if they have the "DM End-of-Day Recaps" notification preference enabled in Settings.
+- **Ops Field Leaders, Ops Managers, SD, Owner, Developer** can receive copies if they have the "DM End-of-Day Recaps" notification preference enabled in Settings.
 
 ## Can I turn it off?
 The recap always generates for the DM on clock-out. Leadership can toggle the "DM End-of-Day Recaps" notification in **Settings > Notifications** to stop receiving copies.

@@ -9,7 +9,7 @@ interface Session {
   id: string
   fullName: string
   email: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
   org_id?: string | null
 }
 
@@ -65,7 +65,7 @@ function todayLocal(): string {
 }
 
 const canViewAll = (role: string) =>
-  role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
+  role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
 const canManageStores = (role: string) =>
   role === 'owner' || role === 'sales_director' || role === 'developer'

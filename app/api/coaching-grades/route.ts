@@ -4,12 +4,12 @@ import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { scoreToGrade } from '@/lib/coaching-grader'
 
-const canViewAll = (role: Role) => role === 'ops_manager' || isOwner(role) || role === 'developer'
+const canViewAll = (role: Role) => role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role) || role === 'developer'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)) {
+  if (!['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

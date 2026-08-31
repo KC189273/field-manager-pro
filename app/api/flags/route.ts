@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
       FROM flags f JOIN users u ON u.id = f.user_id
       WHERE u.manager_id = $1 AND f.resolved = $2${ageFilter} ORDER BY f.created_at DESC
     `
-  } else if (session.role === 'ops_manager' || isOwner(session.role) || session.role === 'developer') {
+  } else if (session.role === 'ops_field_leader' || session.role === 'ops_manager' || isOwner(session.role) || session.role === 'developer') {
     params = [resolved]
     const orgClause = appendOrgFilter(orgFilter, params)
     sql = `

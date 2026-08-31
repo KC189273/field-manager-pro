@@ -16,7 +16,7 @@ permissions:
   - "SD reviews/approves each DM"
   - "SD can edit after lock"
   - "owner gets final notification"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Payroll
 
@@ -46,7 +46,7 @@ If you're a DM who is hourly, your personal hours also appear in a **DM Timecard
 **DMs cannot edit their own timecards.** If you need a correction to your own hours, contact the Sales Director.
 
 ## How do I download the ADP CSV?
-SD, Owner, Ops Manager, and Developer can download the payroll CSV:
+SD, Owner, Field Leader, Ops Manager, and Developer can download the payroll CSV:
 1. Go to **Payroll** and scroll to **Download Payroll CSV**.
 2. Set the date range (From / To).
 3. Tap **Download Full ADP CSV**.

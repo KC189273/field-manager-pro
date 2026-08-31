@@ -15,7 +15,7 @@ permissions:
   - "employees see My Schedule only"
   - "DMs build and publish"
   - "SD+ view all"
-verified: 2026-07-22
+verified: 2026-08-31
 ---
 # Scheduling
 
@@ -54,4 +54,4 @@ The schedule must be **published** first. Draft schedules are only visible to th
 |------|--------|
 | Employee | Cannot see Store Schedule — they use My Schedule |
 | DM (manager) | Can build and publish for their team |
-| Ops Manager, SD, Owner, Developer | Can view all schedules across the org |
+| Field Leader, Ops Manager, SD, Owner, Developer | Can view all schedules across the org |

@@ -30,7 +30,7 @@ function Linkified({ text, className }: { text: string; className?: string }) {
   return <p className={className}>{parts}</p>
 }
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
   id: string
@@ -94,7 +94,7 @@ const MONTH_NAMES = ['January','February','March','April','May','June',
 const DAY_HEADERS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
 const HAS_OWN_CALENDAR: Role[] = ['manager', 'sales_director']
-const CAN_VIEW_TEAM: Role[]    = ['ops_manager', 'owner', 'developer', 'sales_director']
+const CAN_VIEW_TEAM: Role[]    = ['ops_field_leader', 'ops_manager', 'owner', 'developer', 'sales_director']
 
 function getCat(key: string) {
   return CATEGORIES.find(c => c.key === key) ?? CATEGORIES[4]

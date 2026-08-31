@@ -7,7 +7,7 @@ import { startNativeTracking, stopNativeTracking, isCapacitor } from '@/lib/gps-
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface TodayShift {
@@ -418,7 +418,7 @@ export default function ClockPage() {
         )}
 
         {/* Geofence Override — DMs+ can clock in any employee with a reason */}
-        {!clocked && ['manager', 'ops_manager', 'owner', 'developer'].includes(session?.role ?? '') && (
+        {!clocked && ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(session?.role ?? '') && (
           <div className="w-full mb-4">
             {!overrideRequesting ? (
               <button

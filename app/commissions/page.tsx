@@ -281,7 +281,7 @@ export default function CommissionsPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 pb-20 pt-14">
-      <NavBar role={session.role as 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'} fullName={session.fullName} />
+      <NavBar role={session.role as 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'} fullName={session.fullName} />
 
       {/* Tab bar */}
       <div className="flex border-b border-gray-800 bg-gray-950 sticky top-14 z-30">

@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Shift {
@@ -28,7 +28,7 @@ interface User {
   username: string
 }
 
-const isManagerRole = (role: string) => role === 'manager' || role === 'ops_manager' || role === 'developer'
+const isManagerRole = (role: string) => role === 'manager' || role === 'ops_field_leader' || role === 'ops_manager' || role === 'developer'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Chicago' })

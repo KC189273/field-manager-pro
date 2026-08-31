@@ -29,6 +29,7 @@ const ROLE_OPTIONS = [
   { value: 'owner', label: 'Owner' },
   { value: 'sales_director', label: 'Sales Director' },
   { value: 'ops_manager', label: 'Ops Manager' },
+  { value: 'ops_field_leader', label: 'Field Leader' },
   { value: 'manager', label: 'Manager' },
   { value: 'employee', label: 'Employee' },
 ]

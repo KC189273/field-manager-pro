@@ -4,7 +4,7 @@ import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
 const canViewAll = (role: string) =>
-  role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
+  role === 'ops_field_leader' || role === 'ops_manager' || role === 'owner' || role === 'sales_director' || role === 'developer'
 
 let ensured = false
 async function ensureTable() {

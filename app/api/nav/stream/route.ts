@@ -5,7 +5,7 @@ import { query, queryOne } from '@/lib/db'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-const CHAT_ROLES = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CHAT_ROLES = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms))

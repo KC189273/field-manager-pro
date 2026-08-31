@@ -4,7 +4,7 @@ import { getReceiptUploadUrl } from '@/lib/s3'
 
 export const dynamic = 'force-dynamic'
 
-const CAN_ACCESS = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer']
+const CAN_ACCESS = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer']
 
 // POST /api/calendar/upload-url
 // Returns presigned S3 upload URL for calendar event attachments

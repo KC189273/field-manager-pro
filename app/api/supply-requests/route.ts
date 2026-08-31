@@ -304,7 +304,7 @@ export async function PATCH(req: NextRequest) {
     ).catch(() => {})
 
   } else if (action === 'delivered') {
-    const canDeliver = ['manager', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
+    const canDeliver = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role)
     if (!canDeliver) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (session.role === 'manager' && row.manager_id !== session.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     if (row.status !== 'approved') return NextResponse.json({ error: 'Must be approved first' }, { status: 400 })

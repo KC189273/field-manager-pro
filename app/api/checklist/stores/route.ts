@@ -40,7 +40,7 @@ export async function GET() {
       ORDER BY l.address
     `, [session.id])
   } else {
-    // ops_manager, sales_director, owner, developer — all active stores
+    // ops_field_leader, ops_manager, sales_director, owner, developer — all active stores
     stores = await query<StoreRow>(`
       SELECT DISTINCT ON (l.id) l.id, l.address,
              m.id AS dm_id, m.full_name AS dm_name, m.email AS dm_email

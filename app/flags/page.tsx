@@ -7,7 +7,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 }
 
 interface Flag {
@@ -90,7 +90,7 @@ export default function FlagsPage() {
 
   useEffect(() => { loadFlags(showResolved) }, [showResolved])
 
-  const isManager = session && (session.role === 'manager' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer')
+  const isManager = session && (session.role === 'manager' || session.role === 'ops_field_leader' || session.role === 'ops_manager' || session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer')
 
   function openResolve(flag: Flag) {
     setActiveFlag(flag)

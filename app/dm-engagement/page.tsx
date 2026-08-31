@@ -141,7 +141,7 @@ export default function DmEngagementPage() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d?.role) { router.push('/login'); return }
-      if (!['ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) {
+      if (!['ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) {
         router.push('/dashboard'); return
       }
       setSession(d)

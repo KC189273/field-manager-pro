@@ -10,6 +10,32 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+    // ── One-time reminders (date-based, auto-skip after the date) ──
+    const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+    if (todayCST === '2026-08-31') {
+      const reminderHtml = `<div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto">
+        <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0">
+          <h1 style="color:white;margin:0;font-size:18px">Reminder: DM Store Geography Changes</h1>
+          <p style="color:#e9d5ff;margin:4px 0 0;font-size:13px">Tomorrow (Sept 1) — store swaps take effect</p>
+        </div>
+        <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:20px;background:white">
+          <p style="font-size:14px;color:#111827;line-height:1.7;margin:0 0 16px">
+            This is your reminder that <strong>September 1st store geography changes</strong> go into effect tomorrow. You need to:
+          </p>
+          <ul style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 16px;padding-left:20px">
+            <li>Swap the two DMs' store assignments</li>
+            <li>Move stores between DMs as planned</li>
+            <li>Update DM-store assignments on the Team page</li>
+            <li>Verify geofencing is set correctly on any new/moved stores</li>
+          </ul>
+          <p style="font-size:13px;color:#6b7280;margin:0">
+            Manage stores at <a href="https://fieldmanagerpro.app/store-locations" style="color:#7c3aed">Store Locations</a> · Manage DM assignments on <a href="https://fieldmanagerpro.app/team" style="color:#7c3aed">Team</a>
+          </p>
+        </div>
+      </div>`
+      await sendEmail('sg2425231@gmail.com', 'Reminder: DM Store Geography Changes — Sept 1', reminderHtml).catch(() => {})
+    }
+
     type ActionItem = { severity: 'critical' | 'warning' | 'info'; title: string; detail: string; action: string }
     const items: ActionItem[] = []
 

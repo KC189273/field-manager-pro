@@ -7,13 +7,13 @@ features:
   - role-hierarchy
   - feature-access-by-role
 permissions:
-  - "employee→manager→ops_manager→sales_director→owner→developer"
-verified: 2026-07-22
+  - "employee→manager→ops_field_leader→ops_manager→sales_director→owner→developer"
+verified: 2026-08-31
 ---
 # Roles & Permissions
 
 ## Role Hierarchy (Wireless Retail)
-From least to most access: **Employee → Manager (DM) → Ops Manager → Sales Director → Owner → Developer**
+From least to most access: **Employee → Manager (DM) → Ops Field Leader → Ops Manager → Sales Director → Owner → Developer**
 
 ### Employee
 - Clock in/out, breaks
@@ -42,13 +42,16 @@ Everything an employee can do, plus:
 - Payroll (submit their team's timecards)
 - **Cannot**: see Live Map, approve expenses, see org-wide data, edit their own timecards
 
-### Ops Manager
+### Ops Field Leader
 Everything a DM can do, plus:
 - View all data org-wide (not scoped to their team)
 - DM Engagement dashboard
 - App Health dashboard
 - Approve supply/facility requests
 - **Cannot**: approve expenses, create accountability docs (view only)
+
+### Ops Manager
+Everything an Ops Field Leader can do, plus owner-level elevated access (single designated person).
 
 ### Sales Director
 Everything an ops manager can do, plus:

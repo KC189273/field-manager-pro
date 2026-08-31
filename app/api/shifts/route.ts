@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   // DM edit stats — SD/owner/developer only
   const stats = searchParams.get('stats')
   if (stats === 'dm-edits') {
-    if (!['sales_director', 'ops_manager', 'owner', 'developer'].includes(session.role)) {
+    if (!['sales_director', 'ops_field_leader', 'ops_manager', 'owner', 'developer'].includes(session.role)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
     const orgFilter = await getOrgFilter(session)
@@ -244,7 +244,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Timecard locking check (owners and developers can always add entries)
-  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
+  if (!['owner', 'sales_director', 'ops_field_leader', 'developer'].includes(session.role)) {
     const clockInDate = new Date(clockIn).toISOString().split('T')[0]
     if (await isTimecardLocked(userId, clockInDate)) {
       return NextResponse.json({ error: 'Timecards for this period are locked — use Payroll Adjustment expense instead' }, { status: 403 })
@@ -333,7 +333,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   // Timecard locking check (owners, SD, and developers can always correct)
-  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
+  if (!['owner', 'sales_director', 'ops_field_leader', 'developer'].includes(session.role)) {
     const shiftRecord = await queryOne<{ user_id: string; clock_in_at: string }>('SELECT user_id, clock_in_at FROM shifts WHERE id = $1', [shiftId])
     if (shiftRecord) {
       const shiftDate = new Date(shiftRecord.clock_in_at).toISOString().split('T')[0]
@@ -439,7 +439,7 @@ export async function DELETE(req: NextRequest) {
   }
 
   // Timecard locking check (owners and developers bypass)
-  if (!['owner', 'sales_director', 'developer'].includes(session.role)) {
+  if (!['owner', 'sales_director', 'ops_field_leader', 'developer'].includes(session.role)) {
     const shiftDate = new Date(shiftRecord.clock_in_at).toISOString().split('T')[0]
     if (await isTimecardLocked(shiftRecord.user_id, shiftDate)) {
       return NextResponse.json({ error: 'Timecards for this period are locked' }, { status: 403 })

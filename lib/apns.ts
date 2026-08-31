@@ -311,7 +311,7 @@ export async function sendPushToUser(
       [userId, title, body, notificationType ?? null]
     ).catch(() => {})
 
-    // Companion email for DMs and ops managers — fire-and-forget
+    // Companion email for DMs, ops managers, and field leaders — fire-and-forget
     if (!notificationType || !EMAIL_EXCLUDED_TYPES.has(notificationType)) {
       sendPushCompanionEmail(userId, title, body).catch(() => {})
     }
@@ -322,7 +322,7 @@ export async function sendPushToUser(
 
 /**
  * Send a companion email alongside a push notification.
- * Only sends to managers and ops_managers with email enabled.
+ * Only sends to managers, ops_managers, and ops_field_leaders with email enabled.
  * Uses dynamic import so the Resend SDK is only loaded when actually needed.
  */
 async function sendPushCompanionEmail(userId: string, title: string, body: string): Promise<void> {
@@ -332,7 +332,7 @@ async function sendPushCompanionEmail(userId: string, title: string, body: strin
      FROM users u
      LEFT JOIN notification_preferences np ON np.user_id = u.id
      WHERE u.id = $1 AND u.is_active = TRUE
-       AND u.role IN ('manager', 'ops_manager')`,
+       AND u.role IN ('manager', 'ops_manager', 'ops_field_leader')`,
     [userId]
   )
   if (!user) return // not a DM/ops, or inactive — skip entirely

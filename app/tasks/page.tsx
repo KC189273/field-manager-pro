@@ -32,7 +32,7 @@ function Linkified({ text, className }: { text: string; className?: string }) {
   return <p className={className}>{parts}</p>
 }
 
-type Role = 'employee' | 'manager' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
 
 interface Session {
   id: string
@@ -187,7 +187,7 @@ export default function TasksPage() {
   const weekStart = toDateStr(monday)
   const weekLabel = formatWeekRange(monday)
 
-  const canCreate = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer' || session?.role === 'manager' || session?.role === 'ops_manager'
+  const canCreate = session?.role === 'owner' || session?.role === 'sales_director' || session?.role === 'developer' || session?.role === 'manager' || session?.role === 'ops_field_leader' || session?.role === 'ops_manager'
   const canCompleteTask = (task: Task) =>
     session?.id === task.assignee_id || session?.id === task.created_by || canCreate
 
@@ -565,7 +565,7 @@ export default function TasksPage() {
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
   const assigneeManagerMap = new Map(assignableUsers.map(u => [u.id, u.manager_id]))
-  const dmUsers = assignableUsers.filter(u => u.role === 'manager' || u.role === 'ops_manager')
+  const dmUsers = assignableUsers.filter(u => u.role === 'manager' || u.role === 'ops_field_leader' || u.role === 'ops_manager')
   const empUsers = assignableUsers.filter(u => u.role === 'employee')
 
   const filteredTasks = (() => {

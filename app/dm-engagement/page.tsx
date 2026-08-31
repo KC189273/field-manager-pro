@@ -123,7 +123,10 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'metrics'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos'>('coaching')
+  const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
+  const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; withPhoto: number; withoutPhoto: number; photoRate: number; byDm: Record<string, { total: number; withPhoto: number }>; missing: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string }> } | null>(null)
+  const [photoLoading, setPhotoLoading] = useState(false)
 
   // Coaching state
   const [coachingDms, setCoachingDms] = useState<CoachingDm[]>([])
@@ -175,6 +178,15 @@ export default function DmEngagementPage() {
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
+
+  async function loadPhotoCompliance(d?: string) {
+    setPhotoLoading(true)
+    try {
+      const res = await fetch(`/api/reports/photo-compliance?date=${d || photoDate}`)
+      if (res.ok) setPhotoData(await res.json())
+    } catch { /* ignore */ }
+    finally { setPhotoLoading(false) }
+  }
 
   function openDmCoaching(dmId: string, dmName: string, month?: string) {
     setSelectedDmId(dmId)
@@ -241,6 +253,12 @@ export default function DmEngagementPage() {
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'metrics' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Activity Metrics
+          </button>
+          <button
+            onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'photos' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Photo Compliance
           </button>
         </div>
 
@@ -612,6 +630,100 @@ export default function DmEngagementPage() {
         )}
         </>
         )}
+        {/* ── Photo Compliance Tab ── */}
+        {mainTab === 'photos' && (
+          <div className="space-y-4">
+            <div className="flex items-end gap-2 mb-4">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">Date</label>
+                <input type="date" value={photoDate} onChange={e => setPhotoDate(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+              </div>
+              <button onClick={() => loadPhotoCompliance(photoDate)} disabled={photoLoading}
+                className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+                {photoLoading ? '...' : 'Load'}
+              </button>
+            </div>
+
+            {photoLoading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading...</p>
+            ) : !photoData ? (
+              <p className="text-center text-gray-600 py-10 text-sm">Select a date and click Load</p>
+            ) : (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-white">{photoData.totalShifts}</p>
+                    <p className="text-[10px] text-gray-500">Total Clock-ins</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-green-400">{photoData.withPhoto}</p>
+                    <p className="text-[10px] text-gray-500">With Photo</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className={`text-lg font-bold ${photoData.withoutPhoto > 0 ? 'text-red-400' : 'text-white'}`}>{photoData.withoutPhoto}</p>
+                    <p className="text-[10px] text-gray-500">Missing Photo</p>
+                  </div>
+                </div>
+
+                {/* Compliance rate bar */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400">Compliance Rate</p>
+                    <p className={`text-sm font-bold ${photoData.photoRate >= 80 ? 'text-green-400' : photoData.photoRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{photoData.photoRate}%</p>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div className={`h-2 rounded-full ${photoData.photoRate >= 80 ? 'bg-green-500' : photoData.photoRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${photoData.photoRate}%` }} />
+                  </div>
+                </div>
+
+                {/* By DM breakdown */}
+                <div>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">By DM</p>
+                  <div className="space-y-2">
+                    {Object.entries(photoData.byDm).sort((a, b) => {
+                      const rateA = a[1].total > 0 ? a[1].withPhoto / a[1].total : 0
+                      const rateB = b[1].total > 0 ? b[1].withPhoto / b[1].total : 0
+                      return rateA - rateB
+                    }).map(([dm, data]) => {
+                      const rate = data.total > 0 ? Math.round((data.withPhoto / data.total) * 100) : 0
+                      return (
+                        <div key={dm} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-white">{dm}</p>
+                            <p className="text-xs text-gray-500">{data.withPhoto}/{data.total} with photo</p>
+                          </div>
+                          <span className={`text-sm font-bold ${rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{rate}%</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Missing photos list */}
+                {photoData.missing.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Missing Photos ({photoData.missing.length})</p>
+                    <div className="space-y-1">
+                      {photoData.missing.map((m, i) => (
+                        <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-white">{m.full_name}</p>
+                            <p className="text-xs text-gray-500">{m.store_address || 'No store'} · {m.manager_name || 'Unassigned'}</p>
+                          </div>
+                          <p className="text-xs text-gray-600">{new Date(m.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   )

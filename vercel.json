@@ -147,6 +147,10 @@
     {
       "path": "/api/cron/coaching-weekly-summary",
       "schedule": "0 0 * * 1"
+    },
+    {
+      "path": "/api/cron/unmanned-store",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

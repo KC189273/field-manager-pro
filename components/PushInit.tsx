@@ -13,7 +13,7 @@ export default function PushInit() {
     // This prevents the notification dialog from firing on the login screen.
     fetch('/api/auth/me')
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d?.id) registerForPushNotifications() })
+      .then(d => { if (d?.id) registerForPushNotifications(true) })
       .catch(() => {})
   }, [])
   return null

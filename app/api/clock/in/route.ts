@@ -36,15 +36,16 @@ export async function POST(req: NextRequest) {
       if (!storeId) {
         return NextResponse.json({ error: 'Please select which store you are working at.' }, { status: 400 })
       }
-      const store = await queryOne<{ lat: number; lng: number; address: string }>(
-        `SELECT lat, lng, address FROM dm_store_locations WHERE id = $1`,
+      const store = await queryOne<{ lat: number; lng: number; address: string; geofence_radius_ft: number | null }>(
+        `SELECT lat, lng, address, geofence_radius_ft FROM dm_store_locations WHERE id = $1`,
         [storeId]
       )
       if (store && store.lat && store.lng) {
+        const radiusFt = store.geofence_radius_ft ?? geo.radius_ft
         const distFt = haversineDistanceFt(lat, lng, store.lat, store.lng)
-        if (distFt > geo.radius_ft) {
+        if (distFt > radiusFt) {
           return NextResponse.json({
-            error: `You are too far from ${store.address} to clock in. You must be within ${geo.radius_ft} feet of the store. (Currently ${Math.round(distFt)} ft away)`,
+            error: `You are too far from ${store.address} to clock in. You must be within ${radiusFt} feet of the store. (Currently ${Math.round(distFt)} ft away)`,
             distanceFt: Math.round(distFt),
             geofenceBlocked: true,
             storeAddress: store.address,

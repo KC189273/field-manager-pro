@@ -64,13 +64,14 @@ export async function POST(req: NextRequest) {
     try {
       const geo = await getGeofenceSettings(session.org_id)
       if (geo.enabled) {
-        const store = await queryOne<{ lat: number; lng: number; address: string }>(
-          `SELECT lat, lng, address FROM dm_store_locations WHERE id = $1`,
+        const store = await queryOne<{ lat: number; lng: number; address: string; geofence_radius_ft: number | null }>(
+          `SELECT lat, lng, address, geofence_radius_ft FROM dm_store_locations WHERE id = $1`,
           [shift.store_location_id]
         )
         if (store && store.lat && store.lng) {
+          const storeRadius = store.geofence_radius_ft ?? geo.radius_ft
           const dist = haversineDistanceFt(lat, lng, store.lat, store.lng)
-          if (dist > geo.radius_ft) {
+          if (dist > storeRadius) {
             // Check how long they've been outside the geofence
             const recentCrumbs = await query<{ lat: number; lng: number; recorded_at: string }>(
               `SELECT lat, lng, recorded_at FROM gps_breadcrumbs
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
             let firstOutsideAt: Date | null = null
             for (const crumb of recentCrumbs) {
               const crumbDist = haversineDistanceFt(Number(crumb.lat), Number(crumb.lng), store.lat, store.lng)
-              if (crumbDist <= geo.radius_ft) break
+              if (crumbDist <= storeRadius) break
               firstOutsideAt = new Date(crumb.recorded_at)
             }
 

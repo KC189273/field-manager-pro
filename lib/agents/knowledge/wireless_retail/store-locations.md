@@ -44,3 +44,15 @@ An automated check runs every 30 minutes. If a store has no one clocked in durin
 
 ## GPS & Geofencing
 Store GPS coordinates are required for geofencing (clock-in radius enforcement). When adding a store, coordinates are auto-detected from the address. If geofencing is enabled in Settings, employees must be within the configured radius to clock in.
+
+### Per-Store Geofence Radius
+Each store can have its own **custom geofence radius** (in feet), set on the Store Locations edit form. This overrides the org-wide default from Settings → Geofence. If no custom radius is set, the org default is used (typically 300 ft).
+
+**How to set it:** Store Locations → tap a store → Edit → "Geofence Radius" field → enter distance in feet → Save. Click "Reset to default" to clear the custom radius.
+
+**When to use it:**
+- **Mall stores or strip mall locations** where GPS signal bounces — set a larger radius (e.g., 500-800 ft)
+- **Stores in large buildings** where GPS is less accurate — larger radius
+- **Outdoor or standalone stores** with clear GPS signal — the default 300 ft usually works
+
+Both clock-in AND auto clock-out geofence checks use the per-store radius.

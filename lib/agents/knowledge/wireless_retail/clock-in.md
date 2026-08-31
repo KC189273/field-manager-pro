@@ -33,9 +33,11 @@ verified: 2026-08-31
 3. Tap **Clock In**. Your GPS location and time are recorded automatically.
 4. You'll see a confirmation with your clock-in time and store.
 
-**Geofencing:** You must be within **300 feet** of the store you selected to clock in. If you're too far away, you'll see a message showing how far you are. Move closer and try again. GPS must be enabled — if location can't be determined, clock-in is blocked.
+**Geofencing:** You must be within the store's geofence radius to clock in. The default is **300 feet** (set org-wide in Settings → Geofence), but each store can have its own custom radius set on the **Store Locations** page. If you're too far away, you'll see a message showing how far you are and the required distance. Move closer and try again. GPS must be enabled — if location can't be determined, clock-in is blocked.
 
 > DMs, SDs, owners, field leaders, and ops managers are **not** subject to the geofence check.
+
+**Per-store geofence radius:** Owners, Ops Managers, and developers can set a custom geofence radius for individual stores on the Store Locations page (More menu → Store Locations → tap a store → edit). If no custom radius is set, the org-wide default from Settings is used. This is useful for stores in malls, strip malls, or buildings with GPS interference where a larger radius may be needed.
 
 ## How do I clock out?
 1. Tap **Clock** from the bottom nav.

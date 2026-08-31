@@ -60,7 +60,7 @@ export default function DmSchedulesPage() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d) { router.replace('/login'); return }
-      if (!['sales_director', 'owner', 'developer'].includes(d.role)) { router.replace('/dashboard'); return }
+      if (!['ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) { router.replace('/dashboard'); return }
       setSession(d)
     })
   }, [router])

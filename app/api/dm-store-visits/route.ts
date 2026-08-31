@@ -523,6 +523,31 @@ export async function POST(req: NextRequest) {
       })()
     }
 
+    // Flag when DM visits without coaching
+    if (body.visit_type === 'quick') {
+      const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+      query(
+        `INSERT INTO flags (user_id, type, date, detail, store_location_id)
+         VALUES ($1, 'visit_without_coaching', $2, $3, $4)`,
+        [session.id, todayCST,
+         `${session.fullName} submitted a store visit at ${body.store_address} without coaching.`,
+         body.store_location_id || null]
+      ).catch(() => {})
+
+      // Notify leadership
+      const { getSDOrFallback } = await import('@/lib/sd-fallback')
+      const leaders = await getSDOrFallback(session.org_id)
+      if (leaders.length) {
+        const { sendPushToUsers } = await import('@/lib/apns')
+        sendPushToUsers(
+          leaders.map(l => l.id),
+          'Visit Without Coaching',
+          `${session.fullName} visited ${body.store_address.split(',')[0]} without submitting coaching.`,
+          'flag_created'
+        ).catch(() => {})
+      }
+    }
+
     return NextResponse.json({ id: visit.id })
   }
 

@@ -123,10 +123,15 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp'>('coaching')
   const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
   const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; withPhoto: number; withoutPhoto: number; photoRate: number; byDm: Record<string, { total: number; withPhoto: number }>; missing: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string }> } | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
+
+  // Coaching compliance state
+  const [coachCompRange, setCoachCompRange] = useState('7')
+  const [coachCompData, setCoachCompData] = useState<{ dmStats: Array<{ dm_id: string; dm_name: string; total_visits: number; visits_with_coaching: number; visits_without_coaching: number; compliance_rate: number }>; totals: { totalVisits: number; withCoaching: number; withoutCoaching: number; overallRate: number }; todayMissing: Array<{ dm_name: string; store_address: string; submitted_at: string }> } | null>(null)
+  const [coachCompLoading, setCoachCompLoading] = useState(false)
 
   // Coaching state
   const [coachingDms, setCoachingDms] = useState<CoachingDm[]>([])
@@ -178,6 +183,15 @@ export default function DmEngagementPage() {
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
+
+  async function loadCoachingCompliance(r?: string) {
+    setCoachCompLoading(true)
+    try {
+      const res = await fetch(`/api/reports/coaching-compliance?range=${r || coachCompRange}`)
+      if (res.ok) setCoachCompData(await res.json())
+    } catch { /* ignore */ }
+    finally { setCoachCompLoading(false) }
+  }
 
   async function loadPhotoCompliance(d?: string) {
     setPhotoLoading(true)
@@ -258,7 +272,13 @@ export default function DmEngagementPage() {
             onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'photos' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
-            Photo Compliance
+            Photos
+          </button>
+          <button
+            onClick={() => { setMainTab('coaching_comp'); if (!coachCompData) loadCoachingCompliance() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching_comp' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Coaching
           </button>
         </div>
 
@@ -630,6 +650,97 @@ export default function DmEngagementPage() {
         )}
         </>
         )}
+        {/* ── Coaching Compliance Tab ── */}
+        {mainTab === 'coaching_comp' && (
+          <div className="space-y-4">
+            <div className="flex items-end gap-2 mb-4">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">Range</label>
+                <select value={coachCompRange} onChange={e => setCoachCompRange(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                  <option value="7">Last 7 days</option>
+                  <option value="14">Last 14 days</option>
+                  <option value="30">Last 30 days</option>
+                </select>
+              </div>
+              <button onClick={() => loadCoachingCompliance(coachCompRange)} disabled={coachCompLoading}
+                className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+                {coachCompLoading ? '...' : 'Load'}
+              </button>
+            </div>
+
+            {coachCompLoading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading...</p>
+            ) : !coachCompData ? (
+              <p className="text-center text-gray-600 py-10 text-sm">Select a range and click Load</p>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-white">{coachCompData.totals.totalVisits}</p>
+                    <p className="text-[10px] text-gray-500">Total Visits</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-green-400">{coachCompData.totals.withCoaching}</p>
+                    <p className="text-[10px] text-gray-500">With Coaching</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className={`text-lg font-bold ${coachCompData.totals.withoutCoaching > 0 ? 'text-red-400' : 'text-white'}`}>{coachCompData.totals.withoutCoaching}</p>
+                    <p className="text-[10px] text-gray-500">Without Coaching</p>
+                  </div>
+                </div>
+
+                {/* Rate bar */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400">Coaching Compliance Rate</p>
+                    <p className={`text-sm font-bold ${coachCompData.totals.overallRate >= 90 ? 'text-green-400' : coachCompData.totals.overallRate >= 70 ? 'text-amber-400' : 'text-red-400'}`}>{coachCompData.totals.overallRate}%</p>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div className={`h-2 rounded-full ${coachCompData.totals.overallRate >= 90 ? 'bg-green-500' : coachCompData.totals.overallRate >= 70 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${coachCompData.totals.overallRate}%` }} />
+                  </div>
+                </div>
+
+                {/* Per-DM breakdown */}
+                <div>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">By DM</p>
+                  <div className="space-y-2">
+                    {coachCompData.dmStats.map(dm => (
+                      <div key={dm.dm_id} className={`bg-gray-900 border rounded-xl px-4 py-2.5 flex items-center justify-between ${dm.compliance_rate < 70 ? 'border-red-800/40' : dm.compliance_rate < 100 ? 'border-amber-800/30' : 'border-gray-800'}`}>
+                        <div>
+                          <p className="text-sm font-medium text-white">{dm.dm_name}</p>
+                          <p className="text-xs text-gray-500">{dm.visits_with_coaching}/{dm.total_visits} visits with coaching</p>
+                        </div>
+                        <span className={`text-sm font-bold ${dm.compliance_rate >= 90 ? 'text-green-400' : dm.compliance_rate >= 70 ? 'text-amber-400' : 'text-red-400'}`}>{dm.compliance_rate}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Today's missing */}
+                {coachCompData.todayMissing.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Today&apos;s Visits Without Coaching ({coachCompData.todayMissing.length})</p>
+                    <div className="space-y-1">
+                      {coachCompData.todayMissing.map((m, i) => (
+                        <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2 flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-white">{m.dm_name}</p>
+                            <p className="text-xs text-gray-500">{m.store_address}</p>
+                          </div>
+                          <p className="text-xs text-gray-600">{new Date(m.submitted_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* ── Photo Compliance Tab ── */}
         {mainTab === 'photos' && (
           <div className="space-y-4">

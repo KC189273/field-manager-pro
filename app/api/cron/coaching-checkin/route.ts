@@ -68,5 +68,45 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, nudged, escalated, checked: dmsNoCoaching.length })
+  // ── Same-day visit-without-coaching check ──
+  // If a DM submitted store visits today but zero coaching, nudge them
+  let sameDayNudged = 0
+  const todayVisitors = await query<{
+    dm_id: string; dm_name: string; total_visits: number; with_coaching: number; stores_without: string
+  }>(`
+    SELECT u.id as dm_id, u.full_name as dm_name,
+      COUNT(*)::int as total_visits,
+      COUNT(*) FILTER (WHERE v.visit_type IN ('quick_coaching', 'remote_coaching'))::int as with_coaching,
+      STRING_AGG(CASE WHEN v.visit_type NOT IN ('quick_coaching', 'remote_coaching') THEN SPLIT_PART(v.store_address, ',', 1) END, ', ') as stores_without
+    FROM dm_store_visits v
+    JOIN users u ON u.id = v.submitted_by_id
+    WHERE (v.submitted_at AT TIME ZONE 'America/Chicago')::date = CURRENT_DATE
+      AND u.role = 'manager' AND u.is_active = TRUE
+    GROUP BY u.id, u.full_name
+    HAVING COUNT(*) FILTER (WHERE v.visit_type NOT IN ('quick_coaching', 'remote_coaching')) > 0
+  `)
+
+  for (const dm of todayVisitors) {
+    if (dm.with_coaching === 0) {
+      // Visited but did zero coaching — strong nudge
+      sendPushToUser(
+        dm.dm_id,
+        'Coaching Required',
+        `You visited ${dm.total_visits} store${dm.total_visits > 1 ? 's' : ''} today without submitting coaching. Every visit should include a coaching session.`,
+        'task_assigned'
+      ).catch(() => {})
+      sameDayNudged++
+    } else if (dm.with_coaching < dm.total_visits) {
+      // Some coaching but not all — gentle reminder
+      sendPushToUser(
+        dm.dm_id,
+        'Coaching Reminder',
+        `You coached at ${dm.with_coaching} of ${dm.total_visits} visits today. Submit coaching for all store visits: ${dm.stores_without}`,
+        'task_assigned'
+      ).catch(() => {})
+      sameDayNudged++
+    }
+  }
+
+  return NextResponse.json({ ok: true, nudged, escalated, sameDayNudged, checked: dmsNoCoaching.length })
 }

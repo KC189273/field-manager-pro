@@ -16,8 +16,11 @@ export async function POST(req: NextRequest) {
   }
 
   // Verify conversation exists and is escalated
-  const conv = await queryOne<{ id: string; user_id: string; user_name: string; status: string }>(`
-    SELECT id, user_id, user_name, status FROM support_conversations WHERE id = $1
+  const conv = await queryOne<{ id: string; user_id: string; user_name: string; status: string; org_id: string | null }>(`
+    SELECT sc.id, sc.user_id, sc.user_name, sc.status, u.org_id
+    FROM support_conversations sc
+    LEFT JOIN users u ON u.id = sc.user_id
+    WHERE sc.id = $1
   `, [conversationId])
 
   if (!conv) return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
@@ -61,7 +64,7 @@ export async function POST(req: NextRequest) {
   const originalQuestion = userMessages[0]?.body
   if (originalQuestion) {
     const { autoLearnEscalation } = await import('@/lib/auto-learn')
-    autoLearnEscalation(originalQuestion, message.trim(), conv.user_name)
+    await autoLearnEscalation(originalQuestion, message.trim(), conv.user_name, conv.org_id)
   }
 
   return NextResponse.json({ ok: true })

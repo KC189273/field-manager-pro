@@ -1,69 +1,98 @@
-import * as fs from 'fs'
-import * as path from 'path'
-
-const LEARNED_PATH = path.join(process.cwd(), 'lib/agents/knowledge/shared/learned-answers.md')
-
-function ensureFile() {
-  if (!fs.existsSync(LEARNED_PATH)) {
-    const date = new Date().toISOString().split('T')[0]
-    const header = `---
-sources: []
-features:
-  - learned-answers
-permissions:
-  - "auto-generated from resolved support conversations and escalation replies"
-verified: ${date}
----
-# Learned Answers
-
-These answers were learned from successful support conversations and escalation replies. The AI Assistant uses these to answer similar questions without escalating again.
-`
-    fs.writeFileSync(LEARNED_PATH, header)
-  }
-}
-
-function updateVerifiedDate() {
-  const date = new Date().toISOString().split('T')[0]
-  const content = fs.readFileSync(LEARNED_PATH, 'utf-8')
-  const updated = content.replace(/verified: \d{4}-\d{2}-\d{2}/, `verified: ${date}`)
-  fs.writeFileSync(LEARNED_PATH, updated)
-}
+import { query, queryOne } from '@/lib/db'
 
 /** Auto-learn from escalation replies (dev team answers) */
-export function autoLearnEscalation(question: string, answer: string, userName: string) {
+export async function autoLearnEscalation(question: string, answer: string, userName: string, orgId?: string | null) {
   try {
-    ensureFile()
-    const date = new Date().toISOString().split('T')[0]
-    const entry = `\n\n## Q: ${question}\n**A:** ${answer}\n*Answered ${date} for ${userName} (escalation reply)*\n`
-    fs.appendFileSync(LEARNED_PATH, entry)
-    updateVerifiedDate()
+    if (!question || !answer || question.length < 10) return
+
+    // Check for duplicate
+    const existing = await queryOne<{ id: string }>(`
+      SELECT id FROM learned_answers
+      WHERE question = $1 AND source = 'escalation_reply'
+      LIMIT 1
+    `, [question])
+    if (existing) return
+
+    await query(`
+      INSERT INTO learned_answers (question, answer, source, user_name, org_id)
+      VALUES ($1, $2, 'escalation_reply', $3, $4)
+    `, [question.trim(), answer.trim(), userName, orgId || null])
   } catch (err) {
-    console.error('Auto-learn escalation write failed:', err)
+    console.error('Auto-learn escalation failed:', err)
   }
 }
 
 /** Auto-learn from successfully resolved conversations (AI solved it) */
-export function autoLearnResolved(question: string, finalAnswer: string, userName: string) {
+export async function autoLearnResolved(question: string, finalAnswer: string, userName: string, orgId?: string | null) {
   try {
-    ensureFile()
+    if (!question || !finalAnswer || question.length < 15) return
 
-    // Check if a similar question is already in the learned answers (avoid duplicates)
-    const existing = fs.readFileSync(LEARNED_PATH, 'utf-8')
+    // Dedup: check if similar question keywords already exist
     const normalizedQ = question.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim()
-    if (normalizedQ.length < 15) return // Too short to be useful
-
-    // Simple dedup: check if question keywords are already present
     const keywords = normalizedQ.split(' ').filter(w => w.length > 4)
+
     if (keywords.length >= 2) {
-      const matchCount = keywords.filter(k => existing.toLowerCase().includes(k)).length
+      const existing = await query<{ question: string }>(`
+        SELECT question FROM learned_answers ORDER BY created_at DESC LIMIT 100
+      `)
+      const allText = existing.map(r => r.question.toLowerCase()).join(' ')
+      const matchCount = keywords.filter(k => allText.includes(k)).length
       if (matchCount >= keywords.length * 0.7) return // Likely already learned
     }
 
-    const date = new Date().toISOString().split('T')[0]
-    const entry = `\n\n## Q: ${question}\n**A:** ${finalAnswer}\n*Auto-learned ${date} from resolved conversation with ${userName}*\n`
-    fs.appendFileSync(LEARNED_PATH, entry)
-    updateVerifiedDate()
+    await query(`
+      INSERT INTO learned_answers (question, answer, source, user_name, org_id)
+      VALUES ($1, $2, 'resolved_conversation', $3, $4)
+    `, [question.trim(), finalAnswer.trim(), userName, orgId || null])
   } catch (err) {
-    console.error('Auto-learn resolved write failed:', err)
+    console.error('Auto-learn resolved failed:', err)
+  }
+}
+
+/** Load all learned answers as formatted text for the AI system prompt */
+export async function loadLearnedAnswers(): Promise<string> {
+  try {
+    const rows = await query<{ question: string; answer: string; source: string; created_at: string }>(`
+      SELECT question, answer, source, created_at::text
+      FROM learned_answers
+      ORDER BY created_at DESC
+      LIMIT 200
+    `)
+
+    if (rows.length === 0) return ''
+
+    const formatted = rows.map(r => {
+      const sourceLabel = r.source === 'escalation_reply' ? 'dev team answer' : 'resolved by AI'
+      const date = new Date(r.created_at).toISOString().split('T')[0]
+      return `Q: ${r.question}\nA: ${r.answer}\n(${sourceLabel}, ${date})`
+    }).join('\n\n---\n\n')
+
+    return `\n\n# Previously Learned Answers\nThese are answers from past support conversations. Use them to answer similar questions without escalating.\n\n${formatted}`
+  } catch (err) {
+    console.error('Failed to load learned answers:', err)
+    return ''
+  }
+}
+
+/** Load recent changelog entries for the AI system prompt */
+export async function loadChangelog(): Promise<string> {
+  try {
+    const rows = await query<{ change_date: string; change_type: string; title: string; description: string | null }>(`
+      SELECT change_date::text, change_type, title, description
+      FROM app_changelog
+      ORDER BY change_date DESC
+      LIMIT 50
+    `)
+
+    if (rows.length === 0) return ''
+
+    const formatted = rows.map(r =>
+      `- ${r.change_date} [${r.change_type}]: ${r.title}${r.description ? ' — ' + r.description : ''}`
+    ).join('\n')
+
+    return `\n\n# Recent App Changes\nUse these dates when users ask "when was X changed?" or "what's new?"\n\n${formatted}`
+  } catch (err) {
+    console.error('Failed to load changelog:', err)
+    return ''
   }
 }

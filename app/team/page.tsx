@@ -467,19 +467,19 @@ export default function TeamPage() {
 
         {/* Create form */}
         {showCreate && (
-          <form onSubmit={createUser} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-3">
+          <form onSubmit={createUser} autoComplete="off" className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mb-5 space-y-3">
             <h2 className="font-semibold text-white">Add User</h2>
-            <input required placeholder="Full name" value={form.fullName}
+            <input required placeholder="Full name" value={form.fullName} autoComplete="off"
               onChange={e => setForm(p => ({ ...p, fullName: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input required placeholder="Username" value={form.username}
+            <input required placeholder="Username" value={form.username} autoComplete="off"
               onChange={e => setForm(p => ({ ...p, username: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
-            <input required placeholder="Email" type="email" value={form.email}
+            <input required placeholder="Email" type="email" value={form.email} autoComplete="off"
               onChange={e => setForm(p => ({ ...p, email: e.target.value }))}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
             <div className="relative">
-              <input required placeholder="Temporary password" type={showCreatePw ? 'text' : 'password'} value={form.password}
+              <input required placeholder="Temporary password" type={showCreatePw ? 'text' : 'password'} value={form.password} autoComplete="new-password"
                 onChange={e => setForm(p => ({ ...p, password: e.target.value }))}
                 className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 pr-16 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
               <button type="button" onClick={() => setShowCreatePw(p => !p)}
@@ -529,7 +529,7 @@ export default function TeamPage() {
               <div className="flex justify-center pt-3 pb-1">
                 <div className="w-10 h-1 bg-gray-700 rounded-full" />
               </div>
-              <form onSubmit={updateUser} className="px-5 pb-8 pt-3 space-y-3">
+              <form onSubmit={updateUser} autoComplete="off" className="px-5 pb-8 pt-3 space-y-3">
                 <h2 className="font-semibold text-white mb-1">Edit — {editUser.full_name}</h2>
                 <div>
                   <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Preferred Name (shown in app)</label>
@@ -562,7 +562,7 @@ export default function TeamPage() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <input placeholder="Reset password (leave blank to keep)" type="password" value={editForm.password}
+                  <input placeholder="Reset password (leave blank to keep)" type="password" value={editForm.password} autoComplete="new-password"
                     onChange={e => setEditForm(p => ({ ...p, password: e.target.value }))}
                     className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
                   {editForm.password && (

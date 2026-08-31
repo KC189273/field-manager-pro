@@ -34,9 +34,18 @@ function loadDocs(namespace: string): string {
     .join('\n\n---\n\n')
 }
 
-function buildSystemPrompt(industry: string): string {
+async function buildSystemPrompt(industry: string): Promise<string> {
   const verticalDocs = loadDocs(industry)
   const sharedDocs = loadDocs('shared')
+
+  // Load learned answers and changelog from database
+  let learnedSection = ''
+  let changelogSection = ''
+  try {
+    const { loadLearnedAnswers, loadChangelog } = await import('@/lib/auto-learn')
+    learnedSection = await loadLearnedAnswers()
+    changelogSection = await loadChangelog()
+  } catch { /* non-blocking */ }
 
   return `You are the FMP AI Assistant — Field Manager Pro's built-in support helper. You have a conversational, step-by-step troubleshooting style. You're friendly, direct, and never corporate.
 
@@ -158,7 +167,9 @@ HELP DOCS (ground every answer in these):
 
 ${verticalDocs}
 
-${sharedDocs}`
+${sharedDocs}
+${learnedSection}
+${changelogSection}`
 }
 
 // GET: load conversation history
@@ -280,7 +291,7 @@ export async function POST(req: NextRequest) {
   const industry = conv?.industry ?? 'wireless_retail'
 
   // Build messages for Claude
-  const systemPrompt = buildSystemPrompt(industry)
+  const systemPrompt = await buildSystemPrompt(industry)
   const claudeMessages: Anthropic.MessageParam[] = []
 
   for (const msg of history) {
@@ -355,7 +366,7 @@ export async function POST(req: NextRequest) {
         const firstA = convMessages.find(m => m.role === 'assistant')?.body
         if (firstQ && firstA && firstQ.length > 10) {
           const { autoLearnResolved } = await import('@/lib/auto-learn')
-          autoLearnResolved(firstQ, reply, session.fullName)
+          await autoLearnResolved(firstQ, reply, session.fullName, session.org_id)
         }
       } catch { /* never block resolution */ }
     }

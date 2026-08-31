@@ -292,6 +292,33 @@ export async function PATCH(req: NextRequest) {
   return NextResponse.json({ ok: true })
 }
 
+// PUT — bulk reassign employees to a new DM
+export async function PUT(req: NextRequest) {
+  const session = await getSession()
+  if (!session || (!isOwner(session.role) && session.role !== 'developer')) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { userIds, newManagerId } = await req.json()
+  if (!Array.isArray(userIds) || !userIds.length || !newManagerId) {
+    return NextResponse.json({ error: 'userIds array and newManagerId required' }, { status: 400 })
+  }
+
+  // Verify the new manager exists and is a DM
+  const mgr = await queryOne<{ id: string; full_name: string; role: string }>(
+    `SELECT id, full_name, role FROM users WHERE id = $1 AND is_active = TRUE`,
+    [newManagerId]
+  )
+  if (!mgr) return NextResponse.json({ error: 'Manager not found' }, { status: 404 })
+
+  const result = await query(
+    `UPDATE users SET manager_id = $1 WHERE id = ANY($2::uuid[]) RETURNING id`,
+    [newManagerId, userIds]
+  )
+
+  return NextResponse.json({ ok: true, count: result.length, newManagerName: mgr.full_name })
+}
+
 export async function DELETE(req: NextRequest) {
   const session = await getSession()
   if (!session || (!isManager(session.role) && !isOwner(session.role) && session.role !== 'developer')) {

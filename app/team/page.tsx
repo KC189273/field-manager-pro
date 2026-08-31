@@ -82,6 +82,12 @@ export default function TeamPage() {
   const [showCreatePw, setShowCreatePw] = useState(false)
   const [showTempPw, setShowTempPw] = useState(false)
 
+  // Bulk reassignment
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [bulkTargetDm, setBulkTargetDm] = useState('')
+  const [bulkReassigning, setBulkReassigning] = useState(false)
+
   const isDev = session?.role === 'developer'
   const isOwner = session?.role === 'owner' || session?.role === 'sales_director'
   const isDevOrOwner = isDev || isOwner
@@ -161,6 +167,39 @@ export default function TeamPage() {
     setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, legalName: user.legal_name ?? user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
     setShowCreate(false)
     setShowTempPw(false)
+  }
+
+  async function handleBulkReassign() {
+    if (!bulkSelected.size || !bulkTargetDm) return
+    const targetName = users.find(u => u.id === bulkTargetDm)?.full_name || 'DM'
+    if (!confirm(`Reassign ${bulkSelected.size} employee(s) to ${targetName}?`)) return
+    setBulkReassigning(true)
+    try {
+      const res = await fetch('/api/team/users', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userIds: [...bulkSelected], newManagerId: bulkTargetDm }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        showMsg(`${data.count} employee(s) reassigned to ${data.newManagerName}`)
+        setBulkMode(false)
+        setBulkSelected(new Set())
+        setBulkTargetDm('')
+        loadUsers()
+      } else {
+        showMsg(data.error || 'Reassignment failed', 'error')
+      }
+    } catch { showMsg('Network error', 'error') }
+    finally { setBulkReassigning(false) }
+  }
+
+  function toggleBulkSelect(userId: string) {
+    setBulkSelected(prev => {
+      const next = new Set(prev)
+      next.has(userId) ? next.delete(userId) : next.add(userId)
+      return next
+    })
   }
 
   async function createUser(e: FormEvent) {
@@ -354,6 +393,14 @@ export default function TeamPage() {
               Bulk Import
             </button>
           )}
+          {(isDev || isOwner || session?.role === 'ops_manager') && (
+            <button
+              onClick={() => { setBulkMode(!bulkMode); setBulkSelected(new Set()); setBulkTargetDm('') }}
+              className={`text-xs font-semibold transition-colors ${bulkMode ? 'text-amber-400 hover:text-amber-300' : 'text-violet-400 hover:text-violet-300'}`}
+            >
+              {bulkMode ? 'Cancel Reassign' : 'Bulk Reassign'}
+            </button>
+          )}
           </div>
         </div>
 
@@ -365,6 +412,32 @@ export default function TeamPage() {
               : 'bg-green-900/40 border border-green-700 text-green-300'
           }`}>
             {message.text}
+          </div>
+        )}
+
+        {/* Bulk reassignment bar */}
+        {bulkMode && (
+          <div className="mb-4 bg-amber-900/20 border border-amber-800/40 rounded-xl p-4">
+            <p className="text-xs text-amber-300 font-semibold mb-2">Select employees to reassign, then choose a new DM</p>
+            <div className="flex items-end gap-2">
+              <div className="flex-1">
+                <label className="block text-[10px] text-gray-500 mb-1">Reassign to</label>
+                <select value={bulkTargetDm} onChange={e => setBulkTargetDm(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:border-amber-500">
+                  <option value="">— Select DM —</option>
+                  {activeMgrs.filter(m => m.role === 'manager').map(m => (
+                    <option key={m.id} value={m.id}>{m.full_name}</option>
+                  ))}
+                </select>
+              </div>
+              <button onClick={handleBulkReassign} disabled={!bulkSelected.size || !bulkTargetDm || bulkReassigning}
+                className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-semibold px-4 py-2.5 rounded-xl text-sm transition-colors whitespace-nowrap">
+                {bulkReassigning ? 'Reassigning…' : `Reassign (${bulkSelected.size})`}
+              </button>
+            </div>
+            {bulkSelected.size > 0 && (
+              <button onClick={() => setBulkSelected(new Set())} className="text-xs text-gray-500 hover:text-gray-300 mt-2">Clear selection</button>
+            )}
           </div>
         )}
 
@@ -928,6 +1001,9 @@ export default function TeamPage() {
                         }
                         onStores={user.role === 'manager' ? () => openStorePanel(user.id) : undefined}
                         storesPanelOpen={storePanel === user.id}
+                        bulkMode={bulkMode}
+                        bulkSelected={bulkSelected.has(user.id)}
+                        onBulkToggle={() => toggleBulkSelect(user.id)}
                       />
                       {/* Store assignment panel */}
                       {storePanel === user.id && (
@@ -1065,6 +1141,9 @@ export default function TeamPage() {
                           ? () => { setTerminateUser(user); setTerminateReasons(''); setTerminateError('') }
                           : undefined
                       }
+                      bulkMode={bulkMode}
+                      bulkSelected={bulkSelected.has(user.id)}
+                      onBulkToggle={() => toggleBulkSelect(user.id)}
                     />
                   )
                 ))}
@@ -1421,6 +1500,9 @@ function UserCard({
   onTerminate,
   onStores,
   storesPanelOpen,
+  bulkMode,
+  bulkSelected,
+  onBulkToggle,
 }: {
   user: User
   subtitle: string
@@ -1430,13 +1512,20 @@ function UserCard({
   onTerminate?: () => void
   onStores?: () => void
   storesPanelOpen?: boolean
+  bulkMode?: boolean
+  bulkSelected?: boolean
+  onBulkToggle?: () => void
 }) {
   const colorClass = ROLE_COLORS[user.role] ?? ROLE_COLORS.employee
 
   return (
-    <div className={`bg-gray-900 border px-4 py-3 ${storesPanelOpen ? 'rounded-t-2xl border-gray-700' : 'rounded-2xl'} ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'}`}>
+    <div className={`bg-gray-900 border px-4 py-3 ${storesPanelOpen ? 'rounded-t-2xl border-gray-700' : 'rounded-2xl'} ${user.is_active ? 'border-gray-800' : 'border-gray-700 opacity-60'} ${bulkSelected ? 'ring-2 ring-amber-500/50' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-3 min-w-0 flex-1">
+          {bulkMode && user.role === 'employee' && (
+            <input type="checkbox" checked={bulkSelected} onChange={onBulkToggle}
+              className="w-4 h-4 rounded bg-gray-800 border-gray-600 text-amber-500 focus:ring-amber-500 flex-shrink-0 cursor-pointer" />
+          )}
           {user.avatar_url ? (
             <img src={user.avatar_url} alt={user.full_name} className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
           ) : (

@@ -57,11 +57,25 @@ export async function GET(req: NextRequest) {
       console.error('Photo cleanup error:', err)
     }
 
+    // Stale device tokens not refreshed in 90 days
+    const staleTokens = await query<{ cnt: number }>(
+      `WITH deleted AS (DELETE FROM device_tokens WHERE updated_at < NOW() - INTERVAL '90 days' RETURNING 1)
+       SELECT COUNT(*)::int as cnt FROM deleted`
+    ).catch(() => [{ cnt: 0 }])
+
+    // Expired store closures (past dates)
+    const expiredClosures = await query<{ cnt: number }>(
+      `WITH deleted AS (DELETE FROM store_closures WHERE closure_date < CURRENT_DATE RETURNING 1)
+       SELECT COUNT(*)::int as cnt FROM deleted`
+    ).catch(() => [{ cnt: 0 }])
+
     return NextResponse.json({
       ok: true,
       gps_deleted: gps[0].cnt,
       notifications_deleted: notifs[0].cnt,
       photos_deleted: photosDeleted,
+      stale_tokens_deleted: staleTokens[0].cnt,
+      expired_closures_deleted: expiredClosures[0].cnt,
     })
   } catch (err) {
     console.error('DB cleanup error:', err)

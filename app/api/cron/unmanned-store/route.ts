@@ -42,7 +42,8 @@ export async function GET(req: NextRequest) {
          AND h.day_of_week = $1
          AND h.is_closed = FALSE
          AND h.open_time IS NOT NULL
-         AND h.close_time IS NOT NULL`,
+         AND h.close_time IS NOT NULL
+         AND s.id NOT IN (SELECT store_id FROM store_closures WHERE closure_date = CURRENT_DATE)`,
       [dayOfWeek]
     )
 

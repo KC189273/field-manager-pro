@@ -87,18 +87,25 @@ export async function GET(req: NextRequest) {
   // Helper: attach hours to locations
   type HoursRow = { store_id: string; day_of_week: number; open_time: string | null; close_time: string | null; is_closed: boolean }
   async function attachHours(locations: StoreRow[]) {
-    if (!locations.length) return locations.map(l => ({ ...l, hours: [] }))
+    if (!locations.length) return locations.map(l => ({ ...l, hours: [], closed_today: false }))
     const ids = locations.map(l => l.id)
-    const hours = await query<HoursRow>(
-      `SELECT store_id, day_of_week, open_time::text, close_time::text, is_closed FROM store_hours WHERE store_id = ANY($1) ORDER BY day_of_week`,
-      [ids]
-    )
+    const [hours, closures] = await Promise.all([
+      query<HoursRow>(
+        `SELECT store_id, day_of_week, open_time::text, close_time::text, is_closed FROM store_hours WHERE store_id = ANY($1) ORDER BY day_of_week`,
+        [ids]
+      ),
+      query<{ store_id: string; reason: string | null }>(
+        `SELECT store_id, reason FROM store_closures WHERE store_id = ANY($1) AND closure_date = CURRENT_DATE`,
+        [ids]
+      ).catch(() => [] as { store_id: string; reason: string | null }[]),
+    ])
     const byStore = new Map<string, HoursRow[]>()
     for (const h of hours) {
       if (!byStore.has(h.store_id)) byStore.set(h.store_id, [])
       byStore.get(h.store_id)!.push(h)
     }
-    return locations.map(l => ({ ...l, hours: byStore.get(l.id) ?? [] }))
+    const closedToday = new Set(closures.map(c => c.store_id))
+    return locations.map(l => ({ ...l, hours: byStore.get(l.id) ?? [], closed_today: closedToday.has(l.id) }))
   }
 
   // Managers only see their assigned active locations
@@ -268,6 +275,21 @@ export async function PATCH(req: NextRequest) {
 
   // Seed default hours if requested
   if (body.seedHours) await seedDefaultHours(id).catch(() => {})
+
+  // Temporary closure — mark store closed for a specific date
+  if (body.closureDate) {
+    if (body.reopenDate) {
+      // Remove closure
+      await query(`DELETE FROM store_closures WHERE store_id = $1 AND closure_date = $2`, [id, body.reopenDate])
+    } else {
+      await query(
+        `INSERT INTO store_closures (store_id, closure_date, reason, closed_by, closed_by_name)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (store_id, closure_date) DO UPDATE SET reason = $3`,
+        [id, body.closureDate, body.closureReason || 'Temporarily closed', session.id, session.fullName]
+      )
+    }
+  }
 
   return NextResponse.json({ ok: true })
 }

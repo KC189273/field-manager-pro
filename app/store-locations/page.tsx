@@ -30,6 +30,7 @@ interface Store {
   lng: number | null
   geofence_radius_ft: number | null
   hours: StoreHours[]
+  closed_today: boolean
   created_at: string
 }
 
@@ -362,9 +363,29 @@ export default function StoreLocationsPage() {
                           {store.geofence_radius_ft && (
                             <span className="text-xs text-cyan-500">{store.geofence_radius_ft}ft geofence</span>
                           )}
+                          {store.closed_today && (
+                            <span className="text-xs text-red-400 font-semibold">Closed Today</span>
+                          )}
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={async () => {
+                            const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+                            await fetch('/api/dm-store-locations', {
+                              method: 'PATCH',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify(store.closed_today
+                                ? { id: store.id, closureDate: true, reopenDate: today }
+                                : { id: store.id, closureDate: today, closureReason: 'Temporarily closed' }),
+                            })
+                            loadStores()
+                          }}
+                          className={`text-xs font-semibold transition-colors p-1 ${store.closed_today ? 'text-green-400 hover:text-green-300' : 'text-red-400 hover:text-red-300'}`}
+                          title={store.closed_today ? 'Reopen store' : 'Close store for today'}
+                        >
+                          {store.closed_today ? 'Reopen' : 'Close Today'}
+                        </button>
                         <button onClick={() => openEdit(store)} className="text-gray-500 hover:text-gray-300 transition-colors p-1">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

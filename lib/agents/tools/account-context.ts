@@ -45,6 +45,12 @@ export interface AccountSupportContext {
   // Current shift status
   active_shift: { id: string; clock_in_at: string; store_address: string | null } | null
 
+  // Recent shifts (last 7 days) with photo status
+  recent_shifts: { date: string; clock_in: string; clock_out: string | null; hours: number; store: string | null; has_photo: boolean; is_manual: boolean }[]
+
+  // Team members currently clocked in (for DMs)
+  team_clocked_in: { full_name: string; store_address: string | null; clock_in_at: string }[]
+
   // Schedule published status for current week
   schedule_published: boolean
 
@@ -134,6 +140,37 @@ export async function getAccountSupportContext(
     WHERE s.user_id = $1 AND s.clock_out_at IS NULL
     ORDER BY s.clock_in_at DESC LIMIT 1
   `, [userId])
+
+  // ── Recent shifts (last 7 days) ──
+  const recentShifts = await query<{
+    date: string; clock_in: string; clock_out: string | null; hours: number
+    store: string | null; has_photo: boolean; is_manual: boolean
+  }>(`
+    SELECT (s.clock_in_at AT TIME ZONE 'America/Chicago')::date::text as date,
+      s.clock_in_at::text as clock_in, s.clock_out_at::text as clock_out,
+      CASE WHEN s.clock_out_at IS NOT NULL THEN
+        ROUND(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0, 2)::float
+      ELSE 0 END as hours,
+      dsl.address as store,
+      (s.clock_in_photo_key IS NOT NULL AND s.clock_in_photo_key != '') as has_photo,
+      COALESCE(s.is_manual, false) as is_manual
+    FROM shifts s
+    LEFT JOIN dm_store_locations dsl ON dsl.id = s.store_location_id
+    WHERE s.user_id = $1 AND s.clock_in_at >= NOW() - INTERVAL '7 days'
+    ORDER BY s.clock_in_at DESC
+  `, [userId]).catch(() => [])
+
+  // ── Team currently clocked in (DMs only) ──
+  const teamClockedIn = (user?.role === 'manager' || user?.role === 'ops_field_leader' || user?.role === 'ops_manager')
+    ? await query<{ full_name: string; store_address: string | null; clock_in_at: string }>(`
+      SELECT u.full_name, dsl.address as store_address, s.clock_in_at::text
+      FROM shifts s
+      JOIN users u ON u.id = s.user_id
+      LEFT JOIN dm_store_locations dsl ON dsl.id = s.store_location_id
+      WHERE s.clock_out_at IS NULL AND u.manager_id = $1 AND u.is_active = TRUE
+      ORDER BY s.clock_in_at DESC
+    `, [userId]).catch(() => [])
+    : []
 
   // ── Schedule published ──
   const now = new Date()
@@ -300,6 +337,8 @@ export async function getAccountSupportContext(
     team,
     stores,
     active_shift: activeShift,
+    recent_shifts: recentShifts,
+    team_clocked_in: teamClockedIn,
     schedule_published: schedulePub,
     pending_time_off: timeOff,
     payroll,
@@ -314,6 +353,7 @@ export async function getAccountSupportContext(
 function emptyContext(): AccountSupportContext {
   return {
     user: null, team: [], stores: [], active_shift: null,
+    recent_shifts: [], team_clocked_in: [],
     schedule_published: false, pending_time_off: [], payroll: null,
     coaching_grades: null,
     barber_profile: null, shop_settings: null, pending_appointments: 0, org: null,

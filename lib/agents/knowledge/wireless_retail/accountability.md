@@ -85,6 +85,11 @@ For employees who resign or self-quit, use the **"+ Submit Resignation / Self-Qu
 - Shows with green styling and "Resignation" badge in the requests list
 - Any role that can submit terminations can also submit resignations (DM+)
 
+## Attaching Evidence
+All accountability documents (documented conversations, verbal, written, final) support optional file attachments. When creating a document, you can upload photos, PDFs, screenshots, or other files as evidence. The attachment is stored with the document permanently.
+
+**Common uses:** incident photos, resignation letters, text message screenshots, written employee statements, camera footage stills.
+
 ## What happens during a DM transfer?
 When an employee moves to a different DM, accountability docs can be transferred. The doc's `transferred_to` field is updated so the new DM inherits the documentation history.
 

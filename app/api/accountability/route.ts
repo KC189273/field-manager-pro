@@ -783,7 +783,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
     subjectId, subjectIds, level, title, incidentDate, notes, expectations,
-    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode,
+    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode, attachment_key,
   } = body
   const isTestMode = session.role === 'developer' && testMode === true
 
@@ -821,8 +821,8 @@ export async function POST(req: NextRequest) {
               (ref_number, org_id, subject_id, subject_name, subject_role, subject_email,
                author_id, author_name, author_role, author_email,
                level, title, incident_date, notes, expectations,
-               status, ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+               status, ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name, attachment_key)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
              RETURNING id, created_at`,
             [
               refNumber, orgId,
@@ -832,6 +832,7 @@ export async function POST(req: NextRequest) {
               new Date().toISOString().slice(0, 10), notes.trim(), '',
               'approved', null, 'acknowledged', true,
               new Date().toISOString(), session.id, session.fullName,
+              attachment_key || null,
             ]
           )
           doc = rows[0]
@@ -950,8 +951,8 @@ export async function POST(req: NextRequest) {
            author_id, author_name, author_role, author_email,
            level, title, incident_date, notes, expectations,
            status, sd_id, sd_name, sd_email,
-           ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+           ack_token, ack_status, reminder_acknowledged, approved_at, approver_id, approver_name, attachment_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
          RETURNING id, created_at`,
         [
           refNumber, orgId,
@@ -965,6 +966,7 @@ export async function POST(req: NextRequest) {
           (autoApprove || level === 'verbal') ? new Date().toISOString() : null,
           (autoApprove || level === 'verbal') ? session.id : null,
           (autoApprove || level === 'verbal') ? session.fullName : null,
+          attachment_key || null,
         ]
       )
       doc = rows[0]

@@ -151,6 +151,10 @@
     {
       "path": "/api/cron/unmanned-store",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/photo-compliance",
+      "schedule": "0 2 * * *"
     }
   ]
 }

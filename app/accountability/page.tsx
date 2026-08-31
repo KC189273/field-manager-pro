@@ -964,6 +964,8 @@ function SubmitForm({ session, subjects, onSuccess }: {
   const [incidentDate, setIncidentDate] = useState('')
   const [notes, setNotes] = useState('')
   const [expectations, setExpectations] = useState('')
+  const [docAttachKey, setDocAttachKey] = useState('')
+  const [docAttachUploading, setDocAttachUploading] = useState(false)
   const [priorConvos, setPriorConvos] = useState<PriorConvo[]>([])
   const [linkedVerbalIds, setLinkedVerbalIds] = useState<string[]>([])
   const [availableVerbals, setAvailableVerbals] = useState<Doc[]>([])
@@ -1051,6 +1053,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
       const payload = isDocConvo
         ? {
             subjectIds, level, title: title.trim(), notes: notes.trim(),
+            attachment_key: docAttachKey || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
         : {
@@ -1059,6 +1062,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
             priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
             linkedVerbalIds,
             reminderAcknowledged,
+            attachment_key: docAttachKey || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
       const res = await fetch('/api/accountability', {
@@ -1098,7 +1102,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
           <button type="button" onClick={() => {
             try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
             setSubjectId(''); setSubjectIds([]); setSubjectSearch(''); setLevel('verbal')
-            setTitle(''); setIncidentDate(''); setNotes(''); setExpectations('')
+            setTitle(''); setIncidentDate(''); setNotes(''); setExpectations(''); setDocAttachKey('')
             setPriorConvos([]); setLinkedVerbalIds([]); setReminderAcknowledged(false)
             setHasDraft(false)
           }} className="text-xs text-amber-400 hover:text-amber-200 underline shrink-0">
@@ -1339,6 +1343,35 @@ function SubmitForm({ session, subjects, onSuccess }: {
           </label>
         </div>
       )}
+
+      {/* Attachment upload (optional) */}
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Attach Evidence (optional — photos, documents, screenshots)</label>
+        <div className="flex items-center gap-2">
+          <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" onChange={async (e) => {
+            const file = e.target.files?.[0]
+            if (!file) return
+            setDocAttachUploading(true)
+            try {
+              const key = `accountability-docs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+              const urlRes = await fetch('/api/expenses/upload-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key, contentType: file.type }),
+              })
+              if (urlRes.ok) {
+                const { url } = await urlRes.json()
+                await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+                setDocAttachKey(key)
+              }
+            } catch { /* ignore */ }
+            finally { setDocAttachUploading(false) }
+          }}
+            className="text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-800 file:text-gray-300 file:text-xs file:font-semibold hover:file:bg-gray-700" />
+          {docAttachUploading && <span className="text-xs text-violet-400">Uploading...</span>}
+          {docAttachKey && !docAttachUploading && <span className="text-xs text-green-400">Attached</span>}
+        </div>
+      </div>
 
       {error && (
         <div className="bg-red-900/30 border border-red-700 text-red-400 text-sm rounded-xl px-4 py-3">{error}</div>

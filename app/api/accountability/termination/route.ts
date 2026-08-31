@@ -137,6 +137,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  // Check for existing pending request
+  const existing = await queryOne<{ id: string }>(
+    `SELECT id FROM termination_requests WHERE employee_id = $1 AND status = 'pending_approval'`,
+    [employee_id]
+  )
+  if (existing) {
+    return NextResponse.json({ error: `A ${type} request for ${employee.full_name} is already pending approval.` }, { status: 409 })
+  }
+
   const request = await queryOne<{ id: string }>(
     `INSERT INTO termination_requests
        (employee_id, employee_name, employee_email, org_id, requested_by, requested_by_name, requested_by_role, reasons, termination_type, attachment_key, last_day_worked)

@@ -26,6 +26,19 @@ export async function POST(req: NextRequest) {
   )
   if (active) return NextResponse.json({ error: 'Already clocked in' }, { status: 409 })
 
+  // ── Mandatory photo check (employees only) ──
+  if (session.role === 'employee' && !photoKey) {
+    const mandatory = await queryOne<{ value: string }>(
+      `SELECT value FROM dev_config WHERE key = 'clock_in_photo_required'`
+    ).catch(() => null)
+    if (mandatory?.value === 'true') {
+      return NextResponse.json({
+        error: 'A uniform photo is required to clock in. Please take a photo and try again.',
+        photoRequired: true,
+      }, { status: 400 })
+    }
+  }
+
   // ── Geofence check (employees only) ──
   if (session.role === 'employee') {
     const geo = await getGeofenceSettings(session.org_id)

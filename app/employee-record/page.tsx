@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
+import { useSearchParams } from 'next/navigation'
 import NavBar from '@/components/NavBar'
 
 type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
@@ -106,6 +107,8 @@ export default function EmployeeRecordPage() {
   const [timeOff, setTimeOff] = useState<TimeOff[]>([])
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
+  const searchParams = useSearchParams()
+
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(setSession)
     fetch('/api/employee-record').then(r => r.json()).then(d => {
@@ -115,6 +118,14 @@ export default function EmployeeRecordPage() {
         setTo(d.currentPeriod.end)
       }
       setLoading(false)
+      // Auto-select employee from URL param
+      const urlId = searchParams.get('id')
+      if (urlId && d.currentPeriod) {
+        setSelectedId(urlId)
+        setFilter('All')
+        // loadRecord will be called after from/to are set
+        setTimeout(() => loadRecord(urlId, d.currentPeriod.start, d.currentPeriod.end), 100)
+      }
     }).catch(() => setLoading(false))
   }, [])
 

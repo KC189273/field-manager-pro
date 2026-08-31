@@ -1553,6 +1553,15 @@ function UserCard({
             className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors">
             Edit
           </button>
+          {(user.role === 'employee' || user.role === 'manager') && (
+            <>
+              <span className="text-gray-700">·</span>
+              <a href={`/employee-record?id=${user.id}`}
+                className="text-cyan-400 hover:text-cyan-300 text-xs font-semibold transition-colors">
+                Record
+              </a>
+            </>
+          )}
           {onStores && (
             <>
               <span className="text-gray-700">·</span>

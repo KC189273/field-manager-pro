@@ -99,16 +99,18 @@ export async function POST(req: NextRequest) {
   // Get shift edits for audit trail
   const shiftIds = shifts.map(s => s.id)
   const edits = shiftIds.length > 0 ? await query<{
-    shift_id: string; field: string; old_value: string | null; new_value: string | null
-    edited_by_name: string; edited_at: string
+    shift_id: string; old_clock_in: string | null; new_clock_in: string | null
+    old_clock_out: string | null; new_clock_out: string | null
+    note: string | null; edited_by_name: string; edited_at: string
   }>(`
-    SELECT se.shift_id, se.field, se.old_value, se.new_value,
-           u.full_name as edited_by_name, se.edited_at::text
+    SELECT se.shift_id, se.old_clock_in::text, se.new_clock_in::text,
+           se.old_clock_out::text, se.new_clock_out::text,
+           se.note, u.full_name as edited_by_name, se.edited_at::text
     FROM shift_edits se
     JOIN users u ON u.id = se.edited_by
     WHERE se.shift_id = ANY($1::uuid[])
     ORDER BY se.edited_at ASC
-  `, [shiftIds]).catch(() => [] as Array<{ shift_id: string; field: string; old_value: string | null; new_value: string | null; edited_by_name: string; edited_at: string }>) : []
+  `, [shiftIds]).catch(() => [] as Array<{ shift_id: string; old_clock_in: string | null; new_clock_in: string | null; old_clock_out: string | null; new_clock_out: string | null; note: string | null; edited_by_name: string; edited_at: string }>) : []
 
   // Log the export
   await query(`
@@ -442,10 +444,13 @@ These records have been maintained in the ordinary course of business and are pr
     edits.forEach((e, i) => {
       const shift = shifts.find(s => s.id === e.shift_id)
       const r = editSheet.getRow(4 + i)
-      r.getCell(1).value = shift ? fmtDate(shift.clock_in_at) : e.shift_id.slice(0, 8)
-      r.getCell(2).value = e.field
-      r.getCell(3).value = e.old_value || ''
-      r.getCell(4).value = e.new_value || ''
+      const changes: string[] = []
+      if (e.old_clock_in && e.new_clock_in) changes.push(`Clock In: ${fmtTime(e.old_clock_in)} → ${fmtTime(e.new_clock_in)}`)
+      if (e.old_clock_out && e.new_clock_out) changes.push(`Clock Out: ${fmtTime(e.old_clock_out)} → ${fmtTime(e.new_clock_out)}`)
+      r.getCell(1).value = shift ? fmtDate(shift.clock_in_at) : ''
+      r.getCell(2).value = changes.join('; ') || 'Time adjusted'
+      r.getCell(3).value = e.old_clock_in ? fmtTime(e.old_clock_in) + (e.old_clock_out ? ' - ' + fmtTime(e.old_clock_out) : '') : ''
+      r.getCell(4).value = e.new_clock_in ? fmtTime(e.new_clock_in) + (e.new_clock_out ? ' - ' + fmtTime(e.new_clock_out) : '') : ''
       r.getCell(5).value = e.edited_by_name
       r.getCell(6).value = fmtDate(e.edited_at) + ' ' + fmtTime(e.edited_at)
       for (let c = 1; c <= 6; c++) {

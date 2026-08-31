@@ -27,6 +27,7 @@ export default function TerminatedRecordsPage() {
   const [employees, setEmployees] = useState<TermEmployee[]>([])
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState<string | null>(null)
+  const [reactivating, setReactivating] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null)
 
@@ -66,6 +67,32 @@ export default function TerminatedRecordsPage() {
       setDownloading(null)
     }
   }
+
+  async function reactivateEmployee(emp: TermEmployee) {
+    if (!confirm(`Reactivate ${emp.full_name}? This will restore their account so they can log in again.`)) return
+    setReactivating(emp.id)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/terminated-records', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId: emp.id }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        setMessage({ text: data.error || 'Reactivation failed', type: 'error' })
+        return
+      }
+      setEmployees(prev => prev.filter(e => e.id !== emp.id))
+      setMessage({ text: `${emp.full_name} has been reactivated`, type: 'success' })
+    } catch {
+      setMessage({ text: 'Network error — try again', type: 'error' })
+    } finally {
+      setReactivating(null)
+    }
+  }
+
+  const canReactivate = session?.role === 'owner' || session?.role === 'developer' || session?.role === 'ops_manager'
 
   const filtered = employees.filter(e =>
     e.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -136,25 +163,36 @@ export default function TerminatedRecordsPage() {
                     )}
                   </div>
                 </div>
-                <button
-                  onClick={() => downloadRecord(emp)}
-                  disabled={downloading === emp.id || emp.shift_count === 0}
-                  className="flex-shrink-0 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
-                >
-                  {downloading === emp.id ? (
-                    <>
-                      <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Export
-                    </>
+                <div className="flex flex-col gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => downloadRecord(emp)}
+                    disabled={downloading === emp.id || emp.shift_count === 0}
+                    className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors flex items-center gap-1.5"
+                  >
+                    {downloading === emp.id ? (
+                      <>
+                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        Export
+                      </>
+                    )}
+                  </button>
+                  {canReactivate && (
+                    <button
+                      onClick={() => reactivateEmployee(emp)}
+                      disabled={reactivating === emp.id}
+                      className="bg-green-800 hover:bg-green-700 disabled:opacity-50 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-colors"
+                    >
+                      {reactivating === emp.id ? 'Reactivating...' : 'Reactivate'}
+                    </button>
                   )}
-                </button>
+                </div>
               </div>
             </div>
           ))}

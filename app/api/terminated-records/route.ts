@@ -471,3 +471,28 @@ These records have been maintained in the ordinary course of business and are pr
     return NextResponse.json({ error: 'Failed to generate report: ' + String(err) }, { status: 500 })
   }
 }
+
+// PATCH — reactivate a terminated employee
+export async function PATCH(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !['owner', 'ops_manager', 'developer'].includes(session.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { employeeId } = await req.json()
+  if (!employeeId) return NextResponse.json({ error: 'employeeId required' }, { status: 400 })
+
+  const emp = await queryOne<{ id: string; full_name: string; is_terminated: boolean }>(
+    `SELECT id, full_name, is_terminated FROM users WHERE id = $1`,
+    [employeeId]
+  )
+  if (!emp) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
+  if (!emp.is_terminated) return NextResponse.json({ error: 'Employee is not terminated' }, { status: 400 })
+
+  await query(
+    `UPDATE users SET is_active = TRUE, is_terminated = FALSE, is_hidden = FALSE WHERE id = $1`,
+    [employeeId]
+  )
+
+  return NextResponse.json({ ok: true, employee: emp.full_name })
+}

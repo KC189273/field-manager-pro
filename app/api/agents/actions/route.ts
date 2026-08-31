@@ -12,12 +12,12 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status') // 'pending' | 'auto_executed' | 'executed' | 'all'
   const limit = parseInt(searchParams.get('limit') ?? '50')
 
-  let where = ''
+  let where = 'WHERE (o.industry IS NULL OR o.industry != \'barbershop\')'
   const params: unknown[] = []
 
   if (status && status !== 'all') {
     params.push(status)
-    where = `WHERE aa.status = $${params.length}`
+    where += ` AND aa.status = $${params.length}`
   }
 
   const actions = await query<{

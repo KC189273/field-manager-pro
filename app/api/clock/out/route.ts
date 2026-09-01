@@ -152,10 +152,11 @@ export async function POST(req: NextRequest) {
 
   // Generate AI end-of-day recap for DMs — awaited so Vercel doesn't kill the function
   if (session.role === 'manager' && session.org_id) {
+    const freshDm = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
     await sendDmEodRecap({
       dmId: session.id,
       dmName: session.fullName,
-      dmEmail: session.email,
+      dmEmail: freshDm?.email ?? session.email,
       orgId: session.org_id!,
       shiftId: shift.id,
     })

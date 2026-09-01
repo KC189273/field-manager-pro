@@ -42,15 +42,18 @@ export async function getSession(): Promise<SessionPayload | null> {
   // Check if user is still active or role has changed (catches terminated users and stale role JWTs)
   try {
     const { queryOne } = await import('@/lib/db')
-    const user = await queryOne<{ is_active: boolean; role: string }>(`SELECT is_active, role FROM users WHERE id = $1`, [session.id])
+    const user = await queryOne<{ is_active: boolean; role: string; email: string }>(`SELECT is_active, role, email FROM users WHERE id = $1`, [session.id])
     if (user && !user.is_active) {
       jar.delete(COOKIE)
       return null
     }
     if (user && user.role !== session.role) {
-      // Role changed in DB — clear stale JWT so user re-authenticates with correct role
       jar.delete(COOKIE)
       return null
+    }
+    // Keep session email in sync with DB — override stale JWT email
+    if (user && user.email !== session.email) {
+      session.email = user.email
     }
   } catch { /* DB error — allow through rather than blocking everyone */ }
 

@@ -74,6 +74,15 @@ export async function POST(req: NextRequest) {
     [session.id, lat, lng, address ?? null, storeId || null, photoKey || null]
   )
 
+  // AI uniform photo check — fire and forget, never blocks clock-in
+  if (photoKey && session.role === 'employee') {
+    import('@/lib/uniform-check').then(({ checkUniformPhoto }) => {
+      queryOne<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [session.id])
+        .then(u => checkUniformPhoto(shift!.id, session.id, photoKey, session.fullName, u?.manager_id ?? null))
+        .catch(() => {})
+    }).catch(() => {})
+  }
+
   // Record first breadcrumb if coordinates available
   if (lat && lng) {
     await query(

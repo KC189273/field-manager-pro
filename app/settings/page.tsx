@@ -116,6 +116,10 @@ export default function SettingsPage() {
   const [geoSettings, setGeoSettings] = useState<GeoSettings | null>(null)
   const [geoSaving, setGeoSaving] = useState(false)
   const [geoMsg, setGeoMsg] = useState<string | null>(null)
+  const [integrityAmber, setIntegrityAmber] = useState(20)
+  const [integrityRed, setIntegrityRed] = useState(30)
+  const [integritySaving, setIntegritySaving] = useState(false)
+  const [integrityMsg, setIntegrityMsg] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(s => {
@@ -124,6 +128,10 @@ export default function SettingsPage() {
         fetch('/api/geofence/settings').then(r => r.ok ? r.json() : null).then(d => {
           if (d?.settings) setGeoSettings(d.settings)
         })
+        // Load integrity thresholds
+        fetch('/api/reports/clockin-integrity').then(r => r.ok ? r.json() : null).then(d => {
+          if (d?.thresholds) { setIntegrityAmber(d.thresholds.amber); setIntegrityRed(d.thresholds.red) }
+        }).catch(() => {})
       }
     })
     fetch('/api/push/preferences').then(r => r.json()).then(d => setPrefs(d.prefs))
@@ -386,6 +394,53 @@ export default function SettingsPage() {
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Clock-In Integrity Thresholds — owner, ops_manager, developer only */}
+        {session && ['ops_manager', 'owner', 'developer'].includes(session.role) && (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 mt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Clock-In Integrity Thresholds</p>
+              {integrityMsg && <span className="text-xs text-green-400 font-medium">{integrityMsg}</span>}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-amber-400">Warning (Amber) at</label>
+                  <span className="text-amber-400 text-sm font-mono font-bold">{integrityAmber}%</span>
+                </div>
+                <input type="range" min={5} max={50} step={5} value={integrityAmber}
+                  onChange={e => setIntegrityAmber(Number(e.target.value))}
+                  className="w-full accent-amber-500" />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs text-red-400">Critical (Red) at</label>
+                  <span className="text-red-400 text-sm font-mono font-bold">{integrityRed}%</span>
+                </div>
+                <input type="range" min={10} max={60} step={5} value={integrityRed}
+                  onChange={e => setIntegrityRed(Number(e.target.value))}
+                  className="w-full accent-red-500" />
+              </div>
+              <button
+                onClick={async () => {
+                  setIntegritySaving(true)
+                  await fetch('/api/dev/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ updates: [
+                      { key: 'integrity_amber_threshold', value: integrityAmber },
+                      { key: 'integrity_red_threshold', value: integrityRed },
+                    ]})
+                  }).catch(() => {})
+                  setIntegritySaving(false)
+                  setIntegrityMsg('Saved')
+                  setTimeout(() => setIntegrityMsg(null), 2000)
+                }}
+                disabled={integritySaving}
+                className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors">
+                {integritySaving ? 'Saving...' : 'Save Thresholds'}
+              </button>
+            </div>
           </div>
         )}
 

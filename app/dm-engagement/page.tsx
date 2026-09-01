@@ -123,7 +123,21 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp' | 'uniform'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('coaching')
+
+  // Clock-in integrity state
+  const [integrityFrom, setIntegrityFrom] = useState('')
+  const [integrityTo, setIntegrityTo] = useState('')
+  const [integrityData, setIntegrityData] = useState<{
+    view: string; from: string; to: string
+    thresholds: { amber: number; red: number }
+    dmStats?: Array<{ dm_id: string; dm_name: string; total_shifts: number; manual_shifts: number; edited_shifts: number; manual_rate: number; edit_rate: number; intervention_rate: number; employee_count: number }>
+    summary?: { totalShifts: number; manualEntries: number; editedShifts: number; interventionRate: number }
+    employees?: Array<{ emp_id: string; emp_name: string; total_shifts: number; live_shifts: number; manual_shifts: number; edited_shifts: number; manual_by_names: string | null; late_manual_count: number }>
+  } | null>(null)
+  const [integrityLoading, setIntegrityLoading] = useState(false)
+  const [integrityDmId, setIntegrityDmId] = useState<string | null>(null)
+  const [integrityDmName, setIntegrityDmName] = useState('')
   const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
   const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; inCompliance: number; notInCompliance: number; noPhoto: number; pending: number; complianceRate: number; byDm: Record<string, { total: number; compliant: number; failed: number; noPhoto: number }>; nonCompliant: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string; has_photo: boolean; uniform_result: string | null }> } | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
@@ -190,6 +204,25 @@ export default function DmEngagementPage() {
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
+
+  async function loadIntegrity(dmId?: string | null, f?: string, t?: string) {
+    setIntegrityLoading(true)
+    try {
+      let url = `/api/reports/clockin-integrity`
+      const params: string[] = []
+      if (f) params.push(`from=${f}`)
+      if (t) params.push(`to=${t}`)
+      if (dmId) params.push(`dmId=${dmId}`)
+      if (params.length) url += '?' + params.join('&')
+      const res = await fetch(url)
+      if (res.ok) {
+        const d = await res.json()
+        setIntegrityData(d)
+        if (!f && d.from) { setIntegrityFrom(d.from); setIntegrityTo(d.to) }
+      }
+    } catch { /* ignore */ }
+    finally { setIntegrityLoading(false) }
+  }
 
   async function loadUniformCompliance(d?: string, date?: string) {
     setUniformLoading(true)
@@ -302,6 +335,12 @@ export default function DmEngagementPage() {
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'uniform' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Uniform
+          </button>
+          <button
+            onClick={() => { setMainTab('integrity'); if (!integrityData) loadIntegrity() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'integrity' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Integrity
           </button>
         </div>
 
@@ -802,6 +841,115 @@ export default function DmEngagementPage() {
                 )}
               </>
             )}
+          </div>
+        )}
+
+        {/* ── Clock-In Integrity Tab ── */}
+        {mainTab === 'integrity' && (
+          <div className="space-y-4">
+            {/* Date range */}
+            <div className="flex items-end gap-2 mb-4">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">From</label>
+                <input type="date" value={integrityFrom} onChange={e => setIntegrityFrom(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+              </div>
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">To</label>
+                <input type="date" value={integrityTo} onChange={e => setIntegrityTo(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+              </div>
+              <button onClick={() => loadIntegrity(integrityDmId, integrityFrom, integrityTo)} disabled={integrityLoading}
+                className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+                {integrityLoading ? '...' : 'Go'}
+              </button>
+            </div>
+
+            {integrityLoading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading...</p>
+            ) : !integrityData ? (
+              <p className="text-center text-gray-600 py-10 text-sm">Loading integrity data...</p>
+            ) : integrityData.view === 'all_dms' && integrityData.dmStats ? (
+              <>
+                {/* Back button if drilling into a DM */}
+                <p className="text-xs text-gray-500 mb-2">Showing {integrityData.from} to {integrityData.to} · Tap a DM to see per-employee detail</p>
+
+                {/* DM list */}
+                <div className="space-y-2">
+                  {integrityData.dmStats.map(dm => {
+                    const color = dm.intervention_rate >= integrityData!.thresholds.red ? 'border-red-800/40' : dm.intervention_rate >= integrityData!.thresholds.amber ? 'border-amber-800/40' : 'border-gray-800'
+                    const rateColor = dm.intervention_rate >= integrityData!.thresholds.red ? 'text-red-400' : dm.intervention_rate >= integrityData!.thresholds.amber ? 'text-amber-400' : 'text-green-400'
+                    return (
+                      <button key={dm.dm_id} onClick={() => { setIntegrityDmId(dm.dm_id); setIntegrityDmName(dm.dm_name); loadIntegrity(dm.dm_id, integrityFrom, integrityTo) }}
+                        className={`w-full bg-gray-900 border ${color} rounded-xl px-4 py-3 text-left transition-colors hover:border-violet-500/50`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm font-medium text-white">{dm.dm_name}</p>
+                          <span className={`text-sm font-bold ${rateColor}`}>{dm.intervention_rate}%</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-xs text-gray-500">
+                          <span>{dm.total_shifts} shifts</span>
+                          <span>{dm.manual_shifts} manual ({dm.manual_rate}%)</span>
+                          <span>{dm.edited_shifts} edited ({dm.edit_rate}%)</span>
+                          <span>{dm.employee_count} emps</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </>
+            ) : integrityData.view === 'dm_detail' && integrityData.employees ? (
+              <>
+                {/* Back button */}
+                <button onClick={() => { setIntegrityDmId(null); setIntegrityDmName(''); loadIntegrity(null, integrityFrom, integrityTo) }}
+                  className="text-violet-400 text-sm font-medium flex items-center gap-1 hover:text-violet-300 mb-2">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" /></svg>
+                  Back to all DMs
+                </button>
+
+                <p className="text-xs text-gray-500 mb-3">{integrityDmName} · {integrityData.from} to {integrityData.to}</p>
+
+                {/* Summary */}
+                {integrityData.summary && (
+                  <div className="grid grid-cols-3 gap-2 mb-3">
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                      <p className="text-lg font-bold text-white">{integrityData.summary.totalShifts}</p>
+                      <p className="text-[10px] text-gray-500">Total Shifts</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                      <p className={`text-lg font-bold ${integrityData.summary.manualEntries > 0 ? 'text-amber-400' : 'text-white'}`}>{integrityData.summary.manualEntries}</p>
+                      <p className="text-[10px] text-gray-500">Manual</p>
+                    </div>
+                    <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                      <p className={`text-lg font-bold ${integrityData.summary.interventionRate >= integrityData.thresholds.red ? 'text-red-400' : integrityData.summary.interventionRate >= integrityData.thresholds.amber ? 'text-amber-400' : 'text-green-400'}`}>{integrityData.summary.interventionRate}%</p>
+                      <p className="text-[10px] text-gray-500">Intervention</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Per-employee list */}
+                <div className="space-y-2">
+                  {integrityData.employees.map(emp => {
+                    const clockInScore = emp.total_shifts > 0 ? Math.round((emp.live_shifts / emp.total_shifts) * 100) : 100
+                    const scoreColor = clockInScore >= 80 ? 'text-green-400' : clockInScore >= 60 ? 'text-amber-400' : 'text-red-400'
+                    return (
+                      <div key={emp.emp_id} className={`bg-gray-900 border rounded-xl px-4 py-2.5 ${emp.manual_shifts > 0 ? 'border-amber-800/30' : 'border-gray-800'}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-sm font-medium text-white">{emp.emp_name}</p>
+                          <span className={`text-sm font-bold ${scoreColor}`}>{clockInScore}%</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                          <span>{emp.live_shifts} live</span>
+                          <span className={emp.manual_shifts > 0 ? 'text-amber-400' : ''}>{emp.manual_shifts} manual</span>
+                          <span className={emp.edited_shifts > 0 ? 'text-amber-400' : ''}>{emp.edited_shifts} edited</span>
+                          {emp.late_manual_count > 0 && <span className="text-red-400">{emp.late_manual_count} late entry</span>}
+                        </div>
+                        {emp.manual_by_names && <p className="text-[10px] text-gray-600 mt-1">Entered by: {emp.manual_by_names}</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            ) : null}
           </div>
         )}
 

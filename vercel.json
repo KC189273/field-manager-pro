@@ -159,6 +159,10 @@
     {
       "path": "/api/cron/coaching-compliance",
       "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/uniform-compliance",
+      "schedule": "30 2 * * *"
     }
   ]
 }

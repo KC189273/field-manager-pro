@@ -12,10 +12,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const { searchParams } = new URL(req.url)
+    const specificDate = searchParams.get('date')
     const days = Math.min(parseInt(searchParams.get('days') || '7') || 7, 90)
 
     const orgId = session.org_id
     const orgFilter = orgId ? `AND u.org_id = '${(orgId as string).replace(/'/g, "''")}'` : ''
+    const dateFilter = specificDate
+      ? `AND (uc.created_at AT TIME ZONE 'America/Chicago')::date = '${specificDate}'::date`
+      : `AND uc.created_at >= NOW() - INTERVAL '${days} days'`
 
     // Summary stats
     const stats = await query<{
@@ -45,7 +49,7 @@ export async function GET(req: NextRequest) {
       FROM uniform_checks uc
       JOIN users u ON u.id = uc.user_id
       WHERE uc.result = 'fail'
-        AND uc.created_at >= NOW() - INTERVAL '${days} days'
+        ${dateFilter}
         ${orgFilter}
       ORDER BY uc.created_at DESC
       LIMIT 50

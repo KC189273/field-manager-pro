@@ -129,7 +129,9 @@ export default function DmEngagementPage() {
   const [photoLoading, setPhotoLoading] = useState(false)
 
   // Uniform compliance state
+  const [uniformMode, setUniformMode] = useState<'range' | 'date'>('range')
   const [uniformDays, setUniformDays] = useState('7')
+  const [uniformDate, setUniformDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
   const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string }>; offenders: Array<{ user_name: string; fail_count: number }> } | null>(null)
   const [uniformLoading, setUniformLoading] = useState(false)
 
@@ -189,10 +191,11 @@ export default function DmEngagementPage() {
     }).catch(() => setCoachingLoading(false))
   }, [session])
 
-  async function loadUniformCompliance(d?: string) {
+  async function loadUniformCompliance(d?: string, date?: string) {
     setUniformLoading(true)
     try {
-      const res = await fetch(`/api/reports/uniform-compliance?days=${d || uniformDays}`)
+      const params = date ? `date=${date}` : `days=${d || uniformDays}`
+      const res = await fetch(`/api/reports/uniform-compliance?${params}`)
       if (res.ok) setUniformData(await res.json())
     } catch { /* ignore */ }
     finally { setUniformLoading(false) }
@@ -673,20 +676,34 @@ export default function DmEngagementPage() {
         {/* ── Uniform Compliance Tab ── */}
         {mainTab === 'uniform' && (
           <div className="space-y-4">
-            <div className="flex items-end gap-2 mb-4">
-              <div className="flex-1">
-                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">Range</label>
-                <select value={uniformDays} onChange={e => setUniformDays(e.target.value)}
-                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
-                  <option value="7">Last 7 days</option>
-                  <option value="14">Last 14 days</option>
-                  <option value="30">Last 30 days</option>
-                </select>
+            <div className="mb-4">
+              <div className="flex gap-2 mb-2">
+                <button onClick={() => setUniformMode('range')}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${uniformMode === 'range' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400'}`}>Range</button>
+                <button onClick={() => setUniformMode('date')}
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-full transition-colors ${uniformMode === 'date' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400'}`}>Specific Date</button>
               </div>
-              <button onClick={() => loadUniformCompliance(uniformDays)} disabled={uniformLoading}
-                className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
-                {uniformLoading ? '...' : 'Load'}
-              </button>
+              <div className="flex items-end gap-2">
+                {uniformMode === 'range' ? (
+                  <div className="flex-1">
+                    <select value={uniformDays} onChange={e => setUniformDays(e.target.value)}
+                      className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                      <option value="7">Last 7 days</option>
+                      <option value="14">Last 14 days</option>
+                      <option value="30">Last 30 days</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="flex-1">
+                    <input type="date" value={uniformDate} onChange={e => setUniformDate(e.target.value)}
+                      className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500" />
+                  </div>
+                )}
+                <button onClick={() => uniformMode === 'date' ? loadUniformCompliance(undefined, uniformDate) : loadUniformCompliance(uniformDays)} disabled={uniformLoading}
+                  className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+                  {uniformLoading ? '...' : 'Load'}
+                </button>
+              </div>
             </div>
 
             {uniformLoading ? (

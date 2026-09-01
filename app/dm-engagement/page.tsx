@@ -132,7 +132,7 @@ export default function DmEngagementPage() {
   const [uniformMode, setUniformMode] = useState<'range' | 'date'>('range')
   const [uniformDays, setUniformDays] = useState('7')
   const [uniformDate, setUniformDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
-  const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string }>; offenders: Array<{ user_name: string; fail_count: number }> } | null>(null)
+  const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string; photo_url?: string | null }>; offenders: Array<{ user_name: string; fail_count: number }> } | null>(null)
   const [uniformLoading, setUniformLoading] = useState(false)
 
   // Coaching compliance state
@@ -767,21 +767,30 @@ export default function DmEngagementPage() {
                   <div>
                     <p className="text-xs text-amber-400 font-semibold uppercase tracking-wide mb-2">Recent Failures ({uniformData.failures.length})</p>
                     <div className="space-y-2">
-                      {uniformData.failures.map((f, i) => (
+                      {uniformData.failures.map((f: { user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string; photo_url?: string | null }, i: number) => (
                         <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-sm font-medium text-white">{f.user_name}</p>
-                            <p className="text-xs text-gray-600">{new Date(f.created_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}</p>
+                          <div className="flex items-start gap-3">
+                            {f.photo_url && (
+                              <button onClick={() => window.open(f.photo_url!, '_blank')} className="flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border border-gray-700 hover:border-red-500 transition-colors">
+                                <img src={f.photo_url} alt={f.user_name} className="w-full h-full object-cover" />
+                              </button>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-sm font-medium text-white">{f.user_name}</p>
+                                <p className="text-xs text-gray-600">{new Date(f.created_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}</p>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <span className={f.shirt_ok === false ? 'text-red-400' : f.shirt_ok === true ? 'text-green-400' : 'text-gray-500'}>
+                                  Shirt: {f.shirt_ok === false ? 'Fail' : f.shirt_ok === true ? 'Pass' : '?'}
+                                </span>
+                                <span className={f.nametag_ok === false ? 'text-red-400' : f.nametag_ok === true ? 'text-green-400' : 'text-gray-500'}>
+                                  Tag: {f.nametag_ok === false ? 'Fail' : f.nametag_ok === true ? 'Pass' : '?'}
+                                </span>
+                              </div>
+                              {f.details && <p className="text-[11px] text-gray-500 mt-1 line-clamp-2">{f.details}</p>}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-3 text-xs">
-                            <span className={f.shirt_ok === false ? 'text-red-400' : f.shirt_ok === true ? 'text-green-400' : 'text-gray-500'}>
-                              Shirt: {f.shirt_ok === false ? 'No' : f.shirt_ok === true ? 'Yes' : '?'}
-                            </span>
-                            <span className={f.nametag_ok === false ? 'text-red-400' : f.nametag_ok === true ? 'text-green-400' : 'text-gray-500'}>
-                              Name Tag: {f.nametag_ok === false ? 'No' : f.nametag_ok === true ? 'Yes' : '?'}
-                            </span>
-                          </div>
-                          {f.details && <p className="text-[11px] text-gray-500 mt-1">{f.details}</p>}
                         </div>
                       ))}
                     </div>

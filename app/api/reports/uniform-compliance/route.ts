@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 const ALLOWED = ['ops_manager', 'owner', 'sales_director', 'developer']
 
@@ -55,6 +56,14 @@ export async function GET(req: NextRequest) {
       LIMIT 50
     `)
 
+    // Generate presigned photo URLs for failures
+    const failuresWithPhotos = await Promise.all(
+      failures.map(async f => ({
+        ...f,
+        photo_url: f.photo_key ? await getReceiptViewUrl(f.photo_key).catch(() => null) : null,
+      }))
+    )
+
     // Repeat offenders
     const offenders = await query<{ user_name: string; fail_count: number }>(`
       SELECT u.full_name as user_name, COUNT(*)::int as fail_count
@@ -70,7 +79,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       stats: stats[0] || { total: 0, passed: 0, failed: 0, unclear: 0, skipped: 0, monthly_cost: 0 },
-      failures,
+      failures: failuresWithPhotos,
       offenders,
       days,
     })

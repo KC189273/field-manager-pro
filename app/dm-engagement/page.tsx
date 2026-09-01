@@ -123,10 +123,15 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp' | 'uniform'>('coaching')
   const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
   const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; withPhoto: number; withoutPhoto: number; photoRate: number; byDm: Record<string, { total: number; withPhoto: number }>; missing: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string }> } | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
+
+  // Uniform compliance state
+  const [uniformDays, setUniformDays] = useState('7')
+  const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string }>; offenders: Array<{ user_name: string; fail_count: number }> } | null>(null)
+  const [uniformLoading, setUniformLoading] = useState(false)
 
   // Coaching compliance state
   const [coachCompRange, setCoachCompRange] = useState('7')
@@ -183,6 +188,15 @@ export default function DmEngagementPage() {
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
+
+  async function loadUniformCompliance(d?: string) {
+    setUniformLoading(true)
+    try {
+      const res = await fetch(`/api/reports/uniform-compliance?days=${d || uniformDays}`)
+      if (res.ok) setUniformData(await res.json())
+    } catch { /* ignore */ }
+    finally { setUniformLoading(false) }
+  }
 
   async function loadCoachingCompliance(r?: string) {
     setCoachCompLoading(true)
@@ -279,6 +293,12 @@ export default function DmEngagementPage() {
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching_comp' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Coaching
+          </button>
+          <button
+            onClick={() => { setMainTab('uniform'); if (!uniformData) loadUniformCompliance() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'uniform' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Uniform
           </button>
         </div>
 
@@ -650,6 +670,115 @@ export default function DmEngagementPage() {
         )}
         </>
         )}
+        {/* ── Uniform Compliance Tab ── */}
+        {mainTab === 'uniform' && (
+          <div className="space-y-4">
+            <div className="flex items-end gap-2 mb-4">
+              <div className="flex-1">
+                <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">Range</label>
+                <select value={uniformDays} onChange={e => setUniformDays(e.target.value)}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                  <option value="7">Last 7 days</option>
+                  <option value="14">Last 14 days</option>
+                  <option value="30">Last 30 days</option>
+                </select>
+              </div>
+              <button onClick={() => loadUniformCompliance(uniformDays)} disabled={uniformLoading}
+                className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium px-4 py-2 rounded-lg disabled:opacity-50">
+                {uniformLoading ? '...' : 'Load'}
+              </button>
+            </div>
+
+            {uniformLoading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading...</p>
+            ) : !uniformData ? (
+              <p className="text-center text-gray-600 py-10 text-sm">Select a range and click Load</p>
+            ) : (
+              <>
+                {/* Summary */}
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-white">{uniformData.stats.total}</p>
+                    <p className="text-[10px] text-gray-500">Checked</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-green-400">{uniformData.stats.passed}</p>
+                    <p className="text-[10px] text-gray-500">Passed</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className={`text-lg font-bold ${uniformData.stats.failed > 0 ? 'text-red-400' : 'text-white'}`}>{uniformData.stats.failed}</p>
+                    <p className="text-[10px] text-gray-500">Failed</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                    <p className="text-lg font-bold text-gray-400">{uniformData.stats.skipped}</p>
+                    <p className="text-[10px] text-gray-500">Skipped</p>
+                  </div>
+                </div>
+
+                {/* Monthly cost */}
+                <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-gray-400">Monthly AI Cost</p>
+                    <p className="text-sm font-bold text-white">${uniformData.stats.monthly_cost.toFixed(2)} / $20.00</p>
+                  </div>
+                  <div className="w-full bg-gray-800 rounded-full h-2">
+                    <div className={`h-2 rounded-full ${uniformData.stats.monthly_cost >= 20 ? 'bg-red-500' : uniformData.stats.monthly_cost >= 15 ? 'bg-amber-500' : 'bg-green-500'}`}
+                      style={{ width: `${Math.min(100, (uniformData.stats.monthly_cost / 20) * 100)}%` }} />
+                  </div>
+                  <p className="text-[10px] text-gray-600 mt-1">
+                    {uniformData.stats.monthly_cost >= 20 ? 'Cap reached — checking paused' : uniformData.stats.monthly_cost >= 15 ? 'Targeted mode — checking repeat offenders only' : 'Full coverage — checking all photos'}
+                  </p>
+                </div>
+
+                {/* Repeat offenders */}
+                {uniformData.offenders.length > 0 && (
+                  <div>
+                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Repeat Offenders (30 days)</p>
+                    <div className="space-y-1">
+                      {uniformData.offenders.map((o, i) => (
+                        <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2 flex items-center justify-between">
+                          <p className="text-sm text-white">{o.user_name}</p>
+                          <span className="text-xs text-red-400 font-bold">{o.fail_count} violations</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent failures */}
+                {uniformData.failures.length > 0 && (
+                  <div>
+                    <p className="text-xs text-amber-400 font-semibold uppercase tracking-wide mb-2">Recent Failures ({uniformData.failures.length})</p>
+                    <div className="space-y-2">
+                      {uniformData.failures.map((f, i) => (
+                        <div key={i} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-sm font-medium text-white">{f.user_name}</p>
+                            <p className="text-xs text-gray-600">{new Date(f.created_at).toLocaleDateString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric' })}</p>
+                          </div>
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className={f.shirt_ok === false ? 'text-red-400' : f.shirt_ok === true ? 'text-green-400' : 'text-gray-500'}>
+                              Shirt: {f.shirt_ok === false ? 'No' : f.shirt_ok === true ? 'Yes' : '?'}
+                            </span>
+                            <span className={f.nametag_ok === false ? 'text-red-400' : f.nametag_ok === true ? 'text-green-400' : 'text-gray-500'}>
+                              Name Tag: {f.nametag_ok === false ? 'No' : f.nametag_ok === true ? 'Yes' : '?'}
+                            </span>
+                          </div>
+                          {f.details && <p className="text-[11px] text-gray-500 mt-1">{f.details}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {uniformData.stats.total === 0 && (
+                  <p className="text-center text-gray-600 py-6 text-sm">No uniform checks yet — they start with the next clock-in photo</p>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         {/* ── Coaching Compliance Tab ── */}
         {mainTab === 'coaching_comp' && (
           <div className="space-y-4">

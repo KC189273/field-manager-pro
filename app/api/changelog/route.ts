@@ -15,7 +15,7 @@ export async function GET() {
     FROM app_changelog
     WHERE affected_roles IS NULL OR $1 = ANY(affected_roles)
     ORDER BY change_date DESC, created_at DESC
-    LIMIT 20
+    LIMIT 100
   `, [session.role])
 
   return NextResponse.json({ entries })

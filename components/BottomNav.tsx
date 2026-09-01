@@ -78,6 +78,9 @@ const ALL_FEATURES: Feature[] = [
   { href: '/my-customers',    label: 'My Customers',     short: 'Clients',   Icon: TeamIcon,           show: r => r === 'barber' || r === 'shop_owner' },
   { href: '/shop-setup',      label: 'Shop Setup',       short: 'Setup',     Icon: GearIcon,           show: r => r === 'shop_owner' },
 
+  // ── Info ──
+  { href: '/changelog',       label: 'App Changes',       short: 'Changes', Icon: HistoryIcon,        show: isRetail },
+
   // ── Help (all roles) ──
   { href: '/help',            label: 'Help & Support',   short: 'Help',      Icon: HelpIcon,           show: () => true },
   { href: '/feature-requests', label: 'App Recommendations', short: 'Recommend', Icon: ExclamationIcon,    show: canViewTeam },

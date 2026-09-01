@@ -141,6 +141,7 @@ export default function DmEngagementPage() {
   const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
   const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; inCompliance: number; notInCompliance: number; noPhoto: number; pending: number; complianceRate: number; byDm: Record<string, { total: number; compliant: number; failed: number; noPhoto: number }>; nonCompliant: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string; has_photo: boolean; uniform_result: string | null }> } | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
+  const [photoExpandedDm, setPhotoExpandedDm] = useState<string | null>(null)
 
   // Uniform compliance state
   const [uniformMode, setUniformMode] = useState<'range' | 'date'>('range')
@@ -1106,41 +1107,53 @@ export default function DmEngagementPage() {
                       const rateA = a[1].total > 0 ? a[1].compliant / a[1].total : 0
                       const rateB = b[1].total > 0 ? b[1].compliant / b[1].total : 0
                       return rateA - rateB
-                    }).map(([dm, data]) => {
+                    }).map(([dm, data]: [string, { total: number; compliant: number; failed: number; noPhoto: number; employees?: Array<{ full_name: string; clock_in_at: string; store_address: string | null; uniform_result: string | null; has_photo: boolean; photo_url: string | null; uniform_details: string | null }> }]) => {
                       const rate = data.total > 0 ? Math.round((data.compliant / data.total) * 100) : 0
+                      const isExpanded = photoExpandedDm === dm
+                      const hasIssues = (data.failed || 0) + (data.noPhoto || 0) > 0
                       return (
-                        <div key={dm} className={`bg-gray-900 border rounded-xl px-4 py-2.5 flex items-center justify-between ${rate < 70 ? 'border-red-800/40' : 'border-gray-800'}`}>
-                          <div>
-                            <p className="text-sm font-medium text-white">{dm}</p>
-                            <p className="text-xs text-gray-500">{data.compliant}/{data.total} compliant{data.failed > 0 ? ` · ${data.failed} failed` : ''}{data.noPhoto > 0 ? ` · ${data.noPhoto} no photo` : ''}</p>
-                          </div>
-                          <span className={`text-sm font-bold ${rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{rate}%</span>
+                        <div key={dm}>
+                          <button
+                            onClick={() => hasIssues ? setPhotoExpandedDm(isExpanded ? null : dm) : undefined}
+                            className={`w-full bg-gray-900 border rounded-xl px-4 py-2.5 flex items-center justify-between text-left transition-colors ${rate < 70 ? 'border-red-800/40' : 'border-gray-800'} ${hasIssues ? 'hover:border-violet-500/50 cursor-pointer' : ''} ${isExpanded ? 'rounded-b-none' : ''}`}>
+                            <div>
+                              <p className="text-sm font-medium text-white">{dm}</p>
+                              <p className="text-xs text-gray-500">{data.compliant}/{data.total} compliant{data.failed > 0 ? ` · ${data.failed} failed` : ''}{data.noPhoto > 0 ? ` · ${data.noPhoto} no photo` : ''}</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-bold ${rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{rate}%</span>
+                              {hasIssues && <svg className={`w-4 h-4 text-gray-600 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>}
+                            </div>
+                          </button>
+                          {isExpanded && data.employees && data.employees.length > 0 && (
+                            <div className="bg-gray-900 border border-t-0 border-gray-800 rounded-b-xl px-4 pb-3 space-y-2">
+                              {data.employees.map((emp, i) => (
+                                <div key={i} className="flex items-start gap-3 pt-2">
+                                  {emp.photo_url ? (
+                                    <button onClick={() => window.open(emp.photo_url!, '_blank')} className="flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden border border-gray-700 hover:border-red-500 transition-colors">
+                                      <img src={emp.photo_url} alt={emp.full_name} className="w-full h-full object-cover" />
+                                    </button>
+                                  ) : (
+                                    <div className="flex-shrink-0 w-14 h-14 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center">
+                                      <p className="text-[9px] text-gray-600">No photo</p>
+                                    </div>
+                                  )}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm text-white font-medium">{emp.full_name}</p>
+                                    <p className="text-xs text-gray-500">{emp.store_address || 'No store'} · {new Date(emp.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</p>
+                                    <p className="text-[11px] text-red-400 mt-0.5">{!emp.has_photo ? 'No photo taken' : 'Uniform failed'}{emp.uniform_details ? ` — ${emp.uniform_details}` : ''}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )
                     })}
                   </div>
                 </div>
 
-                {/* Non-compliant list */}
-                {photoData.nonCompliant.length > 0 && (
-                  <div>
-                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Non-Compliant ({photoData.nonCompliant.length})</p>
-                    <div className="space-y-1">
-                      {photoData.nonCompliant.map((m, i) => (
-                        <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm text-white">{m.full_name}</p>
-                            <p className="text-xs text-gray-500">
-                              {!m.has_photo ? 'No photo taken' : m.uniform_result === 'fail' ? 'Uniform failed' : 'Pending check'}
-                              {' · '}{m.store_address || 'No store'} · {m.manager_name || 'Unassigned'}
-                            </p>
-                          </div>
-                          <p className="text-xs text-gray-600">{new Date(m.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                {/* Tap a DM above to see their non-compliant employees */}
               </>
             )}
           </div>

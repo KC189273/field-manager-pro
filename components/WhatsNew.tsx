@@ -17,22 +17,29 @@ const TYPE_COLORS: Record<string, string> = {
   role_change: 'bg-amber-900/40 text-amber-400',
 }
 
-const DISMISS_KEY = 'fmp_whats_new_dismissed'
+const FIRST_SEEN_KEY = 'fmp_whats_new_first_seen'
+const FIVE_DAYS = 5 * 86400000
 
 export default function WhatsNew() {
   const [entries, setEntries] = useState<ChangelogEntry[]>([])
   const [expanded, setExpanded] = useState(false)
-  const [dismissed, setDismissed] = useState(true)
+  const [dismissed, setDismissed] = useState(false) // Only hides for current session
+  const [expired, setExpired] = useState(false) // Permanently hidden after 5 days
 
   useEffect(() => {
-    // Check if dismissed
     try {
-      const d = localStorage.getItem(DISMISS_KEY)
-      // Show again if dismissed more than 7 days ago or never dismissed
-      if (!d || Date.now() - parseInt(d) > 7 * 86400000) {
-        setDismissed(false)
+      const firstSeen = localStorage.getItem(FIRST_SEEN_KEY)
+      if (firstSeen) {
+        // If first seen more than 5 days ago, permanently hide
+        if (Date.now() - parseInt(firstSeen) > FIVE_DAYS) {
+          setExpired(true)
+          return
+        }
+      } else {
+        // First time seeing — record the timestamp
+        localStorage.setItem(FIRST_SEEN_KEY, String(Date.now()))
       }
-    } catch { setDismissed(false) }
+    } catch { /* show by default */ }
 
     fetch('/api/changelog').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.entries) setEntries(d.entries)
@@ -40,11 +47,10 @@ export default function WhatsNew() {
   }, [])
 
   function dismiss() {
-    setDismissed(true)
-    try { localStorage.setItem(DISMISS_KEY, String(Date.now())) } catch {}
+    setDismissed(true) // Session-only dismiss — comes back on next app open
   }
 
-  if (dismissed || entries.length === 0) return null
+  if (expired || dismissed || entries.length === 0) return null
 
   const shown = expanded ? entries : entries.slice(0, 3)
 

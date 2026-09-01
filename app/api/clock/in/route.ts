@@ -28,10 +28,10 @@ export async function POST(req: NextRequest) {
 
   // ── Mandatory photo check (employees only) ──
   if (session.role === 'employee' && !photoKey) {
-    const mandatory = await queryOne<{ value: string }>(
+    const mandatory = await queryOne<{ value: unknown }>(
       `SELECT value FROM dev_config WHERE key = 'clock_in_photo_required'`
     ).catch(() => null)
-    if (mandatory?.value === 'true') {
+    if (mandatory?.value === true || mandatory?.value === 'true' || String(mandatory?.value) === 'true') {
       return NextResponse.json({
         error: 'A uniform photo is required to clock in. Please take a photo and try again.',
         photoRequired: true,
@@ -126,10 +126,10 @@ export async function POST(req: NextRequest) {
         SELECT COALESCE((SELECT geofence_enabled FROM organizations WHERE id = $1), FALSE) as val
       `, [session.org_id]).catch(() => null)
       // For now, use a dev_config flag for mandatory photos
-      const mandatory = await queryOne<{ value: string }>(`
+      const mandatory = await queryOne<{ value: unknown }>(`
         SELECT value FROM dev_config WHERE key = 'clock_in_photo_required'
       `).catch(() => null)
-      if (mandatory?.value === 'true') {
+      if (mandatory?.value === true || mandatory?.value === 'true' || String(mandatory?.value) === 'true') {
         const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
         await query(
           `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)

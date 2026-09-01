@@ -91,11 +91,13 @@ export async function checkUniformPhoto(
             text: `You are checking a retail employee's clock-in selfie for uniform compliance. Check for:
 1. SHIRT: Is the person wearing a T-Mobile or Metro by T-Mobile branded shirt? Look for magenta/pink color and/or T-Mobile/Metro logo.
 2. NAME TAG: Is a name badge/tag visible?
+3. HAT: If the person is wearing a hat, is it a T-Mobile or Metro by T-Mobile branded hat? A hat is NOT required — only flag if they ARE wearing a hat that is not T-Mobile/Metro branded.
 
 Respond with ONLY a JSON object (no markdown):
-{"shirt_ok": true/false, "nametag_ok": true/false, "details": "brief description of what you see"}
+{"shirt_ok": true/false, "nametag_ok": true/false, "hat_ok": true/false/null, "details": "brief description of what you see"}
 
-If the photo is too dark, blurry, or you genuinely can't tell, use null for that field.`,
+hat_ok should be: true if wearing a T-Mobile/Metro hat OR no hat at all, false if wearing a non-branded hat, null if you can't tell.
+If the photo is too dark, blurry, or you genuinely can't tell about any field, use null for that field.`,
           },
         ],
       }],
@@ -108,16 +110,16 @@ If the photo is too dark, blurry, or you genuinely can't tell, use null for that
     // Haiku pricing: $0.80/MTok input, $4/MTok output for vision
     const cost = (inputTokens * 0.0000008) + (outputTokens * 0.000004)
 
-    let parsed: { shirt_ok: boolean | null; nametag_ok: boolean | null; details: string }
+    let parsed: { shirt_ok: boolean | null; nametag_ok: boolean | null; hat_ok: boolean | null; details: string }
     try {
       const cleaned = text.replace(/```json\n?/g, '').replace(/```/g, '').trim()
       parsed = JSON.parse(cleaned)
     } catch {
-      parsed = { shirt_ok: null, nametag_ok: null, details: text.slice(0, 500) }
+      parsed = { shirt_ok: null, nametag_ok: null, hat_ok: null, details: text.slice(0, 500) }
     }
 
     const result: UniformResult['result'] =
-      (parsed.shirt_ok === false || parsed.nametag_ok === false) ? 'fail' :
+      (parsed.shirt_ok === false || parsed.nametag_ok === false || parsed.hat_ok === false) ? 'fail' :
       (parsed.shirt_ok === null || parsed.nametag_ok === null) ? 'unclear' : 'pass'
 
     // Save result
@@ -132,6 +134,7 @@ If the photo is too dark, blurry, or you genuinely can't tell, use null for that
       const issues: string[] = []
       if (parsed.shirt_ok === false) issues.push('not wearing T-Mobile/Metro shirt')
       if (parsed.nametag_ok === false) issues.push('no visible name tag')
+      if (parsed.hat_ok === false) issues.push('wearing non-branded hat')
 
       const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
       await query(

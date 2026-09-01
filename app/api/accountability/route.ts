@@ -545,27 +545,36 @@ async function sendApprovedDocEmails(doc: {
 
   const levelEmailLabel = levelLabel(doc.level).toUpperCase()
 
-  // Email to subject (employee/DM)
-  await sendEmail(
-    doc.subject_email,
-    `OFFICIAL NOTICE — ${levelEmailLabel} | Ref: ${doc.ref_number}`,
-    buildFormalDocHtml({ ...baseParams, ackLink })
-  )
+  // Email to subject (employee/DM) — fresh query to get current email
+  const freshSubject = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.subject_id])
+  if (freshSubject?.email) {
+    await sendEmail(
+      freshSubject.email,
+      `OFFICIAL NOTICE — ${levelEmailLabel} | Ref: ${doc.ref_number}`,
+      buildFormalDocHtml({ ...baseParams, ackLink })
+    )
+  }
 
-  // Retained copy to author (DM/SD)
-  await sendEmail(
-    doc.author_email,
-    `[RETAINED COPY] ${levelEmailLabel} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
-    buildFormalDocHtml({ ...baseParams, isRetainedCopy: true })
-  )
+  // Retained copy to author (DM/SD) — fresh query to get current email
+  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+  if (freshAuthor?.email) {
+    await sendEmail(
+      freshAuthor.email,
+      `[RETAINED COPY] ${levelEmailLabel} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
+      buildFormalDocHtml({ ...baseParams, isRetainedCopy: true })
+    )
+  }
 
   // SD copy (only if SD is not the author, and only for written/final)
-  if (doc.sd_id && doc.sd_email && doc.sd_id !== doc.author_id && doc.level !== 'verbal') {
-    await sendEmail(
-      doc.sd_email,
-      `[SD COPY — FILED] ${levelEmailLabel} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
-      buildFormalDocHtml({ ...baseParams, isSdCopy: true })
-    )
+  if (doc.sd_id && doc.sd_id !== doc.author_id && doc.level !== 'verbal') {
+    const freshSd = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.sd_id])
+    if (freshSd?.email) {
+      await sendEmail(
+        freshSd.email,
+        `[SD COPY — FILED] ${levelEmailLabel} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
+        buildFormalDocHtml({ ...baseParams, isSdCopy: true })
+      )
+    }
   }
 }
 

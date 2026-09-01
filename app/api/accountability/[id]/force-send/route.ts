@@ -71,26 +71,31 @@ export async function POST(
     docDate, priorConvos, linkedVerbals,
   }
 
-  // Send formal notice to employee
-  sendEmail(
-    doc.subject_email,
-    `OFFICIAL NOTICE — ${levelLabel(doc.level).toUpperCase()} | Ref: ${doc.ref_number}`,
-    buildFormalDocHtml({ ...baseParams, ackLink })
-  ).catch(() => {})
+  // Send formal notice to employee — fresh query to get current email
+  const freshSubject = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.subject_id])
+  if (freshSubject?.email) {
+    sendEmail(
+      freshSubject.email,
+      `OFFICIAL NOTICE — ${levelLabel(doc.level).toUpperCase()} | Ref: ${doc.ref_number}`,
+      buildFormalDocHtml({ ...baseParams, ackLink })
+    ).catch(() => {})
+  }
 
-  // CC: DM (author), ops managers, SD, owner
-  const ccRecipients = await query<{ email: string; full_name: string }>(
-    `SELECT email, full_name FROM users
+  // CC: DM (author), ops managers, SD, owner — fresh queries for author and SD emails
+  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+  const freshSd = doc.sd_id ? await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.sd_id]) : null
+  const ccRecipients = await query<{ id: string; email: string; full_name: string }>(
+    `SELECT id, email, full_name FROM users
      WHERE org_id = $1 AND is_active = TRUE
        AND role IN ('ops_manager', 'ops_field_leader', 'owner')`,
     [doc.org_id]
   )
   const ccEmails = ccRecipients.map(r => r.email)
-  if (!ccEmails.includes(doc.author_email)) ccEmails.push(doc.author_email)
-  if (doc.sd_email && !ccEmails.includes(doc.sd_email)) ccEmails.push(doc.sd_email)
+  if (freshAuthor?.email && !ccEmails.includes(freshAuthor.email)) ccEmails.push(freshAuthor.email)
+  if (freshSd?.email && !ccEmails.includes(freshSd.email)) ccEmails.push(freshSd.email)
 
   for (const email of ccEmails) {
-    const isAuthor = email === doc.author_email
+    const isAuthor = freshAuthor?.email ? email === freshAuthor.email : false
     sendEmail(
       email,
       `[CC — FILED] ${levelLabel(doc.level).toUpperCase()} sent to ${doc.subject_name} | Ref: ${doc.ref_number}`,

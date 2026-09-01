@@ -114,11 +114,15 @@ export async function POST(
       'accountability'
     ).catch(() => {})
 
-    sendEmail(
-      doc.author_email,
-      `[ACTION REQUIRED] Accountability Doc Sent Back for Revision | Ref: ${doc.ref_number}`,
-      `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#e5e7eb;font-family:'Arial',sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#e5e7eb;padding:32px 0;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #d1d5db;"><tr><td style="background:#1e3a5f;padding:22px 32px;text-align:center;"><h1 style="color:#bfdbfe;font-size:15px;letter-spacing:1px;text-transform:uppercase;margin:0;">Document Sent Back for Revision</h1></td></tr><tr><td style="padding:28px 32px;"><p style="font-size:14px;color:#374151;margin:0 0 16px;line-height:1.6;">Your accountability document <strong>${doc.ref_number}</strong> for <strong>${doc.subject_name}</strong> has been sent back for revision by <strong>${session.fullName}</strong>.</p><div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 16px;margin:16px 0;"><p style="font-size:11px;font-weight:bold;color:#1e40af;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px;">Reviewer Notes — What to Fix</p><p style="font-size:13px;color:#1e3a8a;margin:0;line-height:1.6;">${escapeHtmlBr(rejectionNotes.trim())}</p></div><p style="font-size:13px;color:#6b7280;margin:16px 0 0;">Please log in to <a href="${APP_URL}/accountability" style="color:#1e3a5f;">Field Manager Pro</a>, open the document, make the requested changes, and resubmit for approval.</p></td></tr></table></td></tr></table></body></html>`
-    ).catch(() => {})
+    // Fresh query to get current author email
+    const freshAuthorRevision = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+    if (freshAuthorRevision?.email) {
+      sendEmail(
+        freshAuthorRevision.email,
+        `[ACTION REQUIRED] Accountability Doc Sent Back for Revision | Ref: ${doc.ref_number}`,
+        `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#e5e7eb;font-family:'Arial',sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#e5e7eb;padding:32px 0;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #d1d5db;"><tr><td style="background:#1e3a5f;padding:22px 32px;text-align:center;"><h1 style="color:#bfdbfe;font-size:15px;letter-spacing:1px;text-transform:uppercase;margin:0;">Document Sent Back for Revision</h1></td></tr><tr><td style="padding:28px 32px;"><p style="font-size:14px;color:#374151;margin:0 0 16px;line-height:1.6;">Your accountability document <strong>${doc.ref_number}</strong> for <strong>${doc.subject_name}</strong> has been sent back for revision by <strong>${session.fullName}</strong>.</p><div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 16px;margin:16px 0;"><p style="font-size:11px;font-weight:bold;color:#1e40af;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px;">Reviewer Notes — What to Fix</p><p style="font-size:13px;color:#1e3a8a;margin:0;line-height:1.6;">${escapeHtmlBr(rejectionNotes.trim())}</p></div><p style="font-size:13px;color:#6b7280;margin:16px 0 0;">Please log in to <a href="${APP_URL}/accountability" style="color:#1e3a5f;">Field Manager Pro</a>, open the document, make the requested changes, and resubmit for approval.</p></td></tr></table></td></tr></table></body></html>`
+      ).catch(() => {})
+    }
 
     await query(
       `INSERT INTO accountability_audit_log (doc_id, action, actor_id, actor_name, notes) VALUES ($1,'sent_back_for_revision',$2,$3,$4)`,
@@ -173,9 +177,10 @@ export async function POST(
   const ackLink = `${APP_URL}/ack/${ackToken}`
   const docDate = new Date(newDoc.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 
-  // Send verbal email to subject immediately
-  sendEmail(
-    doc.subject_email,
+  // Send verbal email to subject immediately — fresh query to get current email
+  const freshSubject = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.subject_id])
+  if (freshSubject?.email) sendEmail(
+    freshSubject.email,
     `OFFICIAL NOTICE — VERBAL NOTICE | Ref: ${newRefNumber}`,
     buildVerbalEmail({
       refNumber: newRefNumber, title: doc.title,
@@ -186,18 +191,21 @@ export async function POST(
     })
   ).catch(() => {})
 
-  // Send retained copy to author (DM/SD)
-  sendEmail(
-    doc.author_email,
-    `[RETAINED COPY] VERBAL NOTICE | ${doc.subject_name} | Ref: ${newRefNumber}`,
-    buildVerbalEmail({
-      refNumber: newRefNumber, title: doc.title,
-      subjectName: doc.subject_name, subjectRole: doc.subject_role,
-      authorName: doc.author_name, authorRole: doc.author_role,
-      incidentDate: doc.incident_date, notes: doc.notes, expectations: doc.expectations,
-      docDate, isRetainedCopy: true,
-    })
-  ).catch(() => {})
+  // Send retained copy + rejection email to author (DM/SD) — fresh query to get current email
+  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+  if (freshAuthor?.email) {
+    sendEmail(
+      freshAuthor.email,
+      `[RETAINED COPY] VERBAL NOTICE | ${doc.subject_name} | Ref: ${newRefNumber}`,
+      buildVerbalEmail({
+        refNumber: newRefNumber, title: doc.title,
+        subjectName: doc.subject_name, subjectRole: doc.subject_role,
+        authorName: doc.author_name, authorRole: doc.author_role,
+        incidentDate: doc.incident_date, notes: doc.notes, expectations: doc.expectations,
+        docDate, isRetainedCopy: true,
+      })
+    ).catch(() => {})
+  }
 
   // Push notify the author that their doc was rejected and converted
   sendPushToUser(
@@ -208,8 +216,8 @@ export async function POST(
   ).catch(() => {})
 
   // Email to author explaining the rejection
-  sendEmail(
-    doc.author_email,
+  if (freshAuthor?.email) sendEmail(
+    freshAuthor.email,
     `[ACTION — DOC REJECTED] ${levelLabel(doc.level).toUpperCase()} Rejected | Ref: ${doc.ref_number}`,
     `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#e5e7eb;font-family:'Arial',sans-serif;"><table width="100%" cellpadding="0" cellspacing="0" style="background:#e5e7eb;padding:32px 0;"><tr><td align="center"><table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border:1px solid #d1d5db;"><tr><td style="background:#7f1d1d;padding:24px 32px;text-align:center;"><h1 style="color:#fef2f2;font-size:16px;letter-spacing:1px;text-transform:uppercase;margin:0;font-weight:bold;">Accountability Document Rejected</h1></td></tr><tr><td style="padding:28px 32px;"><p style="font-size:14px;color:#374151;margin:0 0 16px;line-height:1.6;">Your <strong>${levelLabel(doc.level)}</strong> (Ref: <strong>${doc.ref_number}</strong>) for <strong>${doc.subject_name}</strong> was reviewed and <strong>rejected</strong> by ${session.fullName}.</p><p style="font-size:13px;color:#6b7280;margin:0 0 12px;">The document has been automatically converted to a <strong>Verbal Notice</strong> (New Ref: <strong>${newRefNumber}</strong>) and has been sent to ${doc.subject_name}.</p><div style="background:#fef2f2;border-left:4px solid #dc2626;padding:14px 16px;margin:16px 0;"><p style="font-size:11px;font-weight:bold;color:#991b1b;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px;">Reviewer Notes</p><p style="font-size:13px;color:#7f1d1d;margin:0;line-height:1.6;">${escapeHtmlBr(rejectionNotes.trim())}</p></div><p style="font-size:12px;color:#9ca3af;margin:20px 0 0;">Log in to Field Manager Pro to view the updated record.</p></td></tr></table></td></tr></table></body></html>`
   ).catch(() => {})

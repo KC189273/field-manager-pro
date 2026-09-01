@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { sendEmail } from '@/lib/notifications'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 
@@ -275,8 +275,10 @@ export async function GET(_req: NextRequest) {
         'accountability'
       ).catch(() => {})
 
-      sendEmail(
-        doc.author_email,
+      // Fresh query to get current author email
+      const freshAuthorEmail = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+      if (freshAuthorEmail?.email) sendEmail(
+        freshAuthorEmail.email,
         `[ACTION MAY BE REQUIRED] ${doc.subject_name} Has Not Acknowledged ${doc.ref_number}`,
         `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#e5e7eb;font-family:'Arial',sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#e5e7eb;padding:32px 0;"><tr><td align="center">

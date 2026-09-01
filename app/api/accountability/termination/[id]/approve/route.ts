@@ -105,12 +105,16 @@ export async function POST(
   const typeLabel = isResignation ? 'Resignation' : 'Termination'
 
   // Send to employee — skip for resignations (employee already knows they quit)
+  // Note: employee was just deactivated above, so query without is_active check for termination notice
   if (!isResignation) {
-    sendEmail(
-      termReq.employee_email,
-      `Notice of Employment Termination — ${orgName}`,
-      buildTerminationEmailHtml(emailParams)
-    ).catch(e => console.error('Termination async error:', e))
+    const freshEmployee = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [termReq.employee_id])
+    if (freshEmployee?.email) {
+      sendEmail(
+        freshEmployee.email,
+        `Notice of Employment Termination — ${orgName}`,
+        buildTerminationEmailHtml(emailParams)
+      ).catch(e => console.error('Termination async error:', e))
+    }
   }
 
   // Determine who should receive management copies based on the terminated employee's role

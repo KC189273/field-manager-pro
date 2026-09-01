@@ -98,28 +98,37 @@ export async function POST(
   }
 
   if (!needsVoiceConvo) {
-    // Verbal: send employee email immediately
+    // Verbal: send employee email immediately — fresh query to get current email
+    const freshSubject = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.subject_id])
+    if (freshSubject?.email) {
+      sendEmail(
+        freshSubject.email,
+        `OFFICIAL NOTICE — ${levelLabel(doc.level).toUpperCase()} | Ref: ${doc.ref_number}`,
+        buildFormalDocHtml({ ...baseParams, ackLink })
+      ).catch(() => {})
+    }
+  }
+
+  // Retained copy to author (always) — fresh query to get current email
+  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.author_id])
+  if (freshAuthor?.email) {
     sendEmail(
-      doc.subject_email,
-      `OFFICIAL NOTICE — ${levelLabel(doc.level).toUpperCase()} | Ref: ${doc.ref_number}`,
-      buildFormalDocHtml({ ...baseParams, ackLink })
+      freshAuthor.email,
+      `[RETAINED COPY] ${levelLabel(doc.level).toUpperCase()} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
+      buildFormalDocHtml({ ...baseParams, isRetainedCopy: true })
     ).catch(() => {})
   }
 
-  // Retained copy to author (always)
-  sendEmail(
-    doc.author_email,
-    `[RETAINED COPY] ${levelLabel(doc.level).toUpperCase()} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
-    buildFormalDocHtml({ ...baseParams, isRetainedCopy: true })
-  ).catch(() => {})
-
   // SD copy (if SD is not the approver) — always
-  if (doc.sd_id && doc.sd_email && doc.sd_id !== session.id) {
-    sendEmail(
-      doc.sd_email,
-      `[SD COPY — FILED] ${levelLabel(doc.level).toUpperCase()} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
-      buildFormalDocHtml({ ...baseParams, isSdCopy: true })
-    ).catch(() => {})
+  if (doc.sd_id && doc.sd_id !== session.id) {
+    const freshSd = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1 AND is_active = TRUE`, [doc.sd_id])
+    if (freshSd?.email) {
+      sendEmail(
+        freshSd.email,
+        `[SD COPY — FILED] ${levelLabel(doc.level).toUpperCase()} | ${doc.subject_name} | Ref: ${doc.ref_number}`,
+        buildFormalDocHtml({ ...baseParams, isSdCopy: true })
+      ).catch(() => {})
+    }
   }
 
   // Push to author

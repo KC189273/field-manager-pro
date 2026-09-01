@@ -123,7 +123,21 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'scorecard' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('coaching')
+
+  // DM Scorecard state
+  const [scorecardDmId, setScorecardDmId] = useState('')
+  const [scorecardData, setScorecardData] = useState<{
+    dm: { id: string; full_name: string }; allDms: Array<{ id: string; full_name: string }>
+    from: string; to: string
+    coachingGrade: { avg_score: number | null; avg_grade: string | null; count: number; weakest_category: string | null }
+    coachingCompliance: { total_visits: number; with_coaching: number; rate: number }
+    uniformCompliance: { total: number; passed: number; failed: number; rate: number }
+    integrity: { total: number; manual: number; edited: number; intervention_rate: number }
+    overall: { score: number | null; grade: string }
+    thresholds: { amber: number; red: number }
+  } | null>(null)
+  const [scorecardLoading, setScorecardLoading] = useState(false)
 
   // Clock-in integrity state
   const [integrityFrom, setIntegrityFrom] = useState('')
@@ -205,6 +219,20 @@ export default function DmEngagementPage() {
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
   }, [session])
+
+  async function loadScorecard(dmId?: string) {
+    setScorecardLoading(true)
+    try {
+      const id = dmId || scorecardDmId
+      const res = await fetch(`/api/reports/dm-scorecard${id ? `?dmId=${id}` : ''}`)
+      if (res.ok) {
+        const d = await res.json()
+        setScorecardData(d)
+        if (!scorecardDmId && d.allDms?.length) setScorecardDmId(d.allDms[0].id)
+      }
+    } catch { /* ignore */ }
+    finally { setScorecardLoading(false) }
+  }
 
   async function loadIntegrity(dmId?: string | null, f?: string, t?: string) {
     setIntegrityLoading(true)
@@ -314,10 +342,10 @@ export default function DmEngagementPage() {
             Coaching Performance
           </button>
           <button
-            onClick={() => setMainTab('metrics')}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'metrics' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            onClick={() => { setMainTab('scorecard'); if (!scorecardData) loadScorecard() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'scorecard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
-            Activity Metrics
+            Scorecard
           </button>
           <button
             onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
@@ -523,8 +551,105 @@ export default function DmEngagementPage() {
           </div>
         )}
 
-        {/* ── Metrics Tab (existing content) ── */}
-        {mainTab === 'metrics' && (
+        {/* ── DM Scorecard Tab ── */}
+        {mainTab === 'scorecard' && (
+          <div className="space-y-4">
+            {/* DM selector */}
+            {scorecardData?.allDms && scorecardData.allDms.length > 0 && (
+              <div className="flex items-end gap-2">
+                <div className="flex-1">
+                  <label className="text-[10px] text-gray-500 uppercase tracking-wide mb-1 block">Select DM</label>
+                  <select value={scorecardDmId} onChange={e => { setScorecardDmId(e.target.value); loadScorecard(e.target.value) }}
+                    className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500">
+                    {scorecardData.allDms.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {scorecardLoading ? (
+              <p className="text-center text-gray-500 py-10 text-sm">Loading...</p>
+            ) : !scorecardData ? (
+              <p className="text-center text-gray-600 py-10 text-sm">Loading scorecard...</p>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">{scorecardData.from} to {scorecardData.to}</p>
+
+                {/* Overall Grade */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 text-center">
+                  <p className={`text-5xl font-black ${
+                    scorecardData.overall.grade === 'A' ? 'text-green-400' :
+                    scorecardData.overall.grade === 'B' ? 'text-blue-400' :
+                    scorecardData.overall.grade === 'C' ? 'text-amber-400' :
+                    scorecardData.overall.grade === 'D' ? 'text-orange-400' :
+                    scorecardData.overall.grade === 'F' ? 'text-red-400' : 'text-gray-500'
+                  }`}>{scorecardData.overall.grade}</p>
+                  <p className="text-xs text-gray-500 mt-1">Overall Score{scorecardData.overall.score !== null ? ` — ${scorecardData.overall.score}%` : ''}</p>
+                  <p className="text-lg font-bold text-white mt-1">{scorecardData.dm.full_name}</p>
+                </div>
+
+                {/* Score cards — each clickable */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Coaching Grade */}
+                  <button onClick={() => setMainTab('coaching')}
+                    className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-left hover:border-violet-500/50 transition-colors">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Coaching Grade</p>
+                    <p className={`text-2xl font-bold ${
+                      scorecardData.coachingGrade.avg_grade?.startsWith('A') ? 'text-green-400' :
+                      scorecardData.coachingGrade.avg_grade?.startsWith('B') ? 'text-blue-400' :
+                      scorecardData.coachingGrade.avg_grade?.startsWith('C') ? 'text-amber-400' :
+                      'text-red-400'
+                    }`}>{scorecardData.coachingGrade.avg_grade || '-'}</p>
+                    <p className="text-xs text-gray-500 mt-1">{scorecardData.coachingGrade.count} sessions</p>
+                    {scorecardData.coachingGrade.weakest_category && (
+                      <p className="text-[10px] text-amber-400 mt-1">Weakest: {scorecardData.coachingGrade.weakest_category.replace(/_/g, ' ')}</p>
+                    )}
+                  </button>
+
+                  {/* Coaching Compliance */}
+                  <button onClick={() => { setMainTab('coaching_comp'); if (!coachCompData) loadCoachingCompliance() }}
+                    className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-left hover:border-violet-500/50 transition-colors">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Coaching Compliance</p>
+                    <p className={`text-2xl font-bold ${
+                      scorecardData.coachingCompliance.rate >= 90 ? 'text-green-400' :
+                      scorecardData.coachingCompliance.rate >= 70 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{scorecardData.coachingCompliance.rate}%</p>
+                    <p className="text-xs text-gray-500 mt-1">{scorecardData.coachingCompliance.with_coaching}/{scorecardData.coachingCompliance.total_visits} visits coached</p>
+                  </button>
+
+                  {/* Uniform Compliance */}
+                  <button onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
+                    className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-left hover:border-violet-500/50 transition-colors">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Uniform Compliance</p>
+                    <p className={`text-2xl font-bold ${
+                      scorecardData.uniformCompliance.rate >= 80 ? 'text-green-400' :
+                      scorecardData.uniformCompliance.rate >= 50 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{scorecardData.uniformCompliance.rate}%</p>
+                    <p className="text-xs text-gray-500 mt-1">{scorecardData.uniformCompliance.passed}/{scorecardData.uniformCompliance.total} passed</p>
+                    {scorecardData.uniformCompliance.failed > 0 && (
+                      <p className="text-[10px] text-red-400 mt-1">{scorecardData.uniformCompliance.failed} failed</p>
+                    )}
+                  </button>
+
+                  {/* Clock-In Integrity */}
+                  <button onClick={() => { setMainTab('integrity'); if (!integrityData) loadIntegrity() }}
+                    className="bg-gray-900 border border-gray-800 rounded-xl p-4 text-left hover:border-violet-500/50 transition-colors">
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide mb-2">Clock-In Integrity</p>
+                    <p className={`text-2xl font-bold ${
+                      scorecardData.integrity.intervention_rate >= scorecardData.thresholds.red ? 'text-red-400' :
+                      scorecardData.integrity.intervention_rate >= scorecardData.thresholds.amber ? 'text-amber-400' : 'text-green-400'
+                    }`}>{Math.max(0, 100 - scorecardData.integrity.intervention_rate)}%</p>
+                    <p className="text-xs text-gray-500 mt-1">{scorecardData.integrity.manual} manual, {scorecardData.integrity.edited} edited</p>
+                    <p className="text-[10px] text-gray-600 mt-0.5">{scorecardData.integrity.total} total shifts</p>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Activity Metrics Tab (hidden — replaced by Scorecard) ── */}
+        {false && mainTab === 'scorecard' && (
         <>
         {/* Controls */}
         <div className="flex items-center justify-between gap-3">

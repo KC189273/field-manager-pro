@@ -125,7 +125,7 @@ export default function DmEngagementPage() {
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
   const [mainTab, setMainTab] = useState<'coaching' | 'metrics' | 'photos' | 'coaching_comp' | 'uniform'>('coaching')
   const [photoDate, setPhotoDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
-  const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; withPhoto: number; withoutPhoto: number; photoRate: number; byDm: Record<string, { total: number; withPhoto: number }>; missing: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string }> } | null>(null)
+  const [photoData, setPhotoData] = useState<{ date: string; totalShifts: number; inCompliance: number; notInCompliance: number; noPhoto: number; pending: number; complianceRate: number; byDm: Record<string, { total: number; compliant: number; failed: number; noPhoto: number }>; nonCompliant: Array<{ full_name: string; username: string; manager_name: string | null; store_address: string | null; clock_in_at: string; has_photo: boolean; uniform_result: string | null }> } | null>(null)
   const [photoLoading, setPhotoLoading] = useState(false)
 
   // Uniform compliance state
@@ -918,31 +918,36 @@ export default function DmEngagementPage() {
             ) : (
               <>
                 {/* Summary cards */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
+                <div className="grid grid-cols-4 gap-2">
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-2 py-2 text-center">
                     <p className="text-lg font-bold text-white">{photoData.totalShifts}</p>
-                    <p className="text-[10px] text-gray-500">Total Clock-ins</p>
+                    <p className="text-[10px] text-gray-500">Clock-ins</p>
                   </div>
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
-                    <p className="text-lg font-bold text-green-400">{photoData.withPhoto}</p>
-                    <p className="text-[10px] text-gray-500">With Photo</p>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-2 py-2 text-center">
+                    <p className="text-lg font-bold text-green-400">{photoData.inCompliance}</p>
+                    <p className="text-[10px] text-gray-500">Compliant</p>
                   </div>
-                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-3 py-2 text-center">
-                    <p className={`text-lg font-bold ${photoData.withoutPhoto > 0 ? 'text-red-400' : 'text-white'}`}>{photoData.withoutPhoto}</p>
-                    <p className="text-[10px] text-gray-500">Missing Photo</p>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-2 py-2 text-center">
+                    <p className={`text-lg font-bold ${photoData.notInCompliance > 0 ? 'text-red-400' : 'text-white'}`}>{photoData.notInCompliance}</p>
+                    <p className="text-[10px] text-gray-500">Failed</p>
+                  </div>
+                  <div className="bg-gray-900 border border-gray-800 rounded-xl px-2 py-2 text-center">
+                    <p className={`text-lg font-bold ${photoData.noPhoto > 0 ? 'text-red-400' : 'text-white'}`}>{photoData.noPhoto}</p>
+                    <p className="text-[10px] text-gray-500">No Photo</p>
                   </div>
                 </div>
 
                 {/* Compliance rate bar */}
                 <div className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs text-gray-400">Compliance Rate</p>
-                    <p className={`text-sm font-bold ${photoData.photoRate >= 80 ? 'text-green-400' : photoData.photoRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{photoData.photoRate}%</p>
+                    <p className="text-xs text-gray-400">Uniform Compliance Rate</p>
+                    <p className={`text-sm font-bold ${photoData.complianceRate >= 80 ? 'text-green-400' : photoData.complianceRate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{photoData.complianceRate}%</p>
                   </div>
                   <div className="w-full bg-gray-800 rounded-full h-2">
-                    <div className={`h-2 rounded-full ${photoData.photoRate >= 80 ? 'bg-green-500' : photoData.photoRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                      style={{ width: `${photoData.photoRate}%` }} />
+                    <div className={`h-2 rounded-full ${photoData.complianceRate >= 80 ? 'bg-green-500' : photoData.complianceRate >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                      style={{ width: `${photoData.complianceRate}%` }} />
                   </div>
+                  <p className="text-[10px] text-gray-600 mt-1">{photoData.inCompliance} of {photoData.totalShifts} clock-ins in full compliance (photo + uniform passed)</p>
                 </div>
 
                 {/* By DM breakdown */}
@@ -950,16 +955,16 @@ export default function DmEngagementPage() {
                   <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide mb-2">By DM</p>
                   <div className="space-y-2">
                     {Object.entries(photoData.byDm).sort((a, b) => {
-                      const rateA = a[1].total > 0 ? a[1].withPhoto / a[1].total : 0
-                      const rateB = b[1].total > 0 ? b[1].withPhoto / b[1].total : 0
+                      const rateA = a[1].total > 0 ? a[1].compliant / a[1].total : 0
+                      const rateB = b[1].total > 0 ? b[1].compliant / b[1].total : 0
                       return rateA - rateB
                     }).map(([dm, data]) => {
-                      const rate = data.total > 0 ? Math.round((data.withPhoto / data.total) * 100) : 0
+                      const rate = data.total > 0 ? Math.round((data.compliant / data.total) * 100) : 0
                       return (
-                        <div key={dm} className="bg-gray-900 border border-gray-800 rounded-xl px-4 py-2.5 flex items-center justify-between">
+                        <div key={dm} className={`bg-gray-900 border rounded-xl px-4 py-2.5 flex items-center justify-between ${rate < 70 ? 'border-red-800/40' : 'border-gray-800'}`}>
                           <div>
                             <p className="text-sm font-medium text-white">{dm}</p>
-                            <p className="text-xs text-gray-500">{data.withPhoto}/{data.total} with photo</p>
+                            <p className="text-xs text-gray-500">{data.compliant}/{data.total} compliant{data.failed > 0 ? ` · ${data.failed} failed` : ''}{data.noPhoto > 0 ? ` · ${data.noPhoto} no photo` : ''}</p>
                           </div>
                           <span className={`text-sm font-bold ${rate >= 80 ? 'text-green-400' : rate >= 50 ? 'text-amber-400' : 'text-red-400'}`}>{rate}%</span>
                         </div>
@@ -968,16 +973,19 @@ export default function DmEngagementPage() {
                   </div>
                 </div>
 
-                {/* Missing photos list */}
-                {photoData.missing.length > 0 && (
+                {/* Non-compliant list */}
+                {photoData.nonCompliant.length > 0 && (
                   <div>
-                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Missing Photos ({photoData.missing.length})</p>
+                    <p className="text-xs text-red-400 font-semibold uppercase tracking-wide mb-2">Non-Compliant ({photoData.nonCompliant.length})</p>
                     <div className="space-y-1">
-                      {photoData.missing.map((m, i) => (
+                      {photoData.nonCompliant.map((m, i) => (
                         <div key={i} className="bg-red-900/10 border border-red-800/30 rounded-xl px-3 py-2 flex items-center justify-between">
                           <div>
                             <p className="text-sm text-white">{m.full_name}</p>
-                            <p className="text-xs text-gray-500">{m.store_address || 'No store'} · {m.manager_name || 'Unassigned'}</p>
+                            <p className="text-xs text-gray-500">
+                              {!m.has_photo ? 'No photo taken' : m.uniform_result === 'fail' ? 'Uniform failed' : 'Pending check'}
+                              {' · '}{m.store_address || 'No store'} · {m.manager_name || 'Unassigned'}
+                            </p>
                           </div>
                           <p className="text-xs text-gray-600">{new Date(m.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</p>
                         </div>

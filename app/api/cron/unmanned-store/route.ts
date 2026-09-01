@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ ok: true, checked: 0, alerts: 0, note: 'No stores past grace period' })
     }
 
-    // Check which of these stores have someone clocked in
+    // Check which of these stores have someone clocked in OR a DM scheduled for coverage
     const storeIds = openStores.map(s => s.id)
     const clockedIn = await query<{ store_location_id: string }>(
       `SELECT DISTINCT store_location_id FROM shifts
@@ -75,7 +75,19 @@ export async function GET(req: NextRequest) {
          AND store_location_id = ANY($1)`,
       [storeIds]
     )
-    const coveredIds = new Set(clockedIn.map(r => r.store_location_id))
+    // Also check if a DM is scheduled at these stores today (DM coverage counts)
+    const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+    const dmScheduled = await query<{ store_location_id: string }>(
+      `SELECT DISTINCT store_location_id FROM scheduled_shifts
+       WHERE store_location_id = ANY($1)
+         AND shift_date = $2
+         AND is_dm_shift = TRUE`,
+      [storeIds, todayCST]
+    ).catch(() => [] as { store_location_id: string }[])
+    const coveredIds = new Set([
+      ...clockedIn.map(r => r.store_location_id),
+      ...dmScheduled.map(r => r.store_location_id),
+    ])
     const unmanned = openStores.filter(s => !coveredIds.has(s.id))
 
     if (!unmanned.length) {

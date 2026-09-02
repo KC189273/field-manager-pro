@@ -9,15 +9,15 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // GPS breadcrumbs older than 90 days
+    // GPS breadcrumbs older than 30 days
     const gps = await query<{ cnt: number }>(
-      `WITH deleted AS (DELETE FROM gps_breadcrumbs WHERE recorded_at < NOW() - INTERVAL '90 days' RETURNING 1)
+      `WITH deleted AS (DELETE FROM gps_breadcrumbs WHERE recorded_at < NOW() - INTERVAL '30 days' RETURNING 1)
        SELECT COUNT(*)::int as cnt FROM deleted`
     )
 
-    // Notifications older than 30 days
+    // Notifications older than 14 days
     const notifs = await query<{ cnt: number }>(
-      `WITH deleted AS (DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '30 days' RETURNING 1)
+      `WITH deleted AS (DELETE FROM notifications WHERE created_at < NOW() - INTERVAL '14 days' RETURNING 1)
        SELECT COUNT(*)::int as cnt FROM deleted`
     )
 

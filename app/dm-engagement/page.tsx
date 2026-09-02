@@ -204,18 +204,16 @@ export default function DmEngagementPage() {
     setLoading(false)
   }, [])
 
-  useEffect(() => {
-    if (session) fetchData(rangeDays)
-  }, [session, rangeDays, fetchData])
-
-  // Load scorecard on init (default tab)
+  // Load scorecard on init (default tab) — only this fires on page load
   useEffect(() => {
     if (session && !scorecardData) loadScorecard()
   }, [session])
 
-  // Load coaching rollup
+  // Load coaching rollup — only when coaching tab is selected
+  const [coachingLoaded, setCoachingLoaded] = useState(false)
   useEffect(() => {
-    if (!session) return
+    if (!session || coachingLoaded || mainTab !== 'coaching') return
+    setCoachingLoaded(true)
     setCoachingLoading(true)
     fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => {
       if (d?.dmRollup) setCoachingDms(d.dmRollup)
@@ -223,7 +221,7 @@ export default function DmEngagementPage() {
       if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth)
       setCoachingLoading(false)
     }).catch(() => setCoachingLoading(false))
-  }, [session])
+  }, [session, mainTab])
 
   async function loadScorecard(dmId?: string) {
     setScorecardLoading(true)

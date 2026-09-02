@@ -8,6 +8,8 @@ import NavBar from '@/components/NavBar'
 import WelcomeBanner from '@/components/WelcomeBanner'
 import PhotoPromptBanner from '@/components/PhotoPromptBanner'
 import WhatsNew from '@/components/WhatsNew'
+import DashboardCoverage from '@/components/DashboardCoverage'
+import DashboardScorecard from '@/components/DashboardScorecard'
 
 // Cache org-wide aggregate counts for 30s — these change infrequently and are
 // safe to serve slightly stale. User-specific data (shift, hours, tasks) is NOT cached.
@@ -305,63 +307,12 @@ export default async function DashboardPage() {
               <p className="text-xs text-violet-500 mt-2">Timecards →</p>
             </a>
 
-            {/* ── Store Scheduling (DM and above only) ── */}
-            <a
-              href="/staff-schedule"
-              className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-3 transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Store Scheduling</p>
-                  <p className="text-base font-bold text-white">Manage Shifts</p>
-                  <p className="text-xs text-gray-600 mt-0.5">View and edit store schedules</p>
-                </div>
-                <p className="text-xs text-violet-500 shrink-0 ml-3">Schedule →</p>
-              </div>
-            </a>
+            {/* ── Live Coverage ── */}
+            <DashboardCoverage />
 
-            {/* ── Expenses ── */}
-            {canExpenses && (
-              <a
-                href="/expenses"
-                className={`block rounded-2xl p-3 border transition-colors ${
-                  (canTeam && session.role !== 'manager' ? pendingExpCount : myPendingCount) > 0
-                    ? 'bg-yellow-950/40 border-yellow-800/60 hover:border-yellow-700/60'
-                    : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-                }`}
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Expenses</p>
-                    {canTeam && session.role !== 'manager' ? (
-                      pendingExpCount > 0 ? (
-                        <>
-                          <p className="text-lg font-bold text-yellow-400">{pendingExpCount} pending</p>
-                          <p className="text-xs text-gray-500 mt-0.5">${pendingExpTotal.toFixed(2)} awaiting approval</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-lg font-bold text-white">All clear</p>
-                          <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
-                        </>
-                      )
-                    ) : (
-                      myPendingCount > 0 ? (
-                        <>
-                          <p className="text-lg font-bold text-yellow-400">{myPendingCount} pending</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Awaiting approval</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-lg font-bold text-white">All clear</p>
-                          <p className="text-xs text-gray-600 mt-0.5">No pending expenses</p>
-                        </>
-                      )
-                    )}
-                  </div>
-                  <p className="text-xs text-violet-500 mt-1">Expenses →</p>
-                </div>
-              </a>
+            {/* ── DM Scorecard (ops+, owner, developer) ── */}
+            {['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) && (
+              <DashboardScorecard />
             )}
 
             {/* ── Management: Flags + Live (2-col) ── */}
@@ -397,23 +348,6 @@ export default async function DashboardPage() {
                   </a>
                 </div>
 
-                {/* Team */}
-                <a
-                  href="/team"
-                  className="block bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-3 transition-colors"
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Team</p>
-                      <p className="text-lg font-bold text-white">
-                        {teamCount}
-                        <span className="text-sm font-normal text-gray-400 ml-1">active members</span>
-                      </p>
-                      <p className="text-xs text-gray-600 mt-0.5">{clockedInCount} clocked in now</p>
-                    </div>
-                    <p className="text-xs text-violet-500">Team →</p>
-                  </div>
-                </a>
               </>
             )}
           </>

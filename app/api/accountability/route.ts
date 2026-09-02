@@ -792,9 +792,26 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
     subjectId, subjectIds, level, title, incidentDate, notes, expectations,
-    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode, attachment_key,
+    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode, attachment_key, authorOverrideId,
   } = body
   const isTestMode = session.role === 'developer' && testMode === true
+
+  // Author override: owner/ops_manager/developer can submit on behalf of a DM
+  let authorId = session.id
+  let authorName = session.fullName
+  let authorRole: string = session.role
+  let authorEmail = session.email
+  if (authorOverrideId && ['ops_manager', 'owner', 'developer'].includes(session.role)) {
+    const override = await queryOne<{ id: string; full_name: string; role: string; email: string }>(
+      `SELECT id, full_name, role, email FROM users WHERE id = $1 AND is_active = TRUE`, [authorOverrideId]
+    )
+    if (override) {
+      authorId = override.id
+      authorName = override.full_name
+      authorRole = override.role
+      authorEmail = override.email
+    }
+  }
 
   // ─── Documented Conversation: separate flow with multi-employee support ────
   if (level === 'documented_conversation') {
@@ -803,8 +820,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Employee(s), topic, and conversation details are required.' }, { status: 400 })
     }
 
-    const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
-    const authorEmail = freshAuthor?.email ?? session.email
+    const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [authorId])
+    if (freshAuthor?.email) authorEmail = freshAuthor.email
     const orgId = session.org_id
     if (!orgId) return NextResponse.json({ error: 'Org not found' }, { status: 400 })
 
@@ -836,11 +853,11 @@ export async function POST(req: NextRequest) {
             [
               refNumber, orgId,
               subject.id, subject.full_name, subject.role, subject.email,
-              session.id, session.fullName, session.role, authorEmail,
+              authorId, authorName, authorRole, authorEmail,
               'documented_conversation', title.trim(),
               new Date().toISOString().slice(0, 10), notes.trim(), '',
               'approved', null, 'acknowledged', true,
-              new Date().toISOString(), session.id, session.fullName,
+              new Date().toISOString(), authorId, authorName,
               attachment_key || null,
             ]
           )
@@ -947,8 +964,9 @@ export async function POST(req: NextRequest) {
   const initialStatus = (autoApprove || level === 'verbal') ? 'approved' : 'pending_approval'
   const ackToken = (autoApprove || level === 'verbal') ? generateAckToken() : null
 
-  const freshAuthor = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [session.id])
-  const authorEmail = freshAuthor?.email ?? session.email
+  // Refresh author email from DB (author override may have changed it above)
+  const freshAuthor2 = await queryOne<{ email: string }>(`SELECT email FROM users WHERE id = $1`, [authorId])
+  if (freshAuthor2?.email) authorEmail = freshAuthor2.email
 
   let refNumber = await generateRefNumber(orgId)
   let doc: { id: string; created_at: string }
@@ -966,15 +984,15 @@ export async function POST(req: NextRequest) {
         [
           refNumber, orgId,
           subject.id, subject.full_name, subject.role, subject.email,
-          session.id, session.fullName, session.role, authorEmail,
+          authorId, authorName, authorRole, authorEmail,
           level, title.trim(), incidentDate, notes.trim(), expectations.trim(),
           initialStatus,
           sd?.id ?? null, sd?.name ?? null, sd?.email ?? null,
           ackToken, 'pending',
           true,
           (autoApprove || level === 'verbal') ? new Date().toISOString() : null,
-          (autoApprove || level === 'verbal') ? session.id : null,
-          (autoApprove || level === 'verbal') ? session.fullName : null,
+          (autoApprove || level === 'verbal') ? authorId : null,
+          (autoApprove || level === 'verbal') ? authorName : null,
           attachment_key || null,
         ]
       )

@@ -971,7 +971,21 @@ function SubmitForm({ session, subjects, onSuccess }: {
   const [availableVerbals, setAvailableVerbals] = useState<Doc[]>([])
   const [reminderAcknowledged, setReminderAcknowledged] = useState(false)
   const [testMode, setTestMode] = useState(session.role === 'developer')
+  const [authorOverrideId, setAuthorOverrideId] = useState('')
+  const [authorOptions, setAuthorOptions] = useState<Array<{ id: string; full_name: string; role: string }>>([])
+  const canOverrideAuthor = ['ops_manager', 'owner', 'developer'].includes(session.role)
   const [submitting, setSubmitting] = useState(false)
+
+  // Load author options for override dropdown
+  useEffect(() => {
+    if (canOverrideAuthor) {
+      fetch('/api/team/users').then(r => r.json()).then(d => {
+        const users = (d.users ?? d ?? []) as Array<{ id: string; full_name: string; role: string; is_active: boolean }>
+        const eligible = users.filter(u => u.is_active && ['manager', 'ops_manager', 'owner'].includes(u.role))
+        setAuthorOptions(eligible)
+      }).catch(() => {})
+    }
+  }, [])
   const [error, setError] = useState('')
   const [hasDraft, setHasDraft] = useState(false)
 
@@ -1054,6 +1068,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
         ? {
             subjectIds, level, title: title.trim(), notes: notes.trim(),
             attachment_key: docAttachKey || undefined,
+            authorOverrideId: authorOverrideId || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
         : {
@@ -1063,6 +1078,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
             linkedVerbalIds,
             reminderAcknowledged,
             attachment_key: docAttachKey || undefined,
+            authorOverrideId: authorOverrideId || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
       const res = await fetch('/api/accountability', {
@@ -1341,6 +1357,20 @@ function SubmitForm({ session, subjects, onSuccess }: {
               <strong className="text-white">Documentation Reminder:</strong> I understand that I am required to retain a copy of this accountability document on file for a minimum of one year, and that this document is permanently on record and cannot be altered or deleted once submitted.
             </p>
           </label>
+        </div>
+      )}
+
+      {/* Author override — owner/ops_manager/developer can submit on behalf of a DM */}
+      {canOverrideAuthor && authorOptions.length > 0 && (
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Submit on behalf of (defaults to you)</label>
+          <select value={authorOverrideId} onChange={e => setAuthorOverrideId(e.target.value)}
+            className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+            <option value="">Myself ({session.fullName})</option>
+            {authorOptions.filter(u => u.id !== session.id).map(u => (
+              <option key={u.id} value={u.id}>{u.full_name} ({u.role === 'manager' ? 'DM' : u.role.replace(/_/g, ' ')})</option>
+            ))}
+          </select>
         </div>
       )}
 

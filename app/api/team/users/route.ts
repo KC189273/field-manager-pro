@@ -151,7 +151,12 @@ export async function POST(req: NextRequest) {
     if (mgr?.org_id) finalOrgId = mgr.org_id
   }
 
-  const hash = await bcrypt.hash(password, 12)
+  let hash: string
+  try {
+    hash = await bcrypt.hash(password, 12)
+  } catch (err) {
+    return NextResponse.json({ error: 'Password hashing failed: ' + String(err) }, { status: 500 })
+  }
 
   // DMs create pending users — higher roles create immediately active users
   const isDMCreating = session.role === 'manager'
@@ -159,18 +164,23 @@ export async function POST(req: NextRequest) {
     try { await ensureApprovalColumn() } catch {}
   }
 
-  const user = await queryOne<{ id: string }>(
-    `INSERT INTO users (username, email, password_hash, role, full_name, legal_name, manager_id, org_id, created_by, is_active, approval_status, temp_password, must_change_password)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
-    [
-      username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(),
-      finalManagerId, finalOrgId, session.id,
-      isDMCreating ? false : true,
-      isDMCreating ? 'pending' : null,
-      password,
-      true,
-    ]
-  )
+  let user: { id: string } | null | undefined
+  try {
+    user = await queryOne<{ id: string }>(
+      `INSERT INTO users (username, email, password_hash, role, full_name, legal_name, manager_id, org_id, created_by, is_active, approval_status, temp_password, must_change_password)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
+      [
+        username.trim().toLowerCase(), email.trim(), hash, finalRole, fullName.trim(), fullName.trim(),
+        finalManagerId, finalOrgId, session.id,
+        isDMCreating ? false : true,
+        isDMCreating ? 'pending' : null,
+        password,
+        true,
+      ]
+    )
+  } catch (err) {
+    return NextResponse.json({ error: 'Failed to create user: ' + String(err) }, { status: 500 })
+  }
 
   if (isDMCreating) {
     // Notify approvers in the org via push

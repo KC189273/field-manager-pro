@@ -80,7 +80,11 @@ interface StoreRow {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!canView(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Employees are blocked unless they're stretch DMs (checked in the employee handler below)
+  if (!canView(session.role)) {
+    if ((session.role as string) !== 'employee') return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    // Fall through to the employee/stretch DM handler below
+  }
 
   try { await ensureTables() } catch { /* already exists */ }
 

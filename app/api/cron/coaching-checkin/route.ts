@@ -108,16 +108,16 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // ── Tier 3: Late clock-in escalation to leadership ──
-  // Employees with 3+ late clock-ins in 30 days where DM has NOT filed an accountability doc within 3 days
+  // ── Tier 3: Compounding late clock-in escalation ──
+  // 3+ late in 30 days → check accountability history → recommend next level
+  // Resets after 6 months of no late clock-ins
   let lateEscalated = 0
   const lateEmployees = await query<{
-    emp_id: string; emp_name: string; dm_id: string; dm_name: string; late_count: number; first_late: string
+    emp_id: string; emp_name: string; dm_id: string; dm_name: string; late_count: number
   }>(`
     SELECT f.user_id as emp_id, u.full_name as emp_name,
       u.manager_id as dm_id, m.full_name as dm_name,
-      COUNT(*)::int as late_count,
-      MIN(f.created_at)::text as first_late
+      COUNT(*)::int as late_count
     FROM flags f
     JOIN users u ON u.id = f.user_id
     LEFT JOIN users m ON m.id = u.manager_id
@@ -128,40 +128,87 @@ export async function GET(req: NextRequest) {
     HAVING COUNT(*) >= 3
   `)
 
+  const LEVELS = ['documented_conversation', 'verbal', 'written', 'final']
+  const LEVEL_LABELS: Record<string, string> = {
+    documented_conversation: 'Documented Conversation',
+    verbal: 'Verbal Warning',
+    written: 'Written Warning',
+    final: 'Final Warning',
+  }
+
   for (const emp of lateEmployees) {
     if (!emp.dm_id) continue
 
-    // Check if DM filed an accountability doc for this employee in the last 30 days
-    const hasDoc = await queryOne<{ id: string }>(`
-      SELECT id FROM accountability_docs
-      WHERE author_id = $1 AND subject_id = $2
-        AND created_at >= NOW() - INTERVAL '30 days'
-      LIMIT 1
-    `, [emp.dm_id, emp.emp_id]).catch(() => null)
-
-    if (hasDoc) continue // DM addressed it — skip
-
-    // Check if the 3rd late was more than 3 days ago (give DM time to act)
-    const thirdLate = await queryOne<{ created_at: string }>(`
-      SELECT created_at::text FROM flags
-      WHERE user_id = $1 AND type = 'late_clock_in' AND created_at >= NOW() - INTERVAL '30 days'
-      ORDER BY created_at ASC OFFSET 2 LIMIT 1
+    // Check 6-month reset: if no late flags in last 6 months before this current batch, reset
+    const sixMonthLates = await queryOne<{ cnt: number }>(`
+      SELECT COUNT(*)::int as cnt FROM flags
+      WHERE user_id = $1 AND type = 'late_clock_in' AND created_at >= NOW() - INTERVAL '6 months'
     `, [emp.emp_id]).catch(() => null)
 
-    if (!thirdLate) continue
-    const daysSinceThird = (Date.now() - new Date(thirdLate.created_at).getTime()) / 86400000
-    if (daysSinceThird < 3) continue // Give DM 3 days to document the conversation
+    // Count how many accountability docs exist for this employee about lateness (all time)
+    const priorDocs = await query<{ level: string; created_at: string }>(`
+      SELECT level, created_at::text FROM accountability_docs
+      WHERE subject_id = $1 AND (title ILIKE '%late%' OR notes ILIKE '%late%' OR notes ILIKE '%clock%')
+      ORDER BY created_at DESC
+    `, [emp.emp_id]).catch(() => [])
 
-    // Check if we already sent this escalation recently (don't spam leadership)
+    // Find the most recent doc
+    const lastDoc = priorDocs.length > 0 ? priorDocs[0] : null
+    const lastDocLevel = lastDoc?.level || null
+
+    // If last doc was within the last 30 days, check if they got MORE lates after it
+    if (lastDoc) {
+      const latesSinceDoc = await queryOne<{ cnt: number }>(`
+        SELECT COUNT(*)::int as cnt FROM flags
+        WHERE user_id = $1 AND type = 'late_clock_in' AND created_at > $2
+      `, [emp.emp_id, lastDoc.created_at]).catch(() => null)
+
+      if (!latesSinceDoc || latesSinceDoc.cnt < 2) continue // Not enough new lates since last doc — DM addressed it
+    }
+
+    // Determine recommended next level
+    const currentLevelIdx = lastDocLevel ? LEVELS.indexOf(lastDocLevel) : -1
+    const nextLevelIdx = Math.min(currentLevelIdx + 1, LEVELS.length - 1)
+    const nextLevel = LEVELS[nextLevelIdx]
+    const nextLevelLabel = LEVEL_LABELS[nextLevel]
+
+    // Give DM 3 days from the triggering late to act
+    const triggerLate = await queryOne<{ created_at: string }>(`
+      SELECT created_at::text FROM flags
+      WHERE user_id = $1 AND type = 'late_clock_in' AND created_at >= NOW() - INTERVAL '30 days'
+      ORDER BY created_at DESC LIMIT 1
+    `, [emp.emp_id]).catch(() => null)
+
+    if (!triggerLate) continue
+    const daysSinceTrigger = (Date.now() - new Date(triggerLate.created_at).getTime()) / 86400000
+    if (daysSinceTrigger < 3) continue
+
+    // Check if DM already filed the recommended level doc recently
+    const hasRecentDoc = await queryOne<{ id: string }>(`
+      SELECT id FROM accountability_docs
+      WHERE subject_id = $1 AND created_at > $2
+      LIMIT 1
+    `, [emp.emp_id, triggerLate.created_at]).catch(() => null)
+    if (hasRecentDoc) continue
+
+    // Don't spam — check if we escalated this employee recently
     const recentEscalation = await queryOne<{ id: string }>(`
-      SELECT id FROM flags
-      WHERE user_id = $1 AND type = 'late_clock_in' AND detail LIKE '%DM has not addressed%'
+      SELECT id FROM notifications
+      WHERE title = 'DM Accountability Needed' AND body LIKE $1
         AND created_at >= NOW() - INTERVAL '7 days'
       LIMIT 1
-    `, [emp.dm_id]).catch(() => null)
+    `, [`%${emp.emp_name}%`]).catch(() => null)
     if (recentEscalation) continue
 
-    // Escalate to leadership
+    // ── Notify DM: recommend next accountability level ──
+    sendPushToUser(
+      emp.dm_id,
+      'Accountability Action Needed',
+      `${emp.emp_name} has been late to ${emp.late_count} shifts in 30 days.${lastDocLevel ? ` A ${LEVEL_LABELS[lastDocLevel]} was previously issued.` : ''} Recommended: ${nextLevelLabel}.`,
+      'flag_created'
+    ).catch(() => {})
+
+    // ── Notify leadership: DM has not acted ──
     const leaders = await query<{ id: string }>(`
       SELECT id FROM users WHERE role IN ('ops_field_leader', 'ops_manager', 'owner', 'developer')
         AND is_active = TRUE
@@ -172,7 +219,7 @@ export async function GET(req: NextRequest) {
       sendPushToUsers(
         leaders.map(l => l.id),
         'DM Accountability Needed',
-        `${emp.dm_name} has not addressed ${emp.emp_name} being late to ${emp.late_count} shifts in 30 days. No documented conversation on file. Recommended: accountability conversation with DM.`,
+        `${emp.dm_name} has not addressed ${emp.emp_name} (${emp.late_count} late in 30 days).${lastDocLevel ? ` Prior: ${LEVEL_LABELS[lastDocLevel]}.` : ''} Recommended next step: ${nextLevelLabel}.`,
         'flag_created'
       ).catch(() => {})
       lateEscalated++

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
 
   const totalShifts = shifts.length
   const inCompliance = shifts.filter(s => s.uniform_result === 'pass').length
-  const notInCompliance = shifts.filter(s => s.uniform_result === 'fail').length
+  const notInCompliance = shifts.filter(s => s.uniform_result === 'fail' || s.uniform_result === 'unclear').length
   const noPhoto = shifts.filter(s => !s.has_photo).length
   const pending = shifts.filter(s => s.has_photo && !s.uniform_result).length
   const complianceRate = totalShifts > 0 ? Math.round((inCompliance / totalShifts) * 100) : 0
@@ -65,10 +65,10 @@ export async function GET(req: NextRequest) {
     if (!byDm[dm]) byDm[dm] = { total: 0, compliant: 0, failed: 0, noPhoto: 0, employees: [] }
     byDm[dm].total++
     if (s.uniform_result === 'pass') byDm[dm].compliant++
-    if (s.uniform_result === 'fail') byDm[dm].failed++
+    if (s.uniform_result === 'fail' || s.uniform_result === 'unclear') byDm[dm].failed++
     if (!s.has_photo) byDm[dm].noPhoto++
     // Only include non-compliant employees in detail
-    if (s.uniform_result === 'fail' || !s.has_photo) {
+    if (s.uniform_result !== 'pass' || !s.has_photo) {
       byDm[dm].employees.push({
         full_name: s.full_name, clock_in_at: s.clock_in_at,
         store_address: s.store_address, uniform_result: s.uniform_result,

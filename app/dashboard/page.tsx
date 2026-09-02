@@ -307,49 +307,41 @@ export default async function DashboardPage() {
               <p className="text-xs text-violet-500 mt-2">Timecards →</p>
             </a>
 
+            {/* ── Scorecard + Flags (2-col for leadership) ── */}
+            {canTeam && (
+              <div className="grid grid-cols-2 gap-3">
+                {['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) ? (
+                  <DashboardScorecard />
+                ) : (
+                  <a href="/dm-engagement"
+                    className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-3 transition-colors">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">DM Engagement</p>
+                    <p className="text-base font-bold text-white">Coaching &amp; Metrics</p>
+                    <p className="text-xs text-violet-500 mt-2">View →</p>
+                  </a>
+                )}
+                <a
+                  href="/flags"
+                  className={`rounded-2xl p-3 border transition-colors ${
+                    flagCount > 0
+                      ? 'bg-amber-950 border-amber-800 hover:border-amber-700'
+                      : 'bg-gray-900 border-gray-800 hover:border-gray-700'
+                  }`}
+                >
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Open Flags</p>
+                  <p className={`text-xl font-bold ${flagCount > 0 ? 'text-amber-400' : 'text-white'}`}>
+                    {flagCount}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">
+                    {flagCount === 0 ? 'All clear' : 'Need review'}
+                  </p>
+                  <p className="text-xs text-violet-500 mt-2">Flags →</p>
+                </a>
+              </div>
+            )}
+
             {/* ── Live Coverage ── */}
             <DashboardCoverage />
-
-            {/* ── DM Scorecard (ops+, owner, developer) ── */}
-            {['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(session.role) && (
-              <DashboardScorecard />
-            )}
-
-            {/* ── Management: Flags + Live (2-col) ── */}
-            {canTeam && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <a
-                    href="/flags"
-                    className={`rounded-2xl p-3 border transition-colors ${
-                      flagCount > 0
-                        ? 'bg-amber-950 border-amber-800 hover:border-amber-700'
-                        : 'bg-gray-900 border-gray-800 hover:border-gray-700'
-                    }`}
-                  >
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Open Flags</p>
-                    <p className={`text-xl font-bold ${flagCount > 0 ? 'text-amber-400' : 'text-white'}`}>
-                      {flagCount}
-                    </p>
-                    <p className="text-xs text-gray-600 mt-0.5">
-                      {flagCount === 0 ? 'All clear' : 'Need review'}
-                    </p>
-                    <p className="text-xs text-violet-500 mt-2">Flags →</p>
-                  </a>
-
-                  <a
-                    href="/map"
-                    className="bg-gray-900 border border-gray-800 hover:border-gray-700 rounded-2xl p-3 transition-colors"
-                  >
-                    <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Live</p>
-                    <p className="text-xl font-bold text-white">{clockedInCount}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">on the clock</p>
-                    <p className="text-xs text-violet-500 mt-2">Live Map →</p>
-                  </a>
-                </div>
-
-              </>
-            )}
           </>
         )}
       </div>

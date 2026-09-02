@@ -123,7 +123,7 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'scorecard' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('coaching')
+  const [mainTab, setMainTab] = useState<'coaching' | 'scorecard' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('scorecard')
 
   // DM Scorecard state
   const [scorecardDmId, setScorecardDmId] = useState('')
@@ -207,6 +207,11 @@ export default function DmEngagementPage() {
   useEffect(() => {
     if (session) fetchData(rangeDays)
   }, [session, rangeDays, fetchData])
+
+  // Load scorecard on init (default tab)
+  useEffect(() => {
+    if (session && !scorecardData) loadScorecard()
+  }, [session])
 
   // Load coaching rollup
   useEffect(() => {
@@ -336,16 +341,16 @@ export default function DmEngagementPage() {
         {/* Main Tab Switcher */}
         <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
           <button
-            onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Coaching Performance
-          </button>
-          <button
             onClick={() => { setMainTab('scorecard'); if (!scorecardData) loadScorecard() }}
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'scorecard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Scorecard
+          </button>
+          <button
+            onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Coaching
           </button>
           <button
             onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}

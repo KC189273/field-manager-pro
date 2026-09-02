@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query } from '@/lib/db'
 
-const ALLOWED = ['ops_manager', 'owner', 'sales_director', 'developer']
+const ALLOWED = ['ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer']
 
 export async function GET(req: NextRequest) {
   const session = await getSession()

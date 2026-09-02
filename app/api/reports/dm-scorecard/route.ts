@@ -26,23 +26,26 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url)
-  const dmId = searchParams.get('dmId') || (session.role === 'manager' ? session.id : null)
-  if (!dmId) return NextResponse.json({ error: 'dmId required' }, { status: 400 })
+  let dmId = searchParams.get('dmId') || (session.role === 'manager' ? session.id : null)
 
   const period = getCurrentPeriod()
   const from = searchParams.get('from') || period.start
   const to = searchParams.get('to') || period.end
 
   try {
-    // DM info
-    const dm = await queryOne<{ id: string; full_name: string }>(`SELECT id, full_name FROM users WHERE id = $1`, [dmId])
-    if (!dm) return NextResponse.json({ error: 'DM not found' }, { status: 404 })
-
     // Get all DMs for the selector
     const orgFilter = session.org_id ? `AND org_id = '${(session.org_id as string).replace(/'/g, "''")}'` : ''
     const allDms = canViewAll ? await query<{ id: string; full_name: string }>(`
       SELECT id, full_name FROM users WHERE role = 'manager' AND is_active = TRUE ${orgFilter} ORDER BY full_name
     `) : []
+
+    // Auto-select first DM if none specified
+    if (!dmId && allDms.length > 0) dmId = allDms[0].id
+    if (!dmId) return NextResponse.json({ error: 'No DMs found' }, { status: 404 })
+
+    // DM info
+    const dm = await queryOne<{ id: string; full_name: string }>(`SELECT id, full_name FROM users WHERE id = $1`, [dmId])
+    if (!dm) return NextResponse.json({ error: 'DM not found' }, { status: 404 })
 
     // 1. Coaching Grade
     const coachingGrade = await queryOne<{

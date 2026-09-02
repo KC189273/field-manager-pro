@@ -149,8 +149,14 @@ export async function gradeCoaching(params: {
     ? `\nThis DM has coached ${params.employeeCoachedName} ${priorForEmployee.length} time(s) before: ${priorForEmployee.map(g => `${g.overall_grade} on ${g.graded_at.slice(0, 10)}`).join(', ')}`
     : `\n**FIRST TIME coaching ${params.employeeCoachedName || 'this employee'}** — this DM has never coached this employee before (possibly due to territory change). Do NOT penalize them on the "Reference to Prior Coaching" category. Give them a baseline pass (80+) on that category since there is no prior coaching to reference.`
 
+  // Check how many consecutive sessions the DM has ignored recommendations
+  const recentGrades = await query<{ improvement_tips: string[] | null }>(`
+    SELECT improvement_tips FROM coaching_grades WHERE dm_id = $1 ORDER BY graded_at DESC LIMIT 5
+  `, [params.dmId]).catch(() => [])
+  const ignoredCount = recentGrades.filter(g => g.improvement_tips?.length).length // rough proxy — they keep getting tips
+
   const priorTipsContext = lastTips?.improvement_tips?.length
-    ? `\n\nPRIOR AI FEEDBACK GIVEN TO THIS DM (from their most recent coaching):\n${lastTips.improvement_tips.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}\n\nIMPORTANT: Check if the DM applied ANY of these recommendations in this current coaching session. If they clearly acted on prior feedback, reward them — bump their score up and call it out positively. If they ignored ALL prior recommendations, **BOLD THIS IN YOUR FEEDBACK: "You have not applied any of the recommendations from your previous coaching session."** and cite the specific tips they were given.`
+    ? `\n\nPRIOR AI FEEDBACK GIVEN TO THIS DM (from their most recent coaching):\n${lastTips.improvement_tips.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}\n\nCheck if the DM applied ANY of these recommendations. If they clearly acted on prior feedback, reward them generously — call it out positively at the TOP of your summary. If they did not apply the recommendations:${ignoredCount >= 3 ? `\n**This DM has now received ${ignoredCount} consecutive coaching sessions with improvement tips and has not demonstrated applying them. This is a pattern. Be direct about this at the top of the summary and grade the prior_reference category more strictly.**` : '\nGently note which tips were not applied and encourage them to try incorporating them next time. Keep it constructive — they are learning.'}`
     : ''
 
   // Build coaching data summary for AI
@@ -235,9 +241,16 @@ GRADING CRITERIA (weighted):
 4. DEPTH OF OBSERVATION (20%): How thorough was the observation? Did they use the checklist fully? Did they identify root causes, not just symptoms? One checkbox = low. Full checklist with detailed notes on each area = high.
 5. REFERENCE TO PRIOR COACHING (10%): Did the DM connect this session to previous coaching? Show progress tracking? **If this is the DM's FIRST TIME coaching this specific employee (e.g., after a territory change), give them at least 80 on this category — they have no prior coaching to reference and should not be penalized.**
 
-APPLYING PRIOR AI FEEDBACK BONUS:
-If the DM was given improvement tips in their last coaching grade and they clearly applied those recommendations in this session, reward them with a 5-10 point bonus on the relevant categories. Call it out positively: "Great job applying the feedback from your last session — [specific example]."
-If they ignored ALL prior recommendations, bold this clearly: **"You have not applied any of the recommendations from your previous coaching session."** Then list the specific tips they were given and explain how they could have incorporated them.
+APPLYING PRIOR AI FEEDBACK:
+If the DM was given improvement tips in their last coaching grade and they clearly applied those recommendations in this session, reward them with a 5-10 point bonus on the relevant categories. Call it out positively at the TOP of your summary: "Great job applying the feedback from your last session — [specific example]."
+If they did not apply recommendations, note it encouragingly unless this is a repeated pattern (3+ sessions of ignoring feedback — then be more direct and put it at the top of the summary in bold).
+
+GRADING PHILOSOPHY:
+- Be ENCOURAGING. These DMs are developing their coaching skills. The goal is to build them up, not tear them down.
+- Score generously for genuine effort. A DM who is trying but still learning should get B-range, not D-range.
+- Reserve harsh grades (below 70) for coaching that is truly lazy, copy-pasted, or shows zero effort.
+- A coaching session that shows the DM thought about it and put in effort should score at MINIMUM a C+ (77), even if the technique needs work.
+- ONLY get progressively stricter if the same DM has received multiple rounds of feedback and repeatedly does not adjust. First few sessions = gentle and encouraging. 5th session with the same issues = more direct.
 
 RESPONSE FORMAT (JSON only, no markdown):
 {
@@ -247,17 +260,17 @@ RESPONSE FORMAT (JSON only, no markdown):
   "follow_up": { "score": <0-100>, "feedback": "..." },
   "depth": { "score": <0-100>, "feedback": "..." },
   "prior_reference": { "score": <0-100>, "feedback": "..." },
-  "summary": "2-3 sentence overall assessment. If prior AI tips were ignored, include: **You have not applied any of the recommendations from your previous coaching session.** followed by the specific tips.",
+  "summary": "Start with what the DM did WELL, then note areas to improve. If prior AI tips were applied, lead with that praise. If prior tips were repeatedly ignored (3+ sessions), lead with: **Action Needed:** followed by the specific unaddressed recommendations.",
   "improvement_tips": ["tip 1", "tip 2", "tip 3"]
 }
 
 TONE RULES:
-- Never use the word "consequence" or "consequences" in your feedback. Instead use phrases like "next steps if expectations are not met" or "accountability measures" or "what happens next if this doesn't improve."
-- Keep feedback constructive and development-focused. The goal is to help DMs become better coaches, not to punish.
-- Be encouraging when the DM shows improvement or applies prior feedback. Recognize effort.
-- Be fair and balanced. A coaching session that is genuinely good should score well. Don't be unnecessarily harsh.
+- Never use the word "consequence" or "consequences." Use "next steps if expectations are not met" or "accountability measures."
+- Always start feedback with something positive — find something the DM did right.
+- Be a coach to the coach. Help them grow. Celebrate progress, no matter how small.
+- Only escalate tone after repeated ignored feedback (3+ sessions).
 
-Grade honestly but fairly. Great coaching develops people — and DMs who listen to feedback and put it into action deserve recognition for that.`
+The goal is development, not punishment. Build them up while guiding them to be better.`
 
   const response = await anthropic.messages.create({
     model: MODEL,

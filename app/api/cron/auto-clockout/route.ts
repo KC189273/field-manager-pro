@@ -67,8 +67,9 @@ export async function GET() {
       AND clock_out_at IS NULL
   `, [clockOutUtc.toISOString(), shiftIds])
 
-  // Insert a flag for each affected user
+  // Insert a flag for each affected employee (skip DMs and above — they just forgot to clock out)
   for (const s of activeShifts) {
+    if (s.user_role !== 'employee') continue
     // Skip if flag already exists for this shift
     const existingAutoFlag = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'auto_clock_out' LIMIT 1`, [s.shift_id]).catch(() => null)
     if (!existingAutoFlag) {

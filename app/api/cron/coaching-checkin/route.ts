@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { sendPushToUser } from '@/lib/apns'
 
 // Runs daily at 10 AM CST — nudges DMs who haven't submitted coaching in 3+ days
@@ -108,5 +108,76 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, nudged, escalated, sameDayNudged, checked: dmsNoCoaching.length })
+  // ── Tier 3: Late clock-in escalation to leadership ──
+  // Employees with 3+ late clock-ins in 30 days where DM has NOT filed an accountability doc within 3 days
+  let lateEscalated = 0
+  const lateEmployees = await query<{
+    emp_id: string; emp_name: string; dm_id: string; dm_name: string; late_count: number; first_late: string
+  }>(`
+    SELECT f.user_id as emp_id, u.full_name as emp_name,
+      u.manager_id as dm_id, m.full_name as dm_name,
+      COUNT(*)::int as late_count,
+      MIN(f.created_at)::text as first_late
+    FROM flags f
+    JOIN users u ON u.id = f.user_id
+    LEFT JOIN users m ON m.id = u.manager_id
+    WHERE f.type = 'late_clock_in'
+      AND f.created_at >= NOW() - INTERVAL '30 days'
+      AND u.is_active = TRUE AND u.role = 'employee'
+    GROUP BY f.user_id, u.full_name, u.manager_id, m.full_name
+    HAVING COUNT(*) >= 3
+  `)
+
+  for (const emp of lateEmployees) {
+    if (!emp.dm_id) continue
+
+    // Check if DM filed an accountability doc for this employee in the last 30 days
+    const hasDoc = await queryOne<{ id: string }>(`
+      SELECT id FROM accountability_docs
+      WHERE author_id = $1 AND subject_id = $2
+        AND created_at >= NOW() - INTERVAL '30 days'
+      LIMIT 1
+    `, [emp.dm_id, emp.emp_id]).catch(() => null)
+
+    if (hasDoc) continue // DM addressed it — skip
+
+    // Check if the 3rd late was more than 3 days ago (give DM time to act)
+    const thirdLate = await queryOne<{ created_at: string }>(`
+      SELECT created_at::text FROM flags
+      WHERE user_id = $1 AND type = 'late_clock_in' AND created_at >= NOW() - INTERVAL '30 days'
+      ORDER BY created_at ASC OFFSET 2 LIMIT 1
+    `, [emp.emp_id]).catch(() => null)
+
+    if (!thirdLate) continue
+    const daysSinceThird = (Date.now() - new Date(thirdLate.created_at).getTime()) / 86400000
+    if (daysSinceThird < 3) continue // Give DM 3 days to document the conversation
+
+    // Check if we already sent this escalation recently (don't spam leadership)
+    const recentEscalation = await queryOne<{ id: string }>(`
+      SELECT id FROM flags
+      WHERE user_id = $1 AND type = 'late_clock_in' AND detail LIKE '%DM has not addressed%'
+        AND created_at >= NOW() - INTERVAL '7 days'
+      LIMIT 1
+    `, [emp.dm_id]).catch(() => null)
+    if (recentEscalation) continue
+
+    // Escalate to leadership
+    const leaders = await query<{ id: string }>(`
+      SELECT id FROM users WHERE role IN ('ops_field_leader', 'ops_manager', 'owner', 'developer')
+        AND is_active = TRUE
+    `)
+
+    if (leaders.length) {
+      const { sendPushToUsers } = await import('@/lib/apns')
+      sendPushToUsers(
+        leaders.map(l => l.id),
+        'DM Accountability Needed',
+        `${emp.dm_name} has not addressed ${emp.emp_name} being late to ${emp.late_count} shifts in 30 days. No documented conversation on file. Recommended: accountability conversation with DM.`,
+        'flag_created'
+      ).catch(() => {})
+      lateEscalated++
+    }
+  }
+
+  return NextResponse.json({ ok: true, nudged, escalated, sameDayNudged, lateEscalated, checked: dmsNoCoaching.length })
 }

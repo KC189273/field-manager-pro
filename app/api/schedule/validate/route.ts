@@ -192,11 +192,11 @@ export async function GET(req: NextRequest) {
   }
   for (const [empId, { name, hours, pay_type }] of hoursPerEmp) {
     if (pay_type === 'salary') continue
-    if (hours > 40) {
+    if (hours > 42) {
       flags.push({
         type: 'overtime', date: weekStart,
         employeeId: empId, employeeName: name,
-        detail: `${name} — ${hours.toFixed(1)}h scheduled this week (exceeds 40h)`,
+        detail: `${name} — ${hours.toFixed(1)}h scheduled this week (exceeds 42h)`,
       })
     }
   }

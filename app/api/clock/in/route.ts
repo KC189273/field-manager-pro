@@ -110,7 +110,8 @@ export async function POST(req: NextRequest) {
       const [nh, nm] = nowHHMM.split(':').map(Number)
       const minsLate = (nh * 60 + nm) - (sh * 60 + sm)
 
-      if (minsLate > 0) {
+      // 5-minute grace period — only flag at 6+ minutes late
+      if (minsLate > 5) {
         const fmt = (hhmm: string) => {
           const [h, m] = hhmm.split(':').map(Number)
           return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
@@ -127,6 +128,28 @@ export async function POST(req: NextRequest) {
               scheduled.store_location_id ?? null,
             ]
           )
+
+          // Tier 2: Check if this is the 2nd+ late clock-in this week — notify DM
+          const weekStart = new Date()
+          weekStart.setDate(weekStart.getDate() - weekStart.getDay()) // Sunday
+          const weekStartStr = weekStart.toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+          const lateThisWeek = await queryOne<{ cnt: number }>(`
+            SELECT COUNT(*)::int as cnt FROM flags
+            WHERE user_id = $1 AND type = 'late_clock_in' AND date >= $2
+          `, [session.id, weekStartStr]).catch(() => null)
+
+          if (lateThisWeek && lateThisWeek.cnt >= 2) {
+            const mgr = await queryOne<{ id: string }>(`SELECT manager_id as id FROM users WHERE id = $1 AND manager_id IS NOT NULL`, [session.id])
+            if (mgr) {
+              const { sendPushToUser } = await import('@/lib/apns')
+              sendPushToUser(
+                mgr.id,
+                'Repeated Late Clock-In',
+                `${session.fullName} has been late to ${lateThisWeek.cnt} shifts this week. Recommended: documented conversation.`,
+                'flag_created'
+              ).catch(() => {})
+            }
+          }
         }
       }
     }

@@ -126,9 +126,32 @@ export async function gradeCoaching(params: {
     WHERE dm_id = $1 ORDER BY graded_at DESC LIMIT 5
   `, [params.dmId]).catch(() => [])
 
+  // Check if this DM has ever coached THIS specific employee before
+  const priorForEmployee = params.employeeCoachedName ? await query<{
+    overall_grade: string; graded_at: string; improvement_tips: string[] | null; summary: string | null
+  }>(`
+    SELECT overall_grade, graded_at::text, improvement_tips, summary FROM coaching_grades
+    WHERE dm_id = $1 AND employee_coached = $2
+    ORDER BY graded_at DESC LIMIT 3
+  `, [params.dmId, params.employeeCoachedName]).catch(() => []) : []
+
+  // Get the most recent coaching tips given to this DM (to check if they applied them)
+  const lastTips = await queryOne<{ improvement_tips: string[] | null; summary: string | null; employee_coached: string | null }>(`
+    SELECT improvement_tips, summary, employee_coached FROM coaching_grades
+    WHERE dm_id = $1 ORDER BY graded_at DESC LIMIT 1
+  `, [params.dmId]).catch(() => null)
+
   const priorContext = priorGrades.length > 0
     ? `\nThis DM's last ${priorGrades.length} coaching grades: ${priorGrades.map(g => `${g.overall_grade} (${g.graded_at.slice(0, 10)} at ${g.store_address})`).join(', ')}`
     : '\nThis is the first coaching submission from this DM — no prior grades to compare.'
+
+  const employeePriorContext = priorForEmployee.length > 0
+    ? `\nThis DM has coached ${params.employeeCoachedName} ${priorForEmployee.length} time(s) before: ${priorForEmployee.map(g => `${g.overall_grade} on ${g.graded_at.slice(0, 10)}`).join(', ')}`
+    : `\n**FIRST TIME coaching ${params.employeeCoachedName || 'this employee'}** — this DM has never coached this employee before (possibly due to territory change). Do NOT penalize them on the "Reference to Prior Coaching" category. Give them a baseline pass (80+) on that category since there is no prior coaching to reference.`
+
+  const priorTipsContext = lastTips?.improvement_tips?.length
+    ? `\n\nPRIOR AI FEEDBACK GIVEN TO THIS DM (from their most recent coaching):\n${lastTips.improvement_tips.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}\n\nIMPORTANT: Check if the DM applied ANY of these recommendations in this current coaching session. If they clearly acted on prior feedback, reward them — bump their score up and call it out positively. If they ignored ALL prior recommendations, **BOLD THIS IN YOUR FEEDBACK: "You have not applied any of the recommendations from your previous coaching session."** and cite the specific tips they were given.`
+    : ''
 
   // Build coaching data summary for AI
   let checklistSummary = ''
@@ -203,14 +226,18 @@ Behaviors / Skills Coached: ${params.coaching1 || '(empty)'}
 Action Items Agreed Upon: ${params.coaching2 || '(empty)'}
 Follow-Up Plan: ${params.coaching3 || '(empty)'}
 ${checklistSummary}${remoteSection}
-${priorContext}${mlbGradeContext}
+${priorContext}${employeePriorContext}${priorTipsContext}${mlbGradeContext}
 
 GRADING CRITERIA (weighted):
 1. SPECIFICITY (25%): Did the DM describe specific behaviors they observed? Did they reference concrete examples? Vague coaching like "work on sales" = low score. "I noticed you didn't offer Home Internet to the last 3 customers — here's how to naturally bring it up..." = high score.
 2. ACTIONABILITY (25%): Are the action items concrete and measurable? Can the employee actually do something different tomorrow? "Improve sales" = low. "Practice the MiM pitch with your opening 3 customers tomorrow and track conversion" = high.
 3. FOLLOW-UP QUALITY (20%): Is there a specific follow-up plan? Date set? Clear accountability? "I'll check in" = low. "Follow-up on Friday 8/22 to review MiM conversion rate and role-play the HSI objection script" = high.
 4. DEPTH OF OBSERVATION (20%): How thorough was the observation? Did they use the checklist fully? Did they identify root causes, not just symptoms? One checkbox = low. Full checklist with detailed notes on each area = high.
-5. REFERENCE TO PRIOR COACHING (10%): Did the DM connect this session to previous coaching? Show progress tracking? First-time DMs get a baseline pass here.
+5. REFERENCE TO PRIOR COACHING (10%): Did the DM connect this session to previous coaching? Show progress tracking? **If this is the DM's FIRST TIME coaching this specific employee (e.g., after a territory change), give them at least 80 on this category — they have no prior coaching to reference and should not be penalized.**
+
+APPLYING PRIOR AI FEEDBACK BONUS:
+If the DM was given improvement tips in their last coaching grade and they clearly applied those recommendations in this session, reward them with a 5-10 point bonus on the relevant categories. Call it out positively: "Great job applying the feedback from your last session — [specific example]."
+If they ignored ALL prior recommendations, bold this clearly: **"You have not applied any of the recommendations from your previous coaching session."** Then list the specific tips they were given and explain how they could have incorporated them.
 
 RESPONSE FORMAT (JSON only, no markdown):
 {
@@ -220,15 +247,17 @@ RESPONSE FORMAT (JSON only, no markdown):
   "follow_up": { "score": <0-100>, "feedback": "..." },
   "depth": { "score": <0-100>, "feedback": "..." },
   "prior_reference": { "score": <0-100>, "feedback": "..." },
-  "summary": "2-3 sentence overall assessment",
+  "summary": "2-3 sentence overall assessment. If prior AI tips were ignored, include: **You have not applied any of the recommendations from your previous coaching session.** followed by the specific tips.",
   "improvement_tips": ["tip 1", "tip 2", "tip 3"]
 }
 
 TONE RULES:
 - Never use the word "consequence" or "consequences" in your feedback. Instead use phrases like "next steps if expectations are not met" or "accountability measures" or "what happens next if this doesn't improve."
 - Keep feedback constructive and development-focused. The goal is to help DMs become better coaches, not to punish.
+- Be encouraging when the DM shows improvement or applies prior feedback. Recognize effort.
+- Be fair and balanced. A coaching session that is genuinely good should score well. Don't be unnecessarily harsh.
 
-Be fair but demanding. Great coaching develops people — generic coaching wastes everyone's time. Grade honestly.`
+Grade honestly but fairly. Great coaching develops people — and DMs who listen to feedback and put it into action deserve recognition for that.`
 
   const response = await anthropic.messages.create({
     model: MODEL,

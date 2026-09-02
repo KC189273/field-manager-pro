@@ -55,6 +55,7 @@ export default function TeamPage() {
   const [form, setForm] = useState(emptyForm)
   const [editForm, setEditForm] = useState(emptyEdit)
   const [loading, setLoading] = useState(false)
+  const formMounted = useRef(false)
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' }>({ text: '', type: 'success' })
   const [storePanel, setStorePanel] = useState<string | null>(null) // manager id whose panel is open
   const [allLocations, setAllLocations] = useState<{ id: string; address: string; active: boolean }[]>([])
@@ -160,9 +161,13 @@ export default function TeamPage() {
     setForm({ ...emptyForm, role: type === 'manager' ? 'manager' : 'employee' })
     setShowCreate(true)
     setEditUser(null)
+    formMounted.current = false
+    setTimeout(() => { formMounted.current = true }, 500)
   }
 
   function openEdit(user: User) {
+    formMounted.current = false
+    setTimeout(() => { formMounted.current = true }, 500)
     setEditUser(user)
     setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, legalName: user.legal_name ?? user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
     setShowCreate(false)
@@ -204,6 +209,7 @@ export default function TeamPage() {
 
   async function createUser(e: FormEvent) {
     e.preventDefault()
+    if (!formMounted.current) return // Block Chrome auto-submit on form load
     setLoading(true)
     const res = await fetch('/api/team/users', {
       method: 'POST',
@@ -226,6 +232,7 @@ export default function TeamPage() {
 
   async function updateUser(e: FormEvent) {
     e.preventDefault()
+    if (!formMounted.current) return // Block Chrome auto-submit on form load
     if (!editUser) return
     setLoading(true)
     const body: Record<string, unknown> = { userId: editUser.id, isActive: editForm.isActive }

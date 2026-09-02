@@ -8,6 +8,7 @@ type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner
 
 const STORAGE_KEY = 'fmp_pinned_tabs_v2'
 const ROLE_CACHE_KEY = 'fmp_role_cache'
+const STRETCH_CACHE_KEY = 'fmp_stretch_dm'
 const MAX_PINS = 4
 
 const NO_NAV_PREFIXES = [
@@ -108,6 +109,7 @@ const DEFAULT_PINNED_TABS: Record<Role, string[]> = {
 export default function BottomNav() {
   const pathname = usePathname()
   const [role, setRole] = useState<Role | null>(null)
+  const [isStretchDm, setIsStretchDm] = useState(false)
   const [pinnedHrefs, setPinnedHrefs] = useState<string[]>([])
   const [moreOpen, setMoreOpen] = useState(false)
   const [aiChatOpen, setAiChatOpen] = useState(false)
@@ -144,6 +146,13 @@ export default function BottomNav() {
         if (d?.role) {
           setRole(d.role as Role)
           try { localStorage.setItem(ROLE_CACHE_KEY, d.role) } catch {}
+          if (d.isStretchDm) {
+            setIsStretchDm(true)
+            try { localStorage.setItem(STRETCH_CACHE_KEY, 'true') } catch {}
+          } else {
+            setIsStretchDm(false)
+            try { localStorage.removeItem(STRETCH_CACHE_KEY) } catch {}
+          }
         }
       })
       .catch(() => {})
@@ -258,7 +267,8 @@ export default function BottomNav() {
   }
 
   // All features visible to this role shown in the More sheet
-  const moreFeatures = ALL_FEATURES.filter(f => f.show(role))
+  // Stretch DMs also see DM Store Visit
+  const moreFeatures = ALL_FEATURES.filter(f => f.show(role) || (isStretchDm && f.href === '/dm-visit'))
 
   return (
     <>

@@ -312,11 +312,26 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!canAccess(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  // Allow stretch DMs (employees with is_stretch_dm=true) for remote coaching only
+  let isStretchDm = false
+  if (session.role === 'employee') {
+    const stretchCheck = await queryOne<{ is_stretch_dm: boolean }>(`SELECT COALESCE(is_stretch_dm, FALSE) as is_stretch_dm FROM users WHERE id = $1`, [session.id])
+    isStretchDm = stretchCheck?.is_stretch_dm ?? false
+    if (!isStretchDm) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  } else if (!canAccess(session.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
   try { await ensureTable() } catch { /* already exists */ }
   try { await ensureQuickColumns() } catch {}
 
   const body = await req.json()
+
+  // Stretch DMs can only submit remote coaching
+  if (isStretchDm && body.visit_type !== 'remote_coaching') {
+    return NextResponse.json({ error: 'Stretch DMs can only submit Remote Coaching' }, { status: 403 })
+  }
 
   // ── Quick Visit (with optional coaching) ─────────────────────────────────
   if (body.visit_type === 'quick' || body.visit_type === 'quick_coaching') {

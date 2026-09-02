@@ -21,6 +21,7 @@ interface User {
   is_active: boolean
   is_floater: boolean
   is_ops_collab: boolean
+  is_stretch_dm: boolean
   is_hidden: boolean
   manager_id: string | null
   approval_status: string | null
@@ -42,7 +43,7 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 const emptyForm = { username: '', email: '', fullName: '', password: '', role: 'employee', managerId: '' }
-const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', legalName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false, isHidden: false }
+const emptyEdit = { password: '', requirePasswordChange: true, fullName: '', legalName: '', email: '', isActive: true, managerId: '', role: '', orgId: '', payType: 'hourly' as 'salary' | 'hourly', isFloater: false, isOpsCollab: false, isStretchDm: false, isHidden: false }
 
 export default function TeamPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -167,7 +168,7 @@ export default function TeamPage() {
   function openEdit(user: User) {
     formOpenedAt.current = Date.now()
     setEditUser(user)
-    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, legalName: user.legal_name ?? user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isHidden: user.is_hidden ?? false })
+    setEditForm({ password: '', requirePasswordChange: true, fullName: user.full_name, legalName: user.legal_name ?? user.full_name, email: user.email, isActive: user.is_active, managerId: user.manager_id ?? '', role: user.role, orgId: (user as User & { org_id?: string }).org_id ?? '', payType: user.pay_type ?? 'hourly', isFloater: user.is_floater ?? false, isOpsCollab: user.is_ops_collab ?? false, isStretchDm: user.is_stretch_dm ?? false, isHidden: user.is_hidden ?? false })
     setShowCreate(false)
     setShowTempPw(false)
   }
@@ -246,6 +247,7 @@ export default function TeamPage() {
     if (isDev) body.orgId = editForm.orgId || null
     if (editForm.payType !== (editUser.pay_type ?? 'hourly')) body.payType = editForm.payType
     if (editUser.role === 'employee' && editForm.isFloater !== (editUser.is_floater ?? false)) body.isFloater = editForm.isFloater
+    if (editUser.role === 'employee' && editForm.isStretchDm !== (editUser.is_stretch_dm ?? false)) body.isStretchDm = editForm.isStretchDm
     if (editUser.role === 'manager' && editForm.isOpsCollab !== (editUser.is_ops_collab ?? false)) body.isOpsCollab = editForm.isOpsCollab
     if (isDev && editForm.isHidden !== (editUser.is_hidden ?? false)) body.isHidden = editForm.isHidden
 
@@ -691,6 +693,30 @@ export default function TeamPage() {
                     </button>
                     {editForm.isFloater && (
                       <p className="text-xs text-gray-500 mt-1">This employee can be scheduled and assigned tasks by any DM in the org.</p>
+                    )}
+                  </div>
+                )}
+                {editUser.role === 'employee' && canManageAll && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1.5">Stretch Assignment DM</label>
+                    <button
+                      type="button"
+                      onClick={() => setEditForm(p => ({ ...p, isStretchDm: !p.isStretchDm }))}
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-colors ${
+                        editForm.isStretchDm
+                          ? 'bg-violet-600/15 border-violet-500'
+                          : 'bg-gray-800 border-gray-700'
+                      }`}
+                    >
+                      <div className={`w-10 h-5 rounded-full relative flex-shrink-0 transition-colors ${editForm.isStretchDm ? 'bg-violet-500' : 'bg-gray-600'}`}>
+                        <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editForm.isStretchDm ? 'left-5' : 'left-0.5'}`} />
+                      </div>
+                      <span className={`text-sm font-medium ${editForm.isStretchDm ? 'text-violet-400' : 'text-gray-400'}`}>
+                        {editForm.isStretchDm ? 'Stretch DM — can submit remote coaching' : 'Standard employee'}
+                      </span>
+                    </button>
+                    {editForm.isStretchDm && (
+                      <p className="text-xs text-gray-500 mt-1">This employee can access DM Store Visit to submit Remote Coaching sessions. Grades are sent to their DM.</p>
                     )}
                   </div>
                 )}

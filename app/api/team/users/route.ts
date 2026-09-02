@@ -49,8 +49,8 @@ export async function GET(req: NextRequest) {
   const hiddenFilter = session.role === 'developer' ? '' : ' AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)'
   const hiddenFilterNoAlias = session.role === 'developer' ? '' : ' AND (is_hidden = FALSE OR is_hidden IS NULL)'
 
-  const userCols = 'u.id, u.username, u.email, u.full_name, u.legal_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab, u.is_hidden'
-  const userColsNoAlias = 'id, username, email, full_name, legal_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab, is_hidden'
+  const userCols = 'u.id, u.username, u.email, u.full_name, u.legal_name, u.role, u.is_active, u.is_terminated, u.manager_id, u.org_id, u.created_at, u.approval_status, u.created_by, u.avatar_key, u.temp_password, u.must_change_password, u.pay_type, u.is_floater, u.is_ops_collab, u.is_hidden, u.is_stretch_dm'
+  const userColsNoAlias = 'id, username, email, full_name, legal_name, role, is_active, is_terminated, manager_id, org_id, created_at, approval_status, created_by, avatar_key, temp_password, must_change_password, pay_type, is_floater, is_ops_collab, is_hidden, is_stretch_dm'
 
   if (session.role === 'developer') {
     const params: unknown[] = []
@@ -218,7 +218,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const body = await req.json()
-  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab, isHidden, legalName } = body
+  const { userId, isActive, password, mustChangePassword, fullName, email, managerId, role, orgId, avatarKey, payType, isFloater, isOpsCollab, isHidden, legalName, isStretchDm } = body
   if (!userId) return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
 
   // Managers can only edit their own employees
@@ -279,6 +279,9 @@ export async function PATCH(req: NextRequest) {
   }
   if (isOpsCollab !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager')) {
     await query(`UPDATE users SET is_ops_collab = $1 WHERE id = $2`, [!!isOpsCollab, userId])
+  }
+  if (isStretchDm !== undefined && (session.role === 'developer' || isOwner(session.role) || session.role === 'ops_field_leader' || session.role === 'ops_manager')) {
+    await query(`UPDATE users SET is_stretch_dm = $1 WHERE id = $2`, [!!isStretchDm, userId])
   }
 
   // If the updated user is the currently logged-in user, refresh the session

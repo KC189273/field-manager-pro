@@ -293,9 +293,13 @@ export default function DmVisitPage() {
       return r.json()
     }).then(d => {
       if (!d) return
-      if (d.role === 'employee') { router.replace('/dashboard'); return }
+      if (d.role === 'employee' && !d.isStretchDm) { router.replace('/dashboard'); return }
       setSession(d)
       setForm(f => ({ ...f, dm_name: d.fullName }))
+      // Stretch DMs: force to Remote Coaching tab and load their DM's stores
+      if (d.role === 'employee' && d.isStretchDm) {
+        setTab('remote')
+      }
       if (d.role === 'developer') {
         fetch('/api/orgs').then(r => r.json()).then(o => { if (o.orgs) setOrgs(o.orgs) })
       }
@@ -753,15 +757,18 @@ export default function DmVisitPage() {
       placeholder={placeholder} className={inputCls + ' resize-none'} />
   )
 
-  const tabs: { id: Tab; label: string }[] = [
-    ...(session.role === 'developer' ? [{ id: 'new' as Tab, label: 'New Checklist (dev)' }] : []),
-    { id: 'quick', label: 'Quick Visit' },
-    { id: 'remote', label: 'Remote Coaching' },
-    ...(session.role === 'developer' ? [{ id: 'coaching' as Tab, label: 'DM Coaching (dev)' }] : []),
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'report', label: 'Download Report' },
-    ...(canManageStores(session.role) || session.role === 'manager' ? [{ id: 'stores' as Tab, label: 'Manage Stores' }] : []),
-  ]
+  const isStretchEmployee = session.role === 'employee' && (session as unknown as { isStretchDm?: boolean }).isStretchDm
+  const tabs: { id: Tab; label: string }[] = isStretchEmployee
+    ? [{ id: 'remote', label: 'Remote Coaching' }]
+    : [
+        ...(session.role === 'developer' ? [{ id: 'new' as Tab, label: 'New Checklist (dev)' }] : []),
+        { id: 'quick', label: 'Quick Visit' },
+        { id: 'remote', label: 'Remote Coaching' },
+        ...(session.role === 'developer' ? [{ id: 'coaching' as Tab, label: 'DM Coaching (dev)' }] : []),
+        { id: 'dashboard', label: 'Dashboard' },
+        { id: 'report', label: 'Download Report' },
+        ...(canManageStores(session.role) || session.role === 'manager' ? [{ id: 'stores' as Tab, label: 'Manage Stores' }] : []),
+      ]
 
   // Dashboard: group by DM, then by store
   const dashByDm = dashRows.reduce<Record<string, { stores: DashRow[]; total: number }>>((acc, r) => {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner, type Role } from '@/lib/auth'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 
 const canManage = (role: Role) => isOwner(role) || role === 'developer'
 const canView = (role: Role) => role !== 'employee'
@@ -106,6 +106,27 @@ export async function GET(req: NextRequest) {
     }
     const closedToday = new Set(closures.map(c => c.store_id))
     return locations.map(l => ({ ...l, hours: byStore.get(l.id) ?? [], closed_today: closedToday.has(l.id) }))
+  }
+
+  // Stretch DM employees see their DM's assigned stores
+  if ((session.role as string) === 'employee') {
+    const empInfo = await queryOne<{ manager_id: string | null; is_stretch_dm: boolean }>(
+      `SELECT manager_id, COALESCE(is_stretch_dm, FALSE) as is_stretch_dm FROM users WHERE id = $1`, [session.id]
+    )
+    if (!empInfo?.is_stretch_dm || !empInfo.manager_id) return NextResponse.json({ locations: [] })
+    const assigned = await query<{ store_location_id: string }>(
+      `SELECT store_location_id FROM dm_manager_stores WHERE manager_id = $1`, [empInfo.manager_id]
+    )
+    if (assigned.length === 0) return NextResponse.json({ locations: [] })
+    const ids = assigned.map(r => r.store_location_id)
+    const locations = await query<StoreRow>(
+      `SELECT s.id, s.address, s.active, s.org_id, o.name AS org_name, s.employee_capacity, s.lat, s.lng, s.geofence_radius_ft, s.created_at
+       FROM dm_store_locations s
+       LEFT JOIN organizations o ON o.id = s.org_id
+       WHERE s.id = ANY($1) AND s.active = true ORDER BY s.address ASC`,
+      [ids]
+    )
+    return NextResponse.json({ locations: await attachHours(locations) })
   }
 
   // Managers only see their assigned active locations

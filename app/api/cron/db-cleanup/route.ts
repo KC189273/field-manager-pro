@@ -69,12 +69,23 @@ export async function GET(req: NextRequest) {
        SELECT COUNT(*)::int as cnt FROM deleted`
     ).catch(() => [{ cnt: 0 }])
 
+    // Auto-resolve stale flags older than 7 days (late_clock_in, auto_clock_out, schedule_overtime, overtime)
+    const staleFlags = await query<{ cnt: number }>(`
+      WITH resolved AS (
+        UPDATE flags SET resolved = TRUE, resolved_at = NOW(), resolved_by_name = 'System', resolution_note = 'Auto-resolved — older than 7 days'
+        WHERE resolved = FALSE AND date < CURRENT_DATE - 7
+          AND type IN ('late_clock_in', 'auto_clock_out', 'schedule_overtime', 'overtime', 'break_long', 'break_multiple')
+        RETURNING 1
+      ) SELECT COUNT(*)::int as cnt FROM resolved
+    `).catch(() => [{ cnt: 0 }])
+
     return NextResponse.json({
       ok: true,
       gps_deleted: gps[0].cnt,
       notifications_deleted: notifs[0].cnt,
       photos_deleted: photosDeleted,
       stale_tokens_deleted: staleTokens[0].cnt,
+      stale_flags_resolved: staleFlags[0].cnt,
       expired_closures_deleted: expiredClosures[0].cnt,
     })
   } catch (err) {

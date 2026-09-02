@@ -267,9 +267,11 @@ export default function BottomNav() {
     })
   }
 
-  // All features visible to this role shown in the More sheet
+  // All features visible to this role shown in the More sheet, sorted alphabetically
   // Stretch DMs also see DM Store Visit
-  const moreFeatures = ALL_FEATURES.filter(f => f.show(role) || (isStretchDm && f.href === '/dm-visit'))
+  const moreFeatures = ALL_FEATURES
+    .filter(f => f.show(role) || (isStretchDm && f.href === '/dm-visit'))
+    .sort((a, b) => a.label.localeCompare(b.label))
 
   return (
     <>

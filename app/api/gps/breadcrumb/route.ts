@@ -105,13 +105,17 @@ export async function POST(req: NextRequest) {
                 )
 
                 const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-                await query(
-                  `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
-                   VALUES ($1, $2, 'geofence_exit', $3, $4, $5)`,
-                  [session.id, shift.id, todayCST,
-                   `${session.fullName} was auto clocked out — left ${store.address} geofence for ${Math.round(minutesOutside)} minutes (${Math.round(dist)} ft away)`,
-                   shift.store_location_id]
-                )
+                // Skip if flag already exists for this shift
+                const existingGeofenceFlag = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'geofence_exit' LIMIT 1`, [shift.id]).catch(() => null)
+                if (!existingGeofenceFlag) {
+                  await query(
+                    `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
+                     VALUES ($1, $2, 'geofence_exit', $3, $4, $5)`,
+                    [session.id, shift.id, todayCST,
+                     `${session.fullName} was auto clocked out — left ${store.address} geofence for ${Math.round(minutesOutside)} minutes (${Math.round(dist)} ft away)`,
+                     shift.store_location_id]
+                  )
+                }
 
                 const { sendPushToUser } = await import('@/lib/apns')
                 sendPushToUser(

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 import { sendDmEodRecap } from '@/lib/dm-eod-recap'
 
@@ -69,16 +69,19 @@ export async function GET() {
 
   // Insert a flag for each affected user
   for (const s of activeShifts) {
-    await query(`
-      INSERT INTO flags (user_id, shift_id, type, date, detail)
-      VALUES ($1, $2, 'auto_clock_out', $3, $4)
-      ON CONFLICT DO NOTHING
-    `, [
-      s.user_id,
-      s.shift_id,
-      cstDate,
-      `${s.user_name} was automatically clocked out at 9:00 PM CST. Please review and adjust if needed.`,
-    ]).catch(() => {})
+    // Skip if flag already exists for this shift
+    const existingAutoFlag = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'auto_clock_out' LIMIT 1`, [s.shift_id]).catch(() => null)
+    if (!existingAutoFlag) {
+      await query(`
+        INSERT INTO flags (user_id, shift_id, type, date, detail)
+        VALUES ($1, $2, 'auto_clock_out', $3, $4)
+      `, [
+        s.user_id,
+        s.shift_id,
+        cstDate,
+        `${s.user_name} was automatically clocked out at 9:00 PM CST. Please review and adjust if needed.`,
+      ]).catch(() => {})
+    }
   }
 
   // Notify affected employees

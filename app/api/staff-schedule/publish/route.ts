@@ -75,14 +75,18 @@ export async function POST(req: NextRequest) {
       for (const f of flags) {
         const dbType = TYPE_MAP[f.type]
         if (!dbType) continue
-        // Use DM id for store-level flags, employee id for employee-level flags
         const userId = f.employeeId ?? session.id
+        // Skip if an unresolved flag of this type already exists for this user+date
+        const existing = await queryOne<{ id: string }>(
+          `SELECT id FROM flags WHERE user_id = $1 AND type = $2 AND date = $3 AND resolved = FALSE LIMIT 1`,
+          [userId, dbType, f.date]
+        ).catch(() => null)
+        if (existing) continue
         const storeCol = f.storeId ? ', store_location_id' : ''
         const storeVal = f.storeId ? `, '${f.storeId}'` : ''
         await query(
           `INSERT INTO flags (user_id, type, date, detail${storeCol})
-           VALUES ($1, $2, $3, $4${storeVal})
-           ON CONFLICT DO NOTHING`,
+           VALUES ($1, $2, $3, $4${storeVal})`,
           [userId, dbType, f.date, f.detail]
         ).catch(() => {})
       }

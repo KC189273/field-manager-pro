@@ -113,11 +113,15 @@ export async function POST(req: NextRequest) {
   // Flag: break > 45 minutes
   if (breakMinutes > 45) {
     try {
-      await query(
-        `INSERT INTO flags (user_id, shift_id, type, date, detail)
-         VALUES ($1, $2, 'break_long', CURRENT_DATE, $3)`,
-        [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (45 min limit)`]
-      )
+      // Skip if flag already exists for this shift
+      const existingBreakLong = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'break_long' LIMIT 1`, [shift.id]).catch(() => null)
+      if (!existingBreakLong) {
+        await query(
+          `INSERT INTO flags (user_id, shift_id, type, date, detail)
+           VALUES ($1, $2, 'break_long', CURRENT_DATE, $3)`,
+          [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (45 min limit)`]
+        )
+      }
       flagsRaised.push('break_long')
     } catch {}
   }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isManager, isOwner, type Role } from '@/lib/auth'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { Resend } from 'resend'
 import { escapeHtml } from '@/lib/escape-html'
@@ -526,13 +526,17 @@ export async function POST(req: NextRequest) {
     // Flag when DM visits without coaching
     if (body.visit_type === 'quick') {
       const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-      query(
-        `INSERT INTO flags (user_id, type, date, detail, store_location_id)
-         VALUES ($1, 'visit_without_coaching', $2, $3, $4)`,
-        [session.id, todayCST,
-         `${session.fullName} submitted a store visit at ${body.store_address} without coaching.`,
-         body.store_location_id || null]
-      ).catch(() => {})
+      // Skip if flag already exists for this user + type + date
+      const existingVisitFlag = await queryOne(`SELECT id FROM flags WHERE user_id = $1 AND type = 'visit_without_coaching' AND date = $2 LIMIT 1`, [session.id, todayCST]).catch(() => null)
+      if (!existingVisitFlag) {
+        query(
+          `INSERT INTO flags (user_id, type, date, detail, store_location_id)
+           VALUES ($1, 'visit_without_coaching', $2, $3, $4)`,
+          [session.id, todayCST,
+           `${session.fullName} submitted a store visit at ${body.store_address} without coaching.`,
+           body.store_location_id || null]
+        ).catch(() => {})
+      }
 
       // Notify leadership
       const { getSDOrFallback } = await import('@/lib/sd-fallback')

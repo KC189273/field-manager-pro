@@ -224,12 +224,16 @@ export async function POST(req: NextRequest) {
     ? `${fmtDate(startDate)} (${fmtTime12(partialStartTime)} – ${fmtTime12(partialEndTime)})`
     : `${fmtDate(startDate)} – ${fmtDate(endDate)}`
 
-  // Create a flag so it appears in the approver's flags list
+  // Create a flag so it appears in the approver's flags list (dedup on user_id + type + date)
   try {
-    await query(
-      `INSERT INTO flags (user_id, type, date, detail) VALUES ($1, 'time_off_request', CURRENT_DATE, $2)`,
-      [session.id, `${session.fullName} requested time off: ${dateDisplay}`]
-    )
+    const todayDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+    const existingTimeOffFlag = await queryOne(`SELECT id FROM flags WHERE user_id = $1 AND type = 'time_off_request' AND date = $2 LIMIT 1`, [session.id, todayDate]).catch(() => null)
+    if (!existingTimeOffFlag) {
+      await query(
+        `INSERT INTO flags (user_id, type, date, detail) VALUES ($1, 'time_off_request', CURRENT_DATE, $2)`,
+        [session.id, `${session.fullName} requested time off: ${dateDisplay}`]
+      )
+    }
   } catch {}
 
   // Notify approver

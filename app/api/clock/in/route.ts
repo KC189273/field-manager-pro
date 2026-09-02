@@ -115,15 +115,19 @@ export async function POST(req: NextRequest) {
           const [h, m] = hhmm.split(':').map(Number)
           return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
         }
-        await query(
-          `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
-           VALUES ($1, $2, 'late_clock_in', $3, $4, $5)`,
-          [
-            session.id, shift!.id, todayCST,
-            `${session.fullName} clocked in at ${fmt(nowHHMM)}, scheduled for ${fmt(schHHMM)} (${minsLate} min late)`,
-            scheduled.store_location_id ?? null,
-          ]
-        )
+        // Skip if flag already exists for this shift
+        const existingLateFlag = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'late_clock_in' LIMIT 1`, [shift!.id]).catch(() => null)
+        if (!existingLateFlag) {
+          await query(
+            `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
+             VALUES ($1, $2, 'late_clock_in', $3, $4, $5)`,
+            [
+              session.id, shift!.id, todayCST,
+              `${session.fullName} clocked in at ${fmt(nowHHMM)}, scheduled for ${fmt(schHHMM)} (${minsLate} min late)`,
+              scheduled.store_location_id ?? null,
+            ]
+          )
+        }
       }
     }
   } catch { /* never block clock-in */ }
@@ -140,13 +144,17 @@ export async function POST(req: NextRequest) {
       `).catch(() => null)
       if (mandatory?.value === true || mandatory?.value === 'true' || String(mandatory?.value) === 'true') {
         const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-        await query(
-          `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
-           VALUES ($1, $2, 'missing_clock_in_photo', $3, $4, $5)`,
-          [session.id, shift!.id, todayCST,
-           `${session.fullName} clocked in without a uniform photo.`,
-           storeId || null]
-        )
+        // Skip if flag already exists for this shift
+        const existingPhotoFlag = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'missing_clock_in_photo' LIMIT 1`, [shift!.id]).catch(() => null)
+        if (!existingPhotoFlag) {
+          await query(
+            `INSERT INTO flags (user_id, shift_id, type, date, detail, store_location_id)
+             VALUES ($1, $2, 'missing_clock_in_photo', $3, $4, $5)`,
+            [session.id, shift!.id, todayCST,
+             `${session.fullName} clocked in without a uniform photo.`,
+             storeId || null]
+          )
+        }
         // Notify DM
         const mgr = await queryOne<{ id: string }>(`SELECT manager_id as id FROM users WHERE id = $1 AND manager_id IS NOT NULL`, [session.id])
         if (mgr) {

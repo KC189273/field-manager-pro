@@ -44,6 +44,7 @@ export async function checkUniformPhoto(
   userId: string,
   photoKey: string,
   userName: string,
+  legalName: string | null,
   managerId: string | null,
 ): Promise<void> {
   try {
@@ -92,11 +93,12 @@ export async function checkUniformPhoto(
 
 IMPORTANT: This is a SELFIE taken with a front-facing camera. Text on clothing will appear MIRROR-REVERSED in the image. When checking for logos or text, mentally flip/reverse any text you see. "eliboM-T" reversed is "T-Mobile". "orteM" reversed is "Metro". DO NOT flag reversed text as non-compliant — it is the expected result of a selfie camera.
 
-The employee's name is: ${userName}
+The employee's preferred name is: ${userName}
+${legalName && legalName !== userName ? `The employee's legal name is: ${legalName}` : ''}
 
 Check for:
 1. SHIRT: Is the person wearing a T-Mobile or Metro by T-Mobile branded shirt? Look for magenta/pink color and/or T-Mobile/Metro logo (may appear reversed in selfie). A magenta/pink polo or t-shirt with any T-Mobile or Metro branding counts as compliant.
-2. NAME TAG: Is a name badge/tag visible? If you can read the name on the tag, does it match or closely match "${userName}"? If the name is different, flag it.
+2. NAME TAG: Is a name badge/tag visible? If you can read the name on the tag, does it match or closely match "${userName}"${legalName && legalName !== userName ? ` OR "${legalName}"` : ''}? Either name is acceptable. If the name is completely different from both, flag it.
 3. HAT: If the person is wearing a hat, is it a T-Mobile or Metro by T-Mobile branded hat? A hat is NOT required — only flag if they ARE wearing a hat that is not T-Mobile/Metro branded.
 
 Respond with ONLY a JSON object (no markdown):
@@ -105,7 +107,7 @@ Respond with ONLY a JSON object (no markdown):
 Rules:
 - shirt_ok: true if wearing T-Mobile/Metro shirt (even if text is reversed in selfie), false if clearly not
 - nametag_ok: true if a name badge is visible, false if no badge visible
-- nametag_name_match: true if name on tag matches "${userName}", false if different name visible, null if can't read the name
+- nametag_name_match: true if name on tag matches "${userName}"${legalName && legalName !== userName ? ` or "${legalName}"` : ''}, false if a completely different name is visible, null if can't read the name
 - hat_ok: true if wearing a T-Mobile/Metro hat OR no hat at all, false if wearing a non-branded hat, null if can't tell
 - If the photo is too dark, blurry, or you genuinely can't tell, use null for that field`,
           },

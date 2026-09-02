@@ -77,8 +77,8 @@ export async function POST(req: NextRequest) {
   // AI uniform photo check — fire and forget, never blocks clock-in
   if (photoKey && session.role === 'employee') {
     import('@/lib/uniform-check').then(({ checkUniformPhoto }) => {
-      queryOne<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [session.id])
-        .then(u => checkUniformPhoto(shift!.id, session.id, photoKey, session.fullName, u?.manager_id ?? null))
+      queryOne<{ manager_id: string | null; legal_name: string | null }>(`SELECT manager_id, legal_name FROM users WHERE id = $1`, [session.id])
+        .then(u => checkUniformPhoto(shift!.id, session.id, photoKey, session.fullName, u?.legal_name ?? null, u?.manager_id ?? null))
         .catch(() => {})
     }).catch(() => {})
   }

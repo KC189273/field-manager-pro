@@ -136,33 +136,43 @@ export async function GET(req: NextRequest) {
       const fmtClose = formatTimeAmPm(store.close_time)
 
       // Push to DMs
+      const pushPromises: Promise<void>[] = []
       for (const dm of dms) {
-        sendPushToUser(dm.id, 'Unmanned Store Alert',
-          `${store.address} has no one clocked in. Store hours: ${fmtOpen}-${fmtClose}. Current time: ${fmtCurrent}.`,
-          'flags'
-        ).catch(() => {})
+        pushPromises.push(
+          sendPushToUser(dm.id, 'Unmanned Store Alert',
+            `${store.address} has no one clocked in. Store hours: ${fmtOpen}-${fmtClose}. Current time: ${fmtCurrent}.`,
+            'flags'
+          ).catch(() => {})
+        )
       }
 
       // Push to leadership
       if (leaders.length) {
-        sendPushToUsers(
-          leaders.map(l => l.id),
-          'Unmanned Store Alert',
-          `${store.address} has no one clocked in (${fmtCurrent}). ${dms.length ? `DM: ${dms.map(d => d.full_name).join(', ')}` : 'No DM assigned.'}`,
-          'flags'
-        ).catch(() => {})
+        pushPromises.push(
+          sendPushToUsers(
+            leaders.map(l => l.id),
+            'Unmanned Store Alert',
+            `${store.address} has no one clocked in (${fmtCurrent}). ${dms.length ? `DM: ${dms.map(d => d.full_name).join(', ')}` : 'No DM assigned.'}`,
+            'flags'
+          ).catch(() => {})
+        )
       }
 
-      // Email to DMs
+      // Email to DMs + leadership
       const emailRecipients = [...dms.map(d => d.email), ...leaders.map(l => l.email)]
       if (emailRecipients.length) {
         const html = buildAlertEmail(store.address, fmtOpen, fmtClose, fmtCurrent, dms.map(d => d.full_name))
-        sendEmail(
-          emailRecipients,
-          `Unmanned Store Alert — ${store.address}`,
-          html
-        ).catch(() => {})
+        pushPromises.push(
+          sendEmail(
+            emailRecipients,
+            `Unmanned Store Alert — ${store.address}`,
+            html
+          ).catch(err => { console.error('Unmanned email failed:', err) })
+        )
       }
+
+      // Wait for all pushes + emails before moving on
+      await Promise.all(pushPromises)
 
       alertsSent++
     }

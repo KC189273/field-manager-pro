@@ -732,6 +732,7 @@ export async function POST(req: NextRequest) {
           orgId: session.org_id ?? null,
           storeAddress: body.store_address,
           employeeCoachedName: d.rep_name,
+          coachingSituation: body.coaching_situation || null,
           coaching1: d.cc_coaching_provided || '',
           coaching2: d.commit_sales_rest_of_shift || '',
           coaching3: d.commit_customer_followup || '',

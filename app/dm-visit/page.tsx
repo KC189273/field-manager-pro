@@ -121,6 +121,41 @@ export default function DmVisitPage() {
   const [submitted, setSubmitted] = useState(false)
   const [hasDraft, setHasDraft] = useState(false)
 
+  // Shared coaching employee state
+  const [coachableEmployees, setCoachableEmployees] = useState<Array<{ id: string; full_name: string }>>([])
+  const [lastCoachingData, setLastCoachingData] = useState<{
+    graded_at: string; overall_grade: string; summary: string | null; improvement_tips: string[] | null
+  } | null>(null)
+  const [lastCoachingLoading, setLastCoachingLoading] = useState(false)
+  const [lastCoachingExpanded, setLastCoachingExpanded] = useState(true)
+  const [coachingSituation, setCoachingSituation] = useState('')
+
+  const SITUATION_OPTIONS = [
+    'Regular Coaching Session',
+    'Performance Concern',
+    'Employee on Leave / Extended Absence',
+    'Return from Leave',
+    'New Hire Onboarding',
+    'First Coaching (Territory Change)',
+  ]
+
+  // Load coachable employees on mount
+  useEffect(() => {
+    fetch('/api/coaching-employees').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.employees) setCoachableEmployees(d.employees)
+    }).catch(() => {})
+  }, [])
+
+  function loadLastCoaching(employeeId: string) {
+    if (!employeeId) { setLastCoachingData(null); return }
+    setLastCoachingLoading(true)
+    fetch(`/api/coaching-employees?employeeId=${employeeId}`).then(r => r.ok ? r.json() : null).then(d => {
+      setLastCoachingData(d?.lastCoaching || null)
+      setLastCoachingExpanded(true)
+      setLastCoachingLoading(false)
+    }).catch(() => setLastCoachingLoading(false))
+  }
+
   // Quick Visit
   const [quickForm, setQuickForm] = useState({ store_location_id: '', store_address: '', assigned_rdm: '', intentionality: '', quick_interaction_notes: '', quick_takeaways: '', quick_actions: '', quick_impact: '' })
 
@@ -1204,14 +1239,50 @@ export default function DmVisitPage() {
 
                   <div className={fieldWrap}>
                     <label className={labelCls}>Employee Name <span className="text-red-500">*</span></label>
-                    <input
-                      type="text"
+                    <select
                       value={quickCoaching.employee_name}
-                      onChange={e => setQuickCoaching(f => ({ ...f, employee_name: e.target.value }))}
-                      placeholder="Name of the employee being coached"
+                      onChange={e => {
+                        setQuickCoaching(f => ({ ...f, employee_name: e.target.value }))
+                        const emp = coachableEmployees.find(x => x.full_name === e.target.value)
+                        if (emp) loadLastCoaching(emp.id)
+                        else setLastCoachingData(null)
+                      }}
                       className={inputCls}
-                    />
+                    >
+                      <option value="">— Select Employee —</option>
+                      {coachableEmployees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
+                    </select>
                   </div>
+
+                  {/* Prior coaching card */}
+                  {lastCoachingData && (
+                    <div className="bg-violet-900/10 border border-violet-800/30 rounded-xl overflow-hidden mx-4 mb-2">
+                      <button type="button" onClick={() => setLastCoachingExpanded(!lastCoachingExpanded)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-violet-400">Last Coaching</span>
+                          <span className="text-[10px] text-gray-500">{new Date(lastCoachingData.graded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — {lastCoachingData.overall_grade}</span>
+                        </div>
+                        <svg className={`w-3.5 h-3.5 text-gray-500 transition-transform ${lastCoachingExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {lastCoachingExpanded && (
+                        <div className="px-3 pb-3 space-y-2">
+                          {lastCoachingData.summary && <p className="text-xs text-gray-400">{lastCoachingData.summary}</p>}
+                          {lastCoachingData.improvement_tips?.length ? (
+                            <div>
+                              <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wide mb-1">Recommendations to Apply</p>
+                              {lastCoachingData.improvement_tips.map((tip, i) => (
+                                <p key={i} className="text-xs text-white font-medium leading-relaxed">• {tip}</p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {quickCoaching.employee_name && !lastCoachingData && !lastCoachingLoading && (
+                    <p className="text-xs text-gray-500 italic mx-4 mb-2">First coaching with this employee — no prior history.</p>
+                  )}
 
                   <div className={sectionHeaderCls}>1. Observe — Watch 2-3 Transactions</div>
 
@@ -1396,7 +1467,7 @@ export default function DmVisitPage() {
                 const res = await fetch('/api/dm-store-visits', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ visit_type: 'remote_coaching', ...remoteForm }),
+                  body: JSON.stringify({ visit_type: 'remote_coaching', coaching_situation: coachingSituation, ...remoteForm }),
                 })
                 const data = await res.json()
                 if (!res.ok) { setRemoteError(data.error || 'Submission failed'); return }
@@ -1427,8 +1498,54 @@ export default function DmVisitPage() {
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-gray-400 mb-1">Rep Being Coached</label>
-                    <input type="text" value={remoteForm.rep_name} onChange={e => setRemoteForm(f => ({ ...f, rep_name: e.target.value }))} placeholder="Full name" className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500" />
+                    <select value={remoteForm.rep_name} onChange={e => {
+                      setRemoteForm(f => ({ ...f, rep_name: e.target.value }))
+                      const emp = coachableEmployees.find(x => x.full_name === e.target.value)
+                      if (emp) loadLastCoaching(emp.id)
+                      else setLastCoachingData(null)
+                    }} className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500">
+                      <option value="">— Select Employee —</option>
+                      {coachableEmployees.map(e => <option key={e.id} value={e.full_name}>{e.full_name}</option>)}
+                    </select>
                   </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-gray-400 mb-1">Coaching Situation</label>
+                    <select value={coachingSituation} onChange={e => setCoachingSituation(e.target.value)}
+                      className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500">
+                      <option value="">— Select Situation —</option>
+                      {SITUATION_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  {/* Prior coaching card */}
+                  {lastCoachingLoading && <p className="text-xs text-gray-500">Loading prior coaching...</p>}
+                  {lastCoachingData && !lastCoachingLoading && (
+                    <div className="bg-violet-900/10 border border-violet-800/30 rounded-xl overflow-hidden">
+                      <button type="button" onClick={() => setLastCoachingExpanded(!lastCoachingExpanded)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-left">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-violet-400">Last Coaching</span>
+                          <span className="text-[10px] text-gray-500">{new Date(lastCoachingData.graded_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — {lastCoachingData.overall_grade}</span>
+                        </div>
+                        <svg className={`w-3.5 h-3.5 text-gray-500 transition-transform ${lastCoachingExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {lastCoachingExpanded && (
+                        <div className="px-3 pb-3 space-y-2">
+                          {lastCoachingData.summary && <p className="text-xs text-gray-400">{lastCoachingData.summary}</p>}
+                          {lastCoachingData.improvement_tips?.length ? (
+                            <div>
+                              <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wide mb-1">Recommendations to Apply</p>
+                              {lastCoachingData.improvement_tips.map((tip, i) => (
+                                <p key={i} className="text-xs text-white font-medium leading-relaxed">• {tip}</p>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {remoteForm.rep_name && !lastCoachingData && !lastCoachingLoading && (
+                    <p className="text-xs text-gray-500 italic">First coaching with this employee — no prior history.</p>
+                  )}
                   <div>
                     <label className="block text-xs font-semibold text-gray-400 mb-1">Assigned RDM</label>
                     <select value={remoteForm.assigned_rdm} onChange={e => setRemoteForm(f => ({ ...f, assigned_rdm: e.target.value }))} className="w-full bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:border-violet-500">

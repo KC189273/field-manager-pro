@@ -81,6 +81,7 @@ export async function gradeCoaching(params: {
   orgId: string | null
   storeAddress: string
   employeeCoachedName: string | null
+  coachingSituation?: string | null // e.g., "Employee on Leave", "Performance Concern"
   coaching1: string // Behaviors / Skills Coached
   coaching2: string // Action Items Agreed Upon
   coaching3: string // Follow-Up Plan
@@ -227,7 +228,7 @@ export async function gradeCoaching(params: {
 
 COACHING SUBMISSION:
 Store: ${params.storeAddress}
-Employee Coached: ${params.employeeCoachedName || 'Not specified'}
+Employee Coached: ${params.employeeCoachedName || 'Not specified'}${params.coachingSituation ? `\nSituation: ${params.coachingSituation}` : ''}${params.coachingSituation === 'Employee on Leave / Extended Absence' ? '\n**IMPORTANT: This employee is on leave or extended absence. Do NOT penalize for lack of specific goals, timelines, or follow-up dates. Focus on whether the DM documented the situation appropriately and set expectations for when the employee returns.**' : ''}${params.coachingSituation === 'First Coaching (Territory Change)' ? '\n**IMPORTANT: This is the DMs first time coaching this employee after a territory change. Give full baseline pass on prior reference. Grade generously on depth — the DM is still learning this employees strengths and weaknesses.**' : ''}${params.coachingSituation === 'New Hire Onboarding' ? '\n**IMPORTANT: This is onboarding coaching for a new hire. Focus on whether foundational expectations were set clearly, not on advanced coaching technique.**' : ''}
 Behaviors / Skills Coached: ${params.coaching1 || '(empty)'}
 Action Items Agreed Upon: ${params.coaching2 || '(empty)'}
 Follow-Up Plan: ${params.coaching3 || '(empty)'}

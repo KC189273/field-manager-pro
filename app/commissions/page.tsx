@@ -13,14 +13,14 @@ interface Entry {
   new_activations: number; byod: number; reacts: number; promo10: number
   upgrades: number; hsi: number; bts: number; mim_lines: number
   home_internet: number; complete_protection: number; hd_video: number
-  accessory_revenue: string
+  accessory_revenue: string; total_revenue: string
 }
 
 const EMPTY_DAY = {
   new_activations: 0, byod: 0, reacts: 0, promo10: 0,
   upgrades: 0, hsi: 0, bts: 0, mim_lines: 0,
   home_internet: 0, complete_protection: 0, hd_video: 0,
-  accessory_revenue: '',
+  accessory_revenue: '', total_revenue: '',
 }
 
 function todayLocal(): string {
@@ -33,47 +33,41 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-// ── July 2026 Comp Plan ──────────────────────────────────────────────────────
+// ── September 2026 Comp Plan ────────────────────────────────────────────────
 
-interface Tier {
-  voiceRate: number
-  upgradeRate: number
-  pct: string
-  color: string
-  level: number
+// Revenue Multiplier — based on TOTAL monthly revenue generated
+function getMultiplier(totalRevenue: number): { pct: number; label: string; color: string } {
+  if (totalRevenue >= 5000) return { pct: 1.30, label: '130%', color: 'text-emerald-400' }
+  if (totalRevenue >= 3500) return { pct: 1.20, label: '120%', color: 'text-emerald-400' }
+  if (totalRevenue >= 2500) return { pct: 1.20, label: '120%', color: 'text-emerald-400' }
+  if (totalRevenue >= 1500) return { pct: 1.00, label: '100%', color: 'text-white' }
+  if (totalRevenue >= 1000) return { pct: 0.75, label: '75%', color: 'text-amber-400' }
+  return { pct: 0.50, label: '50%', color: 'text-red-400' }
 }
 
-function getTier(accessoryRevenue: number): Tier {
-  if (accessoryRevenue >= 4500) return { voiceRate: 5.20, upgradeRate: 3.90, pct: '130%', color: 'text-emerald-400', level: 130 }
-  if (accessoryRevenue >= 3000) return { voiceRate: 4.80, upgradeRate: 3.60, pct: '120%', color: 'text-emerald-400', level: 120 }
-  if (accessoryRevenue >= 2000) return { voiceRate: 4.40, upgradeRate: 3.30, pct: '110%', color: 'text-green-400', level: 110 }
-  if (accessoryRevenue >= 1250) return { voiceRate: 4.00, upgradeRate: 3.00, pct: '100%', color: 'text-white', level: 100 }
-  if (accessoryRevenue >= 750)  return { voiceRate: 3.00, upgradeRate: 2.25, pct: '75%', color: 'text-amber-400', level: 75 }
-  return { voiceRate: 2.00, upgradeRate: 1.50, pct: '50%', color: 'text-red-400', level: 50 }
+function getNextMultiplierTier(totalRevenue: number): { target: number; label: string } | null {
+  if (totalRevenue >= 5000) return null
+  if (totalRevenue >= 3500) return { target: 5000, label: '130%' }
+  if (totalRevenue >= 2500) return { target: 3500, label: '120%+' }
+  if (totalRevenue >= 1500) return { target: 2500, label: '120%' }
+  if (totalRevenue >= 1000) return { target: 1500, label: '100%' }
+  return { target: 1000, label: '75%' }
 }
 
-function getVoiceBoostRate(tierLevel: number, voiceBoxes: number): number | null {
-  if (tierLevel < 110 || voiceBoxes < 50) return null
-  if (tierLevel >= 130) return voiceBoxes >= 75 ? 9.10 : 6.50
-  if (tierLevel >= 120) return voiceBoxes >= 75 ? 8.40 : 6.00
-  return voiceBoxes >= 75 ? 7.00 : 5.00 // 110%
+// Voice Boost — requires $2,500 accessory revenue + 50 voice boxes
+function getVoiceBoostRate(accessoryRevenue: number, voiceBoxes: number): number | null {
+  if (accessoryRevenue < 2500 || voiceBoxes < 50) return null
+  return voiceBoxes >= 75 ? 8 : 6
 }
 
-function getNextTier(accessoryRevenue: number): { target: number; label: string } | null {
-  if (accessoryRevenue >= 4500) return null
-  if (accessoryRevenue >= 3000) return { target: 4500, label: '130%' }
-  if (accessoryRevenue >= 2000) return { target: 3000, label: '120%' }
-  if (accessoryRevenue >= 1250) return { target: 2000, label: '110%' }
-  if (accessoryRevenue >= 750) return { target: 1250, label: '100%' }
-  return { target: 750, label: '75%' }
-}
+const BASE_VOICE_RATE = 5
+const BASE_UPGRADE_RATE = 3
 
 function calcCommission(entries: Entry[]) {
-  // Monthly totals
   let totalNewAct = 0, totalByod = 0, totalReacts = 0, totalPromo10 = 0
   let totalUpgrades = 0, totalHsi = 0, totalBts = 0, totalMimLines = 0
   let totalHomeInternet = 0, totalCP = 0, totalHdVideo = 0
-  let totalAccessoryRevenue = 0
+  let totalAccessoryRevenue = 0, totalTotalRevenue = 0
 
   for (const e of entries) {
     totalNewAct += e.new_activations ?? 0
@@ -88,39 +82,42 @@ function calcCommission(entries: Entry[]) {
     totalCP += e.complete_protection ?? 0
     totalHdVideo += e.hd_video ?? 0
     totalAccessoryRevenue += Number(e.accessory_revenue) || 0
+    totalTotalRevenue += Number(e.total_revenue) || 0
   }
 
-  // Voice activations that get paid at voice rate
+  // Voice activations paid at voice rate (excludes Promo10)
   const totalVoiceActivations = totalNewAct + totalByod + totalReacts
 
-  // Voice box count for threshold: New Act + BYOD + Reacts + Promo10 - BTS
-  const voiceBoxes = Math.max(0, totalNewAct + totalByod + totalReacts + totalPromo10 - totalBts)
+  // Voice box count for Voice Boost threshold (includes Promo10)
+  const voiceBoxes = totalNewAct + totalByod + totalReacts + totalPromo10
 
-  // Get tier based on accessory revenue
-  const tier = getTier(totalAccessoryRevenue)
+  // Revenue Multiplier (based on total revenue)
+  const multiplier = getMultiplier(totalTotalRevenue)
 
-  // Check voice boost
-  const voiceBoostRate = getVoiceBoostRate(tier.level, voiceBoxes)
-  const effectiveVoiceRate = voiceBoostRate ?? tier.voiceRate
+  // Voice Boost (requires $2,500 accessory revenue)
+  const voiceBoostRate = getVoiceBoostRate(totalAccessoryRevenue, voiceBoxes)
+  const baseVoiceRate = voiceBoostRate ?? BASE_VOICE_RATE
   const voiceBoostActive = voiceBoostRate !== null
 
-  // Tier-rated commissions (multiplier is already baked into the rates)
+  // Apply multiplier to base rates
+  const effectiveVoiceRate = baseVoiceRate * multiplier.pct
+  const effectiveUpgradeRate = BASE_UPGRADE_RATE * multiplier.pct
+
+  // Tier-rated commissions (base rate x multiplier)
   const voiceCommission = totalVoiceActivations * effectiveVoiceRate
-  const upgradeCommission = totalUpgrades * tier.upgradeRate
-  const hsiBoxCommission = totalHsi * tier.upgradeRate
-  const btsCommission = totalBts * tier.upgradeRate
-  const mimBoxCommission = totalMimLines * tier.upgradeRate
+  const upgradeCommission = totalUpgrades * effectiveUpgradeRate
+  const hsiBoxCommission = totalHsi * effectiveUpgradeRate
+  const btsCommission = totalBts * effectiveUpgradeRate
 
-  const tierRatedTotal = voiceCommission + upgradeCommission + hsiBoxCommission + btsCommission + mimBoxCommission
+  const tierRatedTotal = voiceCommission + upgradeCommission + hsiBoxCommission + btsCommission
 
-  // Bonus stack (NOT affected by multiplier — flat rates)
+  // Bonus Accelerator (flat rates — NOT affected by multiplier)
   const promo10Commission = totalPromo10 * 2
   const mimSpiffCommission = totalMimLines * 10
-  const hsiSpiffCommission = totalHsi * 10
   const attachmentCommission = (totalCP + totalHdVideo) * 1
-  const homeInternetCommission = totalHomeInternet * 10
+  const homeInternetCommission = totalHomeInternet * 15
 
-  const bonusStackTotal = promo10Commission + mimSpiffCommission + hsiSpiffCommission +
+  const bonusStackTotal = promo10Commission + mimSpiffCommission +
     attachmentCommission + homeInternetCommission
 
   // MiM penalty
@@ -132,33 +129,32 @@ function calcCommission(entries: Entry[]) {
     totalNewAct, totalByod, totalReacts, totalPromo10,
     totalVoiceActivations, voiceBoxes,
     totalUpgrades, totalHsi, totalBts, totalMimLines,
-    totalHomeInternet, totalCP, totalHdVideo, totalAccessoryRevenue,
-    tier, effectiveVoiceRate, voiceBoostActive, voiceBoostRate,
-    voiceCommission, upgradeCommission, hsiBoxCommission, btsCommission, mimBoxCommission,
+    totalHomeInternet, totalCP, totalHdVideo, totalAccessoryRevenue, totalTotalRevenue,
+    multiplier, baseVoiceRate, effectiveVoiceRate, effectiveUpgradeRate,
+    voiceBoostActive, voiceBoostRate,
+    voiceCommission, upgradeCommission, hsiBoxCommission, btsCommission,
     tierRatedTotal,
-    promo10Commission, mimSpiffCommission, hsiSpiffCommission,
+    promo10Commission, mimSpiffCommission,
     attachmentCommission, homeInternetCommission, bonusStackTotal,
     mimPenalty, totalCommission,
   }
 }
 
-function calcDayPayout(entry: Entry, effectiveVoiceRate: number, tier: Tier) {
+function calcDayPayout(entry: Entry, effectiveVoiceRate: number, effectiveUpgradeRate: number) {
   const voiceActs = (entry.new_activations ?? 0) + (entry.byod ?? 0) + (entry.reacts ?? 0)
   const voice = voiceActs * effectiveVoiceRate
-  const upgrades = (entry.upgrades ?? 0) * tier.upgradeRate
-  const hsiBox = (entry.hsi ?? 0) * tier.upgradeRate
-  const bts = (entry.bts ?? 0) * tier.upgradeRate
-  const mimBox = (entry.mim_lines ?? 0) * tier.upgradeRate
-  const tierTotal = voice + upgrades + hsiBox + bts + mimBox
+  const upgrades = (entry.upgrades ?? 0) * effectiveUpgradeRate
+  const hsiBox = (entry.hsi ?? 0) * effectiveUpgradeRate
+  const bts = (entry.bts ?? 0) * effectiveUpgradeRate
+  const tierTotal = voice + upgrades + hsiBox + bts
 
-  // Bonus stack (flat)
+  // Bonus Accelerator (flat)
   const promo10 = (entry.promo10 ?? 0) * 2
   const mimSpiff = (entry.mim_lines ?? 0) * 10
-  const hsiSpiff = (entry.hsi ?? 0) * 10
   const attachments = ((entry.complete_protection ?? 0) + (entry.hd_video ?? 0)) * 1
-  const homeInternet = (entry.home_internet ?? 0) * 10
+  const homeInternet = (entry.home_internet ?? 0) * 15
 
-  return tierTotal + promo10 + mimSpiff + hsiSpiff + attachments + homeInternet
+  return tierTotal + promo10 + mimSpiff + attachments + homeInternet
 }
 
 export default function CommissionsPage() {
@@ -203,6 +199,7 @@ export default function CommissionsPage() {
         complete_protection: existing.complete_protection,
         hd_video: existing.hd_video,
         accessory_revenue: String(existing.accessory_revenue),
+        total_revenue: String(existing.total_revenue),
       })
     } else {
       setForm({ ...EMPTY_DAY })
@@ -235,7 +232,11 @@ export default function CommissionsPage() {
     await fetch('/api/commissions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entry_date: selectedDate, ...form, accessory_revenue: Number(form.accessory_revenue) || 0 }),
+      body: JSON.stringify({
+        entry_date: selectedDate, ...form,
+        accessory_revenue: Number(form.accessory_revenue) || 0,
+        total_revenue: Number(form.total_revenue) || 0,
+      }),
     })
     await loadEntries()
     setSaving(false)
@@ -249,10 +250,11 @@ export default function CommissionsPage() {
     upgrades: form.upgrades, hsi: form.hsi, bts: form.bts, mim_lines: form.mim_lines,
     home_internet: form.home_internet, complete_protection: form.complete_protection, hd_video: form.hd_video,
     accessory_revenue: String(form.accessory_revenue || 0),
+    total_revenue: String(form.total_revenue || 0),
   }
-  const dayPayout = calcDayPayout(todayEntry, commission.effectiveVoiceRate, commission.tier)
+  const dayPayout = calcDayPayout(todayEntry, commission.effectiveVoiceRate, commission.effectiveUpgradeRate)
 
-  const nextTier = getNextTier(commission.totalAccessoryRevenue)
+  const nextTier = getNextMultiplierTier(commission.totalTotalRevenue)
 
   if (!session) return null
 
@@ -319,10 +321,10 @@ export default function CommissionsPage() {
                   <p className="text-3xl font-bold text-white mt-1">${dayPayout.toFixed(2)}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-gray-400">Payout Tier</p>
-                  <p className={`text-lg font-bold ${commission.tier.color}`}>{commission.tier.pct}</p>
+                  <p className="text-xs text-gray-400">Multiplier</p>
+                  <p className={`text-lg font-bold ${commission.multiplier.color}`}>{commission.multiplier.label}</p>
                   {commission.voiceBoostActive && (
-                    <p className="text-xs text-cyan-400 font-semibold mt-1">Voice Boost: ${commission.effectiveVoiceRate.toFixed(2)}</p>
+                    <p className="text-xs text-cyan-400 font-semibold mt-1">Voice Boost: ${commission.baseVoiceRate}/box</p>
                   )}
                 </div>
               </div>
@@ -338,7 +340,7 @@ export default function CommissionsPage() {
                 {numInput('new_activations', 'New Activations', 'New lines')}
                 {numInput('byod', 'BYOD', 'Bring your own device')}
                 {numInput('reacts', 'Reactivations', 'Reacts')}
-                {numInput('promo10', 'Promo10 AAL', '$2 flat / counts toward voice')}
+                {numInput('promo10', 'Promo10 AAL', '$2 flat / counts toward voice boost')}
               </div>
             </div>
 
@@ -346,36 +348,53 @@ export default function CommissionsPage() {
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Products</p>
-                <p className="text-xs text-gray-500">${commission.tier.upgradeRate.toFixed(2)}/line</p>
+                <p className="text-xs text-gray-500">${commission.effectiveUpgradeRate.toFixed(2)}/line</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 {numInput('upgrades', 'Upgrades')}
-                {numInput('hsi', 'HSI', '+$10 SPIFF per account')}
-                {numInput('bts', 'BTS', 'Subtracts from voice count')}
-                {numInput('mim_lines', 'MiM Lines', '+$10 SPIFF per line')}
+                {numInput('hsi', 'HSI')}
+                {numInput('bts', 'BTS')}
               </div>
             </div>
 
-            {/* Bonus Stack */}
+            {/* Bonus Accelerator */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">Bonus Stack</p>
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">Bonus Accelerator</p>
               <p className="text-[10px] text-gray-600 mb-3">Not affected by multiplier</p>
               <div className="grid grid-cols-2 gap-3">
-                {numInput('home_internet', 'Home Internet', '$10/account flat')}
+                {numInput('mim_lines', 'MiM Lines', '$10/line flat')}
+                {numInput('home_internet', 'Home Internet', '$15/account flat')}
                 {numInput('complete_protection', 'Complete Protection', '$1/attachment')}
                 {numInput('hd_video', 'HD Video', '$1/attachment')}
               </div>
             </div>
 
-            {/* Accessories */}
+            {/* Revenue */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Accessory Revenue</p>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
-                <input type="number" inputMode="decimal" step="0.01" min="0"
-                  value={form.accessory_revenue || ''}
-                  onChange={e => setForm(f => ({ ...f, accessory_revenue: e.target.value }))}
-                  placeholder="0.00" className={inputCls + ' pl-7 text-left'} />
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Revenue</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className={labelCls}>Total Revenue</p>
+                  <p className="text-[10px] text-gray-600 mb-1">Drives your multiplier</p>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <input type="number" inputMode="decimal" step="0.01" min="0"
+                      value={form.total_revenue || ''}
+                      onChange={e => setForm(f => ({ ...f, total_revenue: e.target.value }))}
+                      placeholder="0.00" className={inputCls + ' pl-7 text-left'} />
+                  </div>
+                </div>
+                <div>
+                  <p className={labelCls}>Accessory Revenue</p>
+                  <p className="text-[10px] text-gray-600 mb-1">$2,500 unlocks Voice Boost</p>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
+                    <input type="number" inputMode="decimal" step="0.01" min="0"
+                      value={form.accessory_revenue || ''}
+                      onChange={e => setForm(f => ({ ...f, accessory_revenue: e.target.value }))}
+                      placeholder="0.00" className={inputCls + ' pl-7 text-left'} />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -411,7 +430,7 @@ export default function CommissionsPage() {
               <p className="text-xs text-violet-300 uppercase tracking-wide font-semibold">{monthLabel} Estimated Commission</p>
               <p className="text-4xl font-bold text-white mt-2">${commission.totalCommission.toFixed(2)}</p>
               <p className="text-xs text-gray-400 mt-1">
-                Tier-rated: ${commission.tierRatedTotal.toFixed(2)} + Bonus stack: ${commission.bonusStackTotal.toFixed(2)}
+                Base + Multiplier: ${commission.tierRatedTotal.toFixed(2)} + Bonus: ${commission.bonusStackTotal.toFixed(2)}
               </p>
             </div>
 
@@ -421,34 +440,34 @@ export default function CommissionsPage() {
                 <p className="text-2xl font-bold text-cyan-400">{commission.voiceBoxes}</p>
                 <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Voice Boxes</p>
                 {commission.voiceBoostActive && (
-                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">${commission.effectiveVoiceRate.toFixed(2)} BOOST</p>
+                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">${commission.baseVoiceRate}/BOX BOOST</p>
                 )}
-                {!commission.voiceBoostActive && commission.voiceBoxes >= 50 && commission.tier.level < 110 && (
-                  <p className="text-[10px] text-amber-400 mt-0.5">Need 110% tier</p>
+                {!commission.voiceBoostActive && commission.voiceBoxes >= 50 && commission.totalAccessoryRevenue < 2500 && (
+                  <p className="text-[10px] text-amber-400 mt-0.5">Need $2,500 acc.</p>
                 )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
-                <p className={`text-2xl font-bold ${commission.tier.color}`}>{commission.tier.pct}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Payout Tier</p>
+                <p className={`text-2xl font-bold ${commission.multiplier.color}`}>{commission.multiplier.label}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Multiplier</p>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-violet-400">${commission.totalAccessoryRevenue.toFixed(0)}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Acc. Revenue</p>
+                <p className="text-2xl font-bold text-violet-400">${commission.totalTotalRevenue.toFixed(0)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Total Rev.</p>
               </div>
             </div>
 
-            {/* Next Tier Progress */}
+            {/* Next Multiplier Tier Progress */}
             {nextTier && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-400">${commission.totalAccessoryRevenue.toFixed(0)} of ${nextTier.target.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">${commission.totalTotalRevenue.toFixed(0)} of ${nextTier.target.toLocaleString()}</p>
                   <p className="text-xs font-semibold text-violet-400">Next: {nextTier.label}</p>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div className="h-full bg-violet-500 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (commission.totalAccessoryRevenue / nextTier.target) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (commission.totalTotalRevenue / nextTier.target) * 100)}%` }} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">${(nextTier.target - commission.totalAccessoryRevenue).toFixed(0)} to go</p>
+                <p className="text-xs text-gray-500 mt-1">${(nextTier.target - commission.totalTotalRevenue).toFixed(0)} to go</p>
               </div>
             )}
 
@@ -457,19 +476,19 @@ export default function CommissionsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Voice Boost</p>
                 {commission.voiceBoostActive ? (
-                  <span className="text-xs font-bold text-emerald-400 bg-emerald-900/40 px-2 py-0.5 rounded-full">${commission.effectiveVoiceRate.toFixed(2)}/BOX</span>
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-900/40 px-2 py-0.5 rounded-full">${commission.baseVoiceRate}/BOX x {commission.multiplier.label}</span>
                 ) : (
                   <span className="text-xs text-gray-500">Inactive</span>
                 )}
               </div>
-              {commission.tier.level < 110 && (
-                <p className="text-xs text-gray-500 mt-2">Requires 110% tier ($2,000+ accessories) to unlock</p>
+              {commission.totalAccessoryRevenue < 2500 && (
+                <p className="text-xs text-gray-500 mt-2">Requires $2,500 accessory revenue to unlock (${commission.totalAccessoryRevenue.toFixed(0)} / $2,500)</p>
               )}
-              {commission.tier.level >= 110 && !commission.voiceBoostActive && (
-                <p className="text-xs text-gray-500 mt-2">{50 - commission.voiceBoxes} more voice boxes for ${getVoiceBoostRate(commission.tier.level, 50)?.toFixed(2)}/box boost</p>
+              {commission.totalAccessoryRevenue >= 2500 && !commission.voiceBoostActive && (
+                <p className="text-xs text-gray-500 mt-2">{50 - commission.voiceBoxes} more voice boxes for $6/box boost</p>
               )}
               {commission.voiceBoostActive && commission.voiceBoxes < 75 && (
-                <p className="text-xs text-gray-300 mt-2">{75 - commission.voiceBoxes} more for ${getVoiceBoostRate(commission.tier.level, 75)?.toFixed(2)}/box</p>
+                <p className="text-xs text-gray-300 mt-2">{75 - commission.voiceBoxes} more for $8/box</p>
               )}
             </div>
 
@@ -484,21 +503,20 @@ export default function CommissionsPage() {
                 )}
               </div>
               {commission.totalMimLines === 0 && (
-                <p className="text-xs text-red-400/70 mt-2">Sell at least 1 MiM line this month to avoid the -$100 penalty</p>
+                <p className="text-xs text-red-400/70 mt-2">Sell at least 1 MiM account this month to avoid the -$100 penalty</p>
               )}
             </div>
 
             {/* Commission Breakdown */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-800">
-                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Tier-Rated Items ({commission.tier.pct})</p>
+                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Base Pay x {commission.multiplier.label} Multiplier</p>
               </div>
               {[
-                ['Voice Activations', `${commission.totalVoiceActivations} x $${commission.effectiveVoiceRate.toFixed(2)}`, commission.voiceCommission],
-                ['Upgrades', `${commission.totalUpgrades} x $${commission.tier.upgradeRate.toFixed(2)}`, commission.upgradeCommission],
-                ['HSI (box rate)', `${commission.totalHsi} x $${commission.tier.upgradeRate.toFixed(2)}`, commission.hsiBoxCommission],
-                ['BTS', `${commission.totalBts} x $${commission.tier.upgradeRate.toFixed(2)}`, commission.btsCommission],
-                ['MiM (box rate)', `${commission.totalMimLines} x $${commission.tier.upgradeRate.toFixed(2)}`, commission.mimBoxCommission],
+                ['Voice Activations', `${commission.totalVoiceActivations} x $${commission.baseVoiceRate} x ${commission.multiplier.label}`, commission.voiceCommission],
+                ['Upgrades', `${commission.totalUpgrades} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.upgradeCommission],
+                ['HSI', `${commission.totalHsi} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.hsiBoxCommission],
+                ['BTS', `${commission.totalBts} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.btsCommission],
               ].filter(([, , val]) => (val as number) > 0).map(([label, detail, val]) => (
                 <div key={label as string} className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 last:border-0">
                   <div>
@@ -509,19 +527,18 @@ export default function CommissionsPage() {
                 </div>
               ))}
               <div className="flex items-center justify-between px-4 py-2 border-t border-gray-700 bg-gray-800/50">
-                <span className="text-sm text-gray-400">Tier-Rated Subtotal</span>
+                <span className="text-sm text-gray-400">Base + Multiplier Subtotal</span>
                 <span className="text-sm font-semibold text-white">${commission.tierRatedTotal.toFixed(2)}</span>
               </div>
 
               <div className="px-4 py-3 border-t border-gray-700">
-                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Bonus Stack (flat rates)</p>
+                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Bonus Accelerator (flat rates)</p>
               </div>
               {[
                 ['Promo10 AAL', `${commission.totalPromo10} x $2`, commission.promo10Commission],
-                ['MiM SPIFF', `${commission.totalMimLines} x $10/line`, commission.mimSpiffCommission],
-                ['HSI SPIFF', `${commission.totalHsi} x $10/acct`, commission.hsiSpiffCommission],
+                ['MiM Lines', `${commission.totalMimLines} x $10/line`, commission.mimSpiffCommission],
                 ['Attachments', `${commission.totalCP + commission.totalHdVideo} x $1`, commission.attachmentCommission],
-                ['Home Internet', `${commission.totalHomeInternet} x $10`, commission.homeInternetCommission],
+                ['Home Internet', `${commission.totalHomeInternet} x $15`, commission.homeInternetCommission],
               ].filter(([, , val]) => (val as number) > 0).map(([label, detail, val]) => (
                 <div key={label as string} className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 last:border-0">
                   <div>
@@ -532,7 +549,7 @@ export default function CommissionsPage() {
                 </div>
               ))}
               <div className="flex items-center justify-between px-4 py-2 border-t border-gray-700 bg-gray-800/50">
-                <span className="text-sm text-gray-400">Bonus Stack Subtotal</span>
+                <span className="text-sm text-gray-400">Bonus Accelerator Subtotal</span>
                 <span className="text-sm font-semibold text-white">${commission.bonusStackTotal.toFixed(2)}</span>
               </div>
 
@@ -555,7 +572,7 @@ export default function CommissionsPage() {
                   <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Daily History</p>
                 </div>
                 {entries.map(e => {
-                  const dp = calcDayPayout(e, commission.effectiveVoiceRate, commission.tier)
+                  const dp = calcDayPayout(e, commission.effectiveVoiceRate, commission.effectiveUpgradeRate)
                   const dayVoice = (e.new_activations ?? 0) + (e.byod ?? 0) + (e.reacts ?? 0) + (e.promo10 ?? 0)
                   const dayDate = new Date(e.entry_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                   return (

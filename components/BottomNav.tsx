@@ -65,8 +65,7 @@ const ALL_FEATURES: Feature[] = [
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: isOpsPlus },
   { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => isRetail(r) && r !== 'employee' },
   { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isRetail },
-  // Commissions hidden until updated comp plan is provided
-  // { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isRetail },
+  { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isRetail },
   { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: isRetail },
   { href: '/store-locations',  label: 'Store Locations',  short: 'Stores',    Icon: StoreIcon,          show: r => r === 'ops_manager' || r === 'owner' || r === 'sales_director' || r === 'developer' },
   { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: isRetail },

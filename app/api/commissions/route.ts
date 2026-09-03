@@ -59,11 +59,11 @@ export async function GET(req: NextRequest) {
     new_activations: number; byod: number; reacts: number; promo10: number
     upgrades: number; hsi: number; bts: number; mim_lines: number
     home_internet: number; complete_protection: number; hd_video: number
-    accessory_revenue: string
+    accessory_revenue: string; total_revenue: string
   }>(
     `SELECT id, entry_date::text, new_activations, byod, reacts, promo10,
             upgrades, hsi, bts, mim_lines, home_internet,
-            complete_protection, hd_video, accessory_revenue::text
+            complete_protection, hd_video, accessory_revenue::text, total_revenue::text
      FROM commission_entries
      WHERE user_id = $1 AND entry_date >= $2 AND entry_date <= $3
      ORDER BY entry_date`,
@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
   const { entry_date, new_activations, byod, reacts, promo10, upgrades, hsi, bts,
-    mim_lines, home_internet, complete_protection, hd_video, accessory_revenue } = body
+    mim_lines, home_internet, complete_protection, hd_video, accessory_revenue, total_revenue } = body
 
   if (!entry_date) return NextResponse.json({ error: 'entry_date required' }, { status: 400 })
 
@@ -91,19 +91,19 @@ export async function POST(req: NextRequest) {
       user_id, org_id, entry_date,
       new_activations, byod, reacts, promo10,
       upgrades, hsi, bts, mim_lines, home_internet,
-      complete_protection, hd_video, accessory_revenue
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      complete_protection, hd_video, accessory_revenue, total_revenue
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
     ON CONFLICT (user_id, entry_date) DO UPDATE SET
       new_activations = $4, byod = $5, reacts = $6, promo10 = $7,
       upgrades = $8, hsi = $9, bts = $10, mim_lines = $11, home_internet = $12,
-      complete_protection = $13, hd_video = $14, accessory_revenue = $15,
+      complete_protection = $13, hd_video = $14, accessory_revenue = $15, total_revenue = $16,
       updated_at = NOW()
     RETURNING id`,
     [
       session.id, session.org_id ?? null, entry_date,
       new_activations ?? 0, byod ?? 0, reacts ?? 0, promo10 ?? 0,
       upgrades ?? 0, hsi ?? 0, bts ?? 0, mim_lines ?? 0, home_internet ?? 0,
-      complete_protection ?? 0, hd_video ?? 0, accessory_revenue ?? 0,
+      complete_protection ?? 0, hd_video ?? 0, accessory_revenue ?? 0, total_revenue ?? 0,
     ]
   )
 

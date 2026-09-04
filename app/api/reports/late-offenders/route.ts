@@ -170,12 +170,34 @@ export async function POST(req: NextRequest) {
   const days = Math.min(parseInt(daysParam || '30') || 30, 90)
 
   try {
-    const lates = await query<{ date: string; detail: string }>(`
-      SELECT date::text, detail
-      FROM flags
-      WHERE user_id = $1 AND type = 'late_clock_in' AND date >= CURRENT_DATE - $2
-      ORDER BY date DESC
+    const lates = await query<{
+      date: string; detail: string; shift_id: string | null
+      clock_in_at: string | null; scheduled_start: string | null
+      clock_in_photo_key: string | null
+    }>(`
+      SELECT f.date::text, f.detail, f.shift_id,
+        s.clock_in_at::text,
+        (SELECT ss.start_time::text FROM scheduled_shifts ss
+         WHERE ss.employee_id = $1 AND ss.shift_date = f.date
+         LIMIT 1) as scheduled_start,
+        s.clock_in_photo_key
+      FROM flags f
+      LEFT JOIN shifts s ON s.id = f.shift_id
+      WHERE f.user_id = $1 AND f.type = 'late_clock_in' AND f.date >= CURRENT_DATE - $2::int
+      ORDER BY f.date DESC
     `, [userId, days])
+
+    // Generate signed photo URLs
+    const { getReceiptViewUrl } = await import('@/lib/s3')
+    const latesWithPhotos = await Promise.all(lates.map(async l => ({
+      date: l.date,
+      detail: l.detail,
+      clock_in_at: l.clock_in_at,
+      scheduled_start: l.scheduled_start,
+      photo_url: l.clock_in_photo_key
+        ? await getReceiptViewUrl(l.clock_in_photo_key).catch(() => null)
+        : null,
+    })))
 
     const edits = await query<{
       edited_at: string; edited_by_name: string
@@ -196,7 +218,7 @@ export async function POST(req: NextRequest) {
       ORDER BY se.edited_at DESC
     `, [userId, days])
 
-    return NextResponse.json({ lates, edits })
+    return NextResponse.json({ lates: latesWithPhotos, edits })
   } catch (err) {
     console.error('Late detail error:', err)
     return NextResponse.json({ error: String(err) }, { status: 500 })

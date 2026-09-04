@@ -184,7 +184,7 @@ export default function DmEngagementPage() {
   const [lateLoading, setLateLoading] = useState(false)
   const [lateExpanded, setLateExpanded] = useState<string | null>(null)
   const [lateDetail, setLateDetail] = useState<{
-    lates: Array<{ date: string; detail: string }>
+    lates: Array<{ date: string; detail: string; clock_in_at: string | null; scheduled_start: string | null; photo_url: string | null }>
     edits: Array<{ edited_at: string; edited_by_name: string; old_clock_in: string | null; new_clock_in: string | null; old_clock_out: string | null; new_clock_out: string | null; note: string | null }>
   } | null>(null)
   const [lateDetailLoading, setLateDetailLoading] = useState(false)
@@ -1442,13 +1442,33 @@ export default function DmEngagementPage() {
                                 {lateDetail.lates.length === 0 ? (
                                   <p className="text-xs text-gray-500">No records found</p>
                                 ) : (
-                                  <div className="space-y-1">
+                                  <div className="space-y-3">
                                     {lateDetail.lates.map((l, i) => (
-                                      <div key={i} className="flex items-center justify-between text-xs">
-                                        <span className="text-gray-300">
-                                          {new Date(l.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                                        </span>
-                                        <span className="text-gray-500">{l.detail.replace(/^.*?—\s*/, '').replace(/^.*clocked in\s*/, '').slice(0, 40)}</span>
+                                      <div key={i} className="flex gap-3 items-start">
+                                        {/* Photo thumbnail */}
+                                        {l.photo_url ? (
+                                          <a href={l.photo_url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                                            <img src={l.photo_url} alt="Clock-in" className="w-12 h-12 rounded-lg object-cover border border-gray-700" />
+                                          </a>
+                                        ) : (
+                                          <div className="w-12 h-12 rounded-lg bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                                            <span className="text-[9px] text-gray-600">No photo</span>
+                                          </div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm text-gray-300 font-medium">
+                                            {new Date(l.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                          </p>
+                                          <div className="flex gap-3 text-xs text-gray-500 mt-0.5">
+                                            {l.scheduled_start && (
+                                              <span>Scheduled: <span className="text-gray-400">{l.scheduled_start.slice(0, 5).replace(/^0/, '')}</span></span>
+                                            )}
+                                            {l.clock_in_at && (
+                                              <span>Clocked in: <span className="text-red-400">{new Date(l.clock_in_at).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}</span></span>
+                                            )}
+                                          </div>
+                                          <p className="text-[11px] text-gray-600 mt-0.5">{l.detail.replace(/^.*?—\s*/, '').slice(0, 60)}</p>
+                                        </div>
                                       </div>
                                     ))}
                                   </div>

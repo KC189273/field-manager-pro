@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         JOIN users u ON u.id = f.user_id
         LEFT JOIN users dm ON dm.id = u.manager_id
         WHERE f.type = 'late_clock_in'
-          AND f.date >= CURRENT_DATE - $1
+          AND f.date >= CURRENT_DATE - $1::int
           AND u.manager_id = $2
           AND u.is_active = TRUE
         GROUP BY f.user_id, u.full_name, u.manager_id, dm.full_name
@@ -58,7 +58,7 @@ export async function GET(req: NextRequest) {
         JOIN users u ON u.id = f.user_id
         LEFT JOIN users dm ON dm.id = u.manager_id
         WHERE f.type = 'late_clock_in'
-          AND f.date >= CURRENT_DATE - $1
+          AND f.date >= CURRENT_DATE - $1::int
           AND u.is_active = TRUE
           ${orgFilter}
         GROUP BY f.user_id, u.full_name, u.manager_id, dm.full_name
@@ -78,7 +78,7 @@ export async function GET(req: NextRequest) {
               ELSE 0 END
           ))::int as avg_min
         FROM flags f
-        WHERE f.user_id = ANY($1) AND f.type = 'late_clock_in' AND f.date >= CURRENT_DATE - $2
+        WHERE f.user_id = ANY($1) AND f.type = 'late_clock_in' AND f.date >= CURRENT_DATE - $2::int
         GROUP BY f.user_id
       `, [userIds, days]).catch(() => [])
       const avgMap = new Map(avgMins.map(a => [a.user_id, a.avg_min]))

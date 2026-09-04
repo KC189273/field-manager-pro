@@ -292,9 +292,14 @@ The goal is development, not punishment. Build them up while guiding them to be 
   }
 
   try {
-    const jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    // Strip markdown code fences and any text before/after JSON
+    let jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+    // Try to extract JSON object if there's surrounding text
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+    if (jsonMatch) jsonStr = jsonMatch[0]
     parsed = JSON.parse(jsonStr)
   } catch {
+    console.error('Coaching grade JSON parse failed. Raw AI text:', text.slice(0, 500))
     // Fallback if AI response isn't valid JSON
     parsed = {
       overall_score: 70,

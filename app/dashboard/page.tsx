@@ -15,7 +15,7 @@ import DashboardScorecard from '@/components/DashboardScorecard'
 // safe to serve slightly stale. User-specific data (shift, hours, tasks) is NOT cached.
 const getCachedAggregates = unstable_cache(
   async (orgId: string | null, managerId: string, role: string) => {
-    const [flagRow, clockedInRow, teamRow, pendingExpRow] = await Promise.all([
+    const [flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow] = await Promise.all([
       queryOne<{ count: string }>(
         role === 'manager'
           ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND f.created_at >= NOW() - INTERVAL '7 days' AND u.manager_id = $1`
@@ -42,8 +42,17 @@ const getCachedAggregates = unstable_cache(
           : `SELECT COUNT(*) as count, COALESCE(SUM(amount), 0)::text as total FROM expenses WHERE status = 'pending'`,
         orgId ? [orgId] : []
       ).catch(() => null),
+      // Late repeat offenders (2+ lates in 30 days)
+      queryOne<{ count: string }>(
+        role === 'manager'
+          ? `SELECT COUNT(DISTINCT f.user_id) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.type = 'late_clock_in' AND f.date >= CURRENT_DATE - 30 AND u.manager_id = $1 AND u.is_active = TRUE GROUP BY f.user_id HAVING COUNT(*) >= 2`
+          : orgId
+          ? `SELECT COUNT(*) as count FROM (SELECT f.user_id FROM flags f JOIN users u ON u.id = f.user_id WHERE f.type = 'late_clock_in' AND f.date >= CURRENT_DATE - 30 AND u.is_active = TRUE AND u.org_id = $1 GROUP BY f.user_id HAVING COUNT(*) >= 2) sub`
+          : `SELECT COUNT(*) as count FROM (SELECT user_id FROM flags WHERE type = 'late_clock_in' AND date >= CURRENT_DATE - 30 GROUP BY user_id HAVING COUNT(*) >= 2) sub`,
+        role === 'manager' ? [managerId] : orgId ? [orgId] : []
+      ).catch(() => null),
     ])
-    return { flagRow, clockedInRow, teamRow, pendingExpRow }
+    return { flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow }
   },
   ['dashboard-aggregates'],
   { revalidate: 30 }
@@ -145,6 +154,7 @@ export default async function DashboardPage() {
   const clockedInRow = agg?.clockedInRow ?? null
   const teamRow = agg?.teamRow ?? null
   const pendingExpRow = agg?.pendingExpRow ?? null
+  const lateOffenderRow = agg?.lateOffenderRow ?? null
 
   // Derived values
   const clocked = !!activeShift
@@ -160,6 +170,7 @@ export default async function DashboardPage() {
   const pendingExpCount = parseInt(pendingExpRow?.count ?? '0')
   const pendingExpTotal = parseFloat(pendingExpRow?.total ?? '0')
   const myPendingCount = parseInt(myPendingRow?.count ?? '0')
+  const lateOffenderCount = parseInt(lateOffenderRow?.count ?? '0')
 
   return (
     <div className="min-h-screen bg-gray-950 pt-14">
@@ -335,7 +346,12 @@ export default async function DashboardPage() {
                   <p className="text-xs text-gray-600 mt-0.5">
                     {flagCount === 0 ? 'All clear' : 'Need review'}
                   </p>
-                  <p className="text-xs text-violet-500 mt-2">Flags →</p>
+                  {lateOffenderCount > 0 && (
+                    <a href="/dm-engagement" className="block mt-2">
+                      <span className="text-xs font-semibold text-red-400">{lateOffenderCount} repeat late</span>
+                    </a>
+                  )}
+                  <p className="text-xs text-violet-500 mt-1">Flags →</p>
                 </a>
               </div>
             )}

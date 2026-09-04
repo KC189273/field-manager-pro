@@ -123,7 +123,7 @@ export default function DmEngagementPage() {
   const [loading, setLoading] = useState(true)
   const [rangeDays, setRangeDays] = useState(30)
   const [sortBy, setSortBy] = useState<'activity' | 'name'>('activity')
-  const [mainTab, setMainTab] = useState<'coaching' | 'scorecard' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity'>('scorecard')
+  const [mainTab, setMainTab] = useState<'coaching' | 'scorecard' | 'photos' | 'coaching_comp' | 'uniform' | 'integrity' | 'late'>('scorecard')
 
   // DM Scorecard state
   const [scorecardDmId, setScorecardDmId] = useState('')
@@ -168,6 +168,26 @@ export default function DmEngagementPage() {
   const [coachCompRange, setCoachCompRange] = useState('7')
   const [coachCompData, setCoachCompData] = useState<{ dmStats: Array<{ dm_id: string; dm_name: string; total_visits: number; visits_with_coaching: number; visits_without_coaching: number; compliance_rate: number }>; totals: { totalVisits: number; withCoaching: number; withoutCoaching: number; overallRate: number }; todayMissing: Array<{ dm_name: string; store_address: string; submitted_at: string }> } | null>(null)
   const [coachCompLoading, setCoachCompLoading] = useState(false)
+
+  // Late offenders state
+  const [lateDays, setLateDays] = useState('30')
+  const [lateDmFilter, setLateDmFilter] = useState('')
+  const [lateData, setLateData] = useState<{
+    offenders: Array<{
+      user_id: string; employee_name: string; dm_name: string | null; dm_id: string | null
+      late_count: number; avg_minutes_late: number; first_late: string; last_late: string
+      edit_count: number; last_doc_level: string | null; last_doc_status: string | null
+      last_doc_date: string | null; next_recommended_level: string
+    }>
+    dms: Array<{ id: string; full_name: string }>
+  } | null>(null)
+  const [lateLoading, setLateLoading] = useState(false)
+  const [lateExpanded, setLateExpanded] = useState<string | null>(null)
+  const [lateDetail, setLateDetail] = useState<{
+    lates: Array<{ date: string; detail: string }>
+    edits: Array<{ edited_at: string; edited_by_name: string; old_clock_in: string | null; new_clock_in: string | null; old_clock_out: string | null; new_clock_out: string | null; note: string | null }>
+  } | null>(null)
+  const [lateDetailLoading, setLateDetailLoading] = useState(false)
 
   // Coaching state
   const [coachingDms, setCoachingDms] = useState<CoachingDm[]>([])
@@ -284,6 +304,33 @@ export default function DmEngagementPage() {
     finally { setPhotoLoading(false) }
   }
 
+  async function loadLateOffenders(d?: string, dm?: string) {
+    setLateLoading(true)
+    try {
+      const params = new URLSearchParams({ days: d || lateDays })
+      if (dm || lateDmFilter) params.set('dmId', dm || lateDmFilter)
+      const res = await fetch(`/api/reports/late-offenders?${params}`)
+      if (res.ok) setLateData(await res.json())
+    } catch { /* ignore */ }
+    finally { setLateLoading(false) }
+  }
+
+  async function loadLateDetail(userId: string) {
+    if (lateExpanded === userId) { setLateExpanded(null); setLateDetail(null); return }
+    setLateExpanded(userId)
+    setLateDetailLoading(true)
+    setLateDetail(null)
+    try {
+      const res = await fetch('/api/reports/late-offenders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, days: lateDays }),
+      })
+      if (res.ok) setLateDetail(await res.json())
+    } catch { /* ignore */ }
+    finally { setLateDetailLoading(false) }
+  }
+
   function openDmCoaching(dmId: string, dmName: string, month?: string) {
     setSelectedDmId(dmId)
     setSelectedDmName(dmName)
@@ -373,6 +420,12 @@ export default function DmEngagementPage() {
             className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'integrity' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Integrity
+          </button>
+          <button
+            onClick={() => { setMainTab('late'); if (!lateData) loadLateOffenders() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'late' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Late
           </button>
         </div>
 
@@ -1283,6 +1336,148 @@ export default function DmEngagementPage() {
 
                 {/* Tap a DM above to see their non-compliant employees */}
               </>
+            )}
+          </div>
+        )}
+
+        {/* ── Late Offenders Tab ── */}
+        {mainTab === 'late' && (
+          <div className="space-y-4">
+            {/* Filters */}
+            <div className="flex gap-2 items-center">
+              <select value={lateDays} onChange={e => { setLateDays(e.target.value); loadLateOffenders(e.target.value, lateDmFilter) }}
+                className="bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500">
+                <option value="7">Last 7 Days</option>
+                <option value="30">Last 30 Days</option>
+                <option value="60">Last 60 Days</option>
+                <option value="90">Last 90 Days</option>
+              </select>
+              {lateData?.dms && lateData.dms.length > 0 && (
+                <select value={lateDmFilter} onChange={e => { setLateDmFilter(e.target.value); loadLateOffenders(lateDays, e.target.value) }}
+                  className="bg-gray-800 border border-gray-700 text-white text-sm rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-violet-500 flex-1">
+                  <option value="">All DMs</option>
+                  {lateData.dms.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                </select>
+              )}
+            </div>
+
+            {lateLoading && <p className="text-center text-gray-500 py-8 text-sm">Loading…</p>}
+
+            {!lateLoading && lateData && lateData.offenders.length === 0 && (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-sm">No repeat late offenders in this period.</p>
+                <p className="text-gray-600 text-xs mt-1">Employees need 2+ late clock-ins to appear here.</p>
+              </div>
+            )}
+
+            {!lateLoading && lateData && lateData.offenders.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-500">{lateData.offenders.length} employee{lateData.offenders.length !== 1 ? 's' : ''} with repeat lates</p>
+
+                {lateData.offenders.map(o => {
+                  const isExpanded = lateExpanded === o.user_id
+                  const levelLabel: Record<string, string> = {
+                    documented_conversation: 'Documented',
+                    verbal: 'Verbal',
+                    written: 'Written',
+                    final: 'Final',
+                  }
+                  const levelColor: Record<string, string> = {
+                    documented_conversation: 'text-amber-400 bg-amber-900/30',
+                    verbal: 'text-orange-400 bg-orange-900/30',
+                    written: 'text-red-400 bg-red-900/30',
+                    final: 'text-red-500 bg-red-900/50',
+                  }
+
+                  return (
+                    <div key={o.user_id} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                      <button onClick={() => loadLateDetail(o.user_id)}
+                        className="w-full text-left px-4 py-3 hover:bg-gray-800/50 transition-colors">
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-semibold text-white truncate">{o.employee_name}</p>
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                                o.late_count >= 4 ? 'text-red-400 bg-red-900/40' : 'text-amber-400 bg-amber-900/40'
+                              }`}>
+                                {o.late_count}x late
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              DM: {o.dm_name || 'Unassigned'} · Avg {o.avg_minutes_late} min late · {o.edit_count} time edit{o.edit_count !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                          <div className="text-right shrink-0 ml-3">
+                            {o.last_doc_level ? (
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${levelColor[o.last_doc_level] || 'text-gray-400 bg-gray-800'}`}>
+                                Last: {levelLabel[o.last_doc_level] || o.last_doc_level}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-gray-600">No docs</span>
+                            )}
+                            <p className="text-[10px] text-violet-400 mt-1">
+                              Next: {levelLabel[o.next_recommended_level] || o.next_recommended_level}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="border-t border-gray-800 px-4 py-3 bg-gray-800/30">
+                          {lateDetailLoading && <p className="text-xs text-gray-500 py-2">Loading details…</p>}
+                          {!lateDetailLoading && lateDetail && (
+                            <div className="space-y-3">
+                              {/* Late dates */}
+                              <div>
+                                <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">Late Clock-Ins</p>
+                                {lateDetail.lates.length === 0 ? (
+                                  <p className="text-xs text-gray-500">No records found</p>
+                                ) : (
+                                  <div className="space-y-1">
+                                    {lateDetail.lates.map((l, i) => (
+                                      <div key={i} className="flex items-center justify-between text-xs">
+                                        <span className="text-gray-300">
+                                          {new Date(l.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                        </span>
+                                        <span className="text-gray-500">{l.detail.replace(/^.*?—\s*/, '').replace(/^.*clocked in\s*/, '').slice(0, 40)}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Time edits */}
+                              {lateDetail.edits.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-bold text-violet-400 uppercase tracking-wider mb-2">DM Time Edits</p>
+                                  <div className="space-y-1">
+                                    {lateDetail.edits.map((e, i) => (
+                                      <div key={i} className="text-xs text-gray-400">
+                                        <span className="text-gray-300">
+                                          {new Date(e.edited_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </span>
+                                        {' — '}
+                                        <span>{e.edited_by_name}</span>
+                                        {e.old_clock_in && e.new_clock_in && (
+                                          <span className="text-gray-500">
+                                            {' '}(in: {new Date(e.old_clock_in).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })}
+                                            → {new Date(e.new_clock_in).toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })})
+                                          </span>
+                                        )}
+                                        {e.note && <span className="text-gray-600 italic"> &quot;{e.note}&quot;</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         )}

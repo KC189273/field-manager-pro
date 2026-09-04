@@ -308,10 +308,19 @@ export default function DmEngagementPage() {
     setLateLoading(true)
     try {
       const params = new URLSearchParams({ days: d || lateDays })
-      if (dm || lateDmFilter) params.set('dmId', dm || lateDmFilter)
+      const dmVal = dm !== undefined ? dm : lateDmFilter
+      if (dmVal) params.set('dmId', dmVal)
       const res = await fetch(`/api/reports/late-offenders?${params}`)
-      if (res.ok) setLateData(await res.json())
-    } catch { /* ignore */ }
+      if (res.ok) {
+        setLateData(await res.json())
+      } else {
+        console.error('Late offenders API error:', res.status, await res.text().catch(() => ''))
+        setLateData({ offenders: [], dms: [] })
+      }
+    } catch (err) {
+      console.error('Late offenders fetch error:', err)
+      setLateData({ offenders: [], dms: [] })
+    }
     finally { setLateLoading(false) }
   }
 

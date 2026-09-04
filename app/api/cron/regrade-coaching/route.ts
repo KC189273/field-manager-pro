@@ -1,15 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { gradeCoaching } from '@/lib/coaching-grader'
+
+export const maxDuration = 120
 
 // One-time endpoint to re-grade broken coaching entries
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
-  const { searchParams } = new URL(req.url)
-  const qSecret = searchParams.get('secret')
-  const cronSecret = process.env.CRON_SECRET
-  if (auth !== `Bearer ${cronSecret}` && qSecret !== cronSecret) {
+  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

@@ -13,7 +13,7 @@ permissions:
   - "DMs see only their own grades"
   - "ops_field_leader/ops_manager/owner/developer see all DMs"
   - "grades are automatic — no one manually assigns them"
-verified: 2026-08-31
+verified: 2026-09-04
 ---
 # AI Coaching Grades
 
@@ -69,6 +69,19 @@ A new form on the DM Store Visit page for coaching done over the phone (~15 minu
 - MLB / Store Priorities (current grade, top 3 priorities, main focus)
 
 Remote coaching submissions are AI-graded the same way as in-person coaching.
+
+## What is the Coaching Situation dropdown?
+When submitting a Quick Visit w/ Coaching or Remote Coaching, you can select a **Coaching Situation** that tells the AI about the context. This ensures fair grading:
+
+- **Regular Coaching Session** — standard grading
+- **New Store Opening** — no penalty for missing metrics, incomplete processes, or low checklist scores. Focus is on setting expectations and building habits.
+- **New Hire Onboarding** — focus on foundational expectations, not advanced technique
+- **First Coaching (Territory Change)** — baseline pass on prior reference since you haven't coached this employee before
+- **Employee on Leave / Extended Absence** — no penalty for missing goals or timelines
+- **Return from Leave** — no penalty for gaps in coaching continuity
+- **Performance Concern** — rewards directness and structured coaching with clear accountability
+
+Always select the right situation so the AI grades you fairly for the circumstances.
 
 ## How do I improve my coaching grade?
 1. **Be specific** — document exact quotes and behaviors you observed

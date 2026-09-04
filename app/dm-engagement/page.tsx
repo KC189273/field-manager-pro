@@ -205,9 +205,10 @@ export default function DmEngagementPage() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d?.role) { router.push('/login'); return }
-      if (!['ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) {
+      if (!['manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) {
         router.push('/dashboard'); return
       }
+      if (d.role === 'manager') setMainTab('late')
       setSession(d)
     })
   }, [router])
@@ -224,9 +225,14 @@ export default function DmEngagementPage() {
     setLoading(false)
   }, [])
 
-  // Load scorecard on init (default tab) — only this fires on page load
+  // Load default tab on init — scorecard for leadership, late for DMs
   useEffect(() => {
-    if (session && !scorecardData) loadScorecard()
+    if (!session) return
+    if (session.role === 'manager') {
+      if (!lateData) loadLateOffenders()
+    } else {
+      if (!scorecardData) loadScorecard()
+    }
   }, [session])
 
   // Load coaching rollup — only when coaching tab is selected
@@ -393,46 +399,50 @@ export default function DmEngagementPage() {
         </div>
 
         {/* Main Tab Switcher */}
-        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1">
-          <button
-            onClick={() => { setMainTab('scorecard'); if (!scorecardData) loadScorecard() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'scorecard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Scorecard
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 overflow-x-auto">
+          {session.role !== 'manager' && (
+            <>
+              <button
+                onClick={() => { setMainTab('scorecard'); if (!scorecardData) loadScorecard() }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'scorecard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Scorecard
+              </button>
+              <button
+                onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Coaching
+              </button>
+              <button
+                onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'photos' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Photos
           </button>
-          <button
-            onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Coaching
-          </button>
-          <button
-            onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'photos' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Photos
-          </button>
-          <button
-            onClick={() => { setMainTab('coaching_comp'); if (!coachCompData) loadCoachingCompliance() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'coaching_comp' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Coaching
-          </button>
-          <button
-            onClick={() => { setMainTab('uniform'); if (!uniformData) loadUniformCompliance() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'uniform' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Uniform
-          </button>
-          <button
-            onClick={() => { setMainTab('integrity'); if (!integrityData) loadIntegrity() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'integrity' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-          >
-            Integrity
-          </button>
+              <button
+                onClick={() => { setMainTab('coaching_comp'); if (!coachCompData) loadCoachingCompliance() }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching_comp' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Coaching
+              </button>
+              <button
+                onClick={() => { setMainTab('uniform'); if (!uniformData) loadUniformCompliance() }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'uniform' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Uniform
+              </button>
+              <button
+                onClick={() => { setMainTab('integrity'); if (!integrityData) loadIntegrity() }}
+                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'integrity' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+              >
+                Integrity
+              </button>
+            </>
+          )}
           <button
             onClick={() => { setMainTab('late'); if (!lateData) loadLateOffenders() }}
-            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors ${mainTab === 'late' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'late' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
           >
             Late
           </button>

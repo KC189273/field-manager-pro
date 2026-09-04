@@ -6,8 +6,9 @@ import { gradeCoaching } from '@/lib/coaching-grader'
 // One-time endpoint to re-grade broken coaching entries
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const expected = `Bearer ${process.env.CRON_SECRET}`
+  if (auth !== expected) {
+    return NextResponse.json({ error: 'Unauthorized', hint: `got=${auth?.slice(0,15)}... exp=${expected.slice(0,15)}...` }, { status: 401 })
   }
 
   // Find broken grades

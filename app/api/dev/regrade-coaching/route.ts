@@ -4,14 +4,10 @@ import { query, queryOne } from '@/lib/db'
 import { gradeCoaching } from '@/lib/coaching-grader'
 
 // One-time endpoint to re-grade broken coaching entries
-export async function POST(req: NextRequest) {
-  // Allow either developer session or CRON_SECRET
+export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    const session = await getSession()
-    if (!session || session.role !== 'developer') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   // Find broken grades
@@ -36,8 +32,7 @@ export async function POST(req: NextRequest) {
       // Get original visit data
       const visit = await queryOne<{
         quick_takeaways: string | null; quick_impact: string | null
-        coaching_situation: string | null
-      }>(`SELECT quick_takeaways, quick_impact, coaching_situation FROM dm_store_visits WHERE id = $1`, [bg.visit_id])
+      }>(`SELECT quick_takeaways, quick_impact FROM dm_store_visits WHERE id = $1`, [bg.visit_id])
 
       // Get coaching checklist data
       const checklist = await queryOne<{
@@ -72,7 +67,7 @@ export async function POST(req: NextRequest) {
         orgId: bg.org_id,
         storeAddress: bg.store_address,
         employeeCoachedName: bg.employee_coached,
-        coachingSituation: visit?.coaching_situation || null,
+        coachingSituation: null,
         coaching1: visit?.quick_takeaways?.trim() || visit?.quick_impact?.trim() || '',
         coaching2: checklist?.commitments_gained?.trim() || '',
         coaching3: checklist?.fu_follow_up_date?.trim() || '',

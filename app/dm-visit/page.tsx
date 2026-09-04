@@ -137,6 +137,7 @@ export default function DmVisitPage() {
     'Return from Leave',
     'New Hire Onboarding',
     'First Coaching (Territory Change)',
+    'New Store Opening',
   ]
 
   // Load coachable employees on mount
@@ -539,7 +540,10 @@ export default function DmVisitPage() {
     try {
       const visitType = quickIncludeCoaching ? 'quick_coaching' : 'quick'
       const payload: Record<string, unknown> = { visit_type: visitType, ...quickForm, photoKeys: quickPhotoKeys }
-      if (quickIncludeCoaching) payload.coaching = quickCoaching
+      if (quickIncludeCoaching) {
+        payload.coaching = quickCoaching
+        if (coachingSituation && coachingSituation !== 'Regular Coaching Session') payload.coaching_situation = coachingSituation
+      }
       const res = await fetch('/api/dm-store-visits', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1283,6 +1287,13 @@ export default function DmVisitPage() {
                   {quickCoaching.employee_name && !lastCoachingData && !lastCoachingLoading && (
                     <p className="text-xs text-gray-500 italic mx-4 mb-2">First coaching with this employee — no prior history.</p>
                   )}
+
+                  <div className={fieldWrap}>
+                    <label className={labelCls}>Coaching Situation</label>
+                    <select value={coachingSituation} onChange={e => setCoachingSituation(e.target.value)} className={inputCls}>
+                      {SITUATION_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
 
                   <div className={sectionHeaderCls}>1. Observe — Watch 2-3 Transactions</div>
 

@@ -507,6 +507,7 @@ export async function POST(req: NextRequest) {
             orgId: session.org_id ?? null,
             storeAddress: body.store_address,
             employeeCoachedName: c.employee_name.trim(),
+            coachingSituation: body.coaching_situation || null,
             coaching1: body.quick_takeaways?.trim() || '',
             coaching2: c.commitments_gained?.trim() || '',
             coaching3: c.fu_follow_up_date?.trim() || '',

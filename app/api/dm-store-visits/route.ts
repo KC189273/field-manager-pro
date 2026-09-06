@@ -183,7 +183,11 @@ function buildEmailHtml(data: Record<string, unknown>) {
 export async function GET(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!canAccess(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (!canAccess(session.role)) {
+    // Allow stretch DMs to load their visit history
+    const stretch = await queryOne<{ is_stretch_dm: boolean }>(`SELECT COALESCE(is_stretch_dm, FALSE) as is_stretch_dm FROM users WHERE id = $1`, [session.id]).catch(() => null)
+    if (!stretch?.is_stretch_dm) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
   try { await ensureTable() } catch { /* already exists */ }
   try { await ensureQuickColumns() } catch {}
 

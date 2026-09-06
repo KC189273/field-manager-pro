@@ -4,18 +4,18 @@ import { query, queryOne } from '@/lib/db'
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer')) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  // Stretch DMs see their DM's employees
+  // Stretch DMs (employee role with is_stretch_dm flag) see their DM's employees
   let managerId = session.id
-  if ((session.role as string) === 'employee') {
+  if (session.role === 'employee') {
     const emp = await queryOne<{ manager_id: string | null; is_stretch_dm: boolean }>(
       `SELECT manager_id, COALESCE(is_stretch_dm, FALSE) as is_stretch_dm FROM users WHERE id = $1`, [session.id]
     )
     if (!emp?.is_stretch_dm || !emp.manager_id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     managerId = emp.manager_id
+  } else if (!isManager(session.role) && session.role !== 'developer') {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const { searchParams } = new URL(req.url)
@@ -68,9 +68,9 @@ export async function GET(req: NextRequest) {
          JOIN dm_store_locations dsl ON dsl.id = dms.store_location_id
          WHERE dms.manager_id = $1 LIMIT 1) as store_address
       FROM users u
-      WHERE u.manager_id = $1 AND u.role = 'employee' AND u.is_active = TRUE
+      WHERE u.manager_id = $1 AND u.role = 'employee' AND u.is_active = TRUE AND u.id != $2
       ORDER BY u.full_name
-    `, [managerId])
+    `, [managerId, session.id])
   }
 
   return NextResponse.json({ employees })

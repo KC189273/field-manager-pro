@@ -15,7 +15,7 @@ import DashboardScorecard from '@/components/DashboardScorecard'
 // safe to serve slightly stale. User-specific data (shift, hours, tasks) is NOT cached.
 const getCachedAggregates = unstable_cache(
   async (orgId: string | null, managerId: string, role: string) => {
-    const [flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow] = await Promise.all([
+    const [flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow, escalationRow] = await Promise.all([
       queryOne<{ count: string }>(
         role === 'manager'
           ? `SELECT COUNT(*) as count FROM flags f JOIN users u ON u.id = f.user_id WHERE f.resolved = FALSE AND f.created_at >= NOW() - INTERVAL '7 days' AND u.manager_id = $1`
@@ -51,8 +51,12 @@ const getCachedAggregates = unstable_cache(
           : `SELECT COUNT(*) as count FROM (SELECT user_id FROM flags WHERE type = 'late_clock_in' AND date >= CURRENT_DATE - 30 GROUP BY user_id HAVING COUNT(*) >= 2) sub`,
         role === 'manager' ? [managerId] : orgId ? [orgId] : []
       ).catch(() => null),
+      // Open AI escalations (developer/owner only)
+      ['developer', 'owner'].includes(role)
+        ? queryOne<{ count: string }>(`SELECT COUNT(*) as count FROM support_conversations WHERE status = 'escalated'`).catch(() => null)
+        : Promise.resolve(null),
     ])
-    return { flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow }
+    return { flagRow, clockedInRow, teamRow, pendingExpRow, lateOffenderRow, escalationRow }
   },
   ['dashboard-aggregates'],
   { revalidate: 30 }
@@ -155,6 +159,7 @@ export default async function DashboardPage() {
   const teamRow = agg?.teamRow ?? null
   const pendingExpRow = agg?.pendingExpRow ?? null
   const lateOffenderRow = agg?.lateOffenderRow ?? null
+  const escalationRow = agg?.escalationRow ?? null
 
   // Derived values
   const clocked = !!activeShift
@@ -171,6 +176,7 @@ export default async function DashboardPage() {
   const pendingExpTotal = parseFloat(pendingExpRow?.total ?? '0')
   const myPendingCount = parseInt(myPendingRow?.count ?? '0')
   const lateOffenderCount = parseInt(lateOffenderRow?.count ?? '0')
+  const escalationCount = parseInt(escalationRow?.count ?? '0')
 
   return (
     <div className="min-h-screen bg-gray-950 pt-14">
@@ -317,6 +323,19 @@ export default async function DashboardPage() {
               </p>
               <p className="text-xs text-violet-500 mt-2">Timecards →</p>
             </a>
+
+            {/* ── AI Escalations banner (developer/owner only) ── */}
+            {escalationCount > 0 && ['developer', 'owner'].includes(session.role) && (
+              <a href="/settings" className="block bg-red-950 border border-red-800 hover:border-red-700 rounded-2xl p-3 transition-colors">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs text-red-400 uppercase tracking-wide font-bold mb-1">AI Escalations</p>
+                    <p className="text-xl font-bold text-red-300">{escalationCount} unresolved</p>
+                  </div>
+                  <p className="text-xs text-red-400">Inbox →</p>
+                </div>
+              </a>
+            )}
 
             {/* ── Scorecard + Flags (2-col for leadership) ── */}
             {canTeam && (

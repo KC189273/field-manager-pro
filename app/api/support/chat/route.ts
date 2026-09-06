@@ -426,15 +426,47 @@ async function escalateConversation(convId: string, reason: string, userName: st
     JSON.stringify({ conversation_id: convId, user_id: conv?.user_id, user_name: conv?.user_name, first_question: firstUserMsg }),
   ])
 
-  // Push notification to all developers
-  const devs = await query<{ id: string }>(`SELECT id FROM users WHERE role = 'developer' AND is_active = TRUE`)
-  for (const dev of devs) {
+  // Push notification to all developers + owners
+  const alertRecipients = await query<{ id: string; email: string }>(`SELECT id, email FROM users WHERE role IN ('developer', 'owner') AND is_active = TRUE`)
+  for (const r of alertRecipients) {
     sendPushToUser(
-      dev.id,
-      `Support Escalation — ${conv?.user_name ?? userName}`,
+      r.id,
+      `AI Escalation — ${conv?.user_name ?? userName}`,
       firstUserMsg.slice(0, 100),
       'support_escalation'
     ).catch(() => {})
+  }
+
+  // Email the full conversation to developers + owners
+  const emailRecipients = alertRecipients.map(r => r.email).filter(Boolean)
+  if (emailRecipients.length) {
+    const { sendEmail } = await import('@/lib/notifications')
+    const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
+    const msgRows = messages.map(m => {
+      const color = m.role === 'user' ? '#7c3aed' : m.role === 'assistant' ? '#374151' : '#6b7280'
+      const label = m.role === 'user' ? (conv?.user_name ?? userName) : m.role === 'assistant' ? 'AI Assistant' : 'System'
+      return `<div style="margin-bottom:12px;"><span style="font-weight:700;color:${color};font-size:13px;">${label}</span><p style="margin:4px 0 0;font-size:13px;color:#374151;line-height:1.6;">${escapeHtml(m.body.slice(0, 500))}</p></div>`
+    }).join('')
+
+    const html = `<div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#991b1b;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <h1 style="color:white;margin:0;font-size:18px;">AI Support Escalation</h1>
+        <p style="color:#fecaca;margin:4px 0 0;font-size:13px;">${conv?.user_name ?? userName} (${conv?.user_role ?? 'unknown'})</p>
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;padding:20px 24px;background:white;">
+        <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:12px 16px;margin-bottom:16px;">
+          <p style="font-size:11px;color:#991b1b;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 4px;">Escalation Reason</p>
+          <p style="font-size:13px;color:#991b1b;margin:0;line-height:1.5;">${escapeHtml(reason)}</p>
+        </div>
+        <p style="font-size:11px;color:#6b7280;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin:0 0 12px;">Conversation</p>
+        ${msgRows}
+      </div>
+      <div style="border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px;padding:14px 24px;background:#f9fafb;">
+        <p style="font-size:11px;color:#9ca3af;margin:0;">Reply in the app: Settings → AI Assistant Inbox</p>
+      </div>
+    </div>`
+
+    await sendEmail(emailRecipients, `AI Escalation — ${conv?.user_name ?? userName}: ${firstUserMsg.slice(0, 60)}`, html).catch(() => {})
   }
 
   // ── Auto-triage: comprehensive diagnostics ──

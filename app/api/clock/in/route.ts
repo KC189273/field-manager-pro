@@ -93,9 +93,20 @@ export async function POST(req: NextRequest) {
   }
 
   // Check for late clock-in against scheduled shift
+  // Only check on the FIRST clock-in of the day — skip if they already have a shift today
+  // (employees sometimes clock out for breaks and clock back in, creating a 2nd shift)
   try {
     const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
     const nowHHMM = new Date().toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour12: false, hour: '2-digit', minute: '2-digit' })
+
+    // Skip late check if this isn't their first clock-in today
+    const priorShiftToday = await queryOne<{ id: string }>(
+      `SELECT id FROM shifts WHERE user_id = $1 AND id != $2
+       AND clock_in_at >= ($3 || ' 00:00:00')::timestamptz
+       AND clock_in_at < ($3 || ' 00:00:00')::timestamptz + INTERVAL '1 day'
+       LIMIT 1`,
+      [session.id, shift!.id, todayCST]
+    ).catch(() => null)
 
     const scheduled = await queryOne<{ start_time: string; store_location_id: string | null }>(
       `SELECT start_time::text, store_location_id FROM scheduled_shifts
@@ -104,7 +115,7 @@ export async function POST(req: NextRequest) {
       [session.id, todayCST]
     )
 
-    if (scheduled) {
+    if (scheduled && !priorShiftToday) {
       const schHHMM = scheduled.start_time.slice(0, 5)
       const [sh, sm] = schHHMM.split(':').map(Number)
       const [nh, nm] = nowHHMM.split(':').map(Number)

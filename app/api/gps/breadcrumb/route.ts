@@ -60,10 +60,16 @@ export async function POST(req: NextRequest) {
   )
 
   // ── Geofence exit check (employees only) ──
+  // Skip geofence check if employee is on an active break
   if (session.role === 'employee' && shift.store_location_id && !markAsGap) {
+    const onBreak = await queryOne<{ id: string }>(
+      `SELECT id FROM shift_breaks WHERE shift_id = $1 AND break_end IS NULL LIMIT 1`,
+      [shift.id]
+    ).catch(() => null)
+
     try {
       const geo = await getGeofenceSettings(session.org_id)
-      if (geo.enabled) {
+      if (geo.enabled && !onBreak) {
         const store = await queryOne<{ lat: number; lng: number; address: string; geofence_radius_ft: number | null }>(
           `SELECT lat, lng, address, geofence_radius_ft FROM dm_store_locations WHERE id = $1`,
           [shift.store_location_id]

@@ -110,8 +110,15 @@ export async function POST(req: NextRequest) {
 
   const flagsRaised: string[] = []
 
-  // Flag: break > 45 minutes
-  if (breakMinutes > 45) {
+  // Flag: break exceeds allowed time — check scheduled break first, fallback to 45 min
+  const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+  const scheduledBreak = await queryOne<{ break_minutes: number | null }>(
+    `SELECT break_minutes FROM scheduled_shifts WHERE employee_id = $1 AND shift_date = $2 LIMIT 1`,
+    [session.id, todayCST]
+  ).catch(() => null)
+  const breakLimit = scheduledBreak?.break_minutes && scheduledBreak.break_minutes > 0 ? scheduledBreak.break_minutes : 45
+
+  if (breakMinutes > breakLimit) {
     try {
       // Skip if flag already exists for this shift
       const existingBreakLong = await queryOne(`SELECT id FROM flags WHERE shift_id = $1 AND type = 'break_long' LIMIT 1`, [shift.id]).catch(() => null)
@@ -119,7 +126,7 @@ export async function POST(req: NextRequest) {
         await query(
           `INSERT INTO flags (user_id, shift_id, type, date, detail)
            VALUES ($1, $2, 'break_long', CURRENT_DATE, $3)`,
-          [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (45 min limit)`]
+          [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (${breakLimit} min allowed)`]
         )
       }
       flagsRaised.push('break_long')

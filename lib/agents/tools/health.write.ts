@@ -51,8 +51,9 @@ export const writeHealthSnapshotTool: Tool = {
       payload: { score, status, handoff_growth: !!handoff_growth },
     })
 
-    // If at_risk or churning, flag for Growth Agent handoff
-    if (handoff_growth && (status === 'at_risk' || status === 'churning')) {
+    // If at_risk or churning, flag for Growth Agent handoff (skip barbershop accounts)
+    const orgIndustry = await queryOne<{ industry: string }>(`SELECT COALESCE(industry, 'wireless_retail') as industry FROM organizations WHERE id = $1`, [account_id]).catch(() => null)
+    if (handoff_growth && (status === 'at_risk' || status === 'churning') && orgIndustry?.industry !== 'barbershop') {
       await ctx.remember('account', account_id, 'pending_growth_handoff', {
         status,
         score,

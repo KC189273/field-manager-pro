@@ -54,6 +54,9 @@ export const getChurnSaveCandidatesTool: Tool = {
 
       if (!org) continue
 
+      // Skip barbershop accounts — no growth outreach for barbershops
+      if (org.industry === 'barbershop') continue
+
       const playbook = getPlaybook(org.industry)
       if (!playbook) continue
 

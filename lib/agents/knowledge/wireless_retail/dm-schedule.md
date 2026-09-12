@@ -7,9 +7,9 @@ features:
   - auto-save
   - blur-save
 permissions:
-  - "DMs edit own"
-  - "SD/owner/dev view all"
-verified: 2026-07-22
+  - "DMs view and edit their own schedule"
+  - "ops_field_leader/ops_manager/SD/owner/dev view all DMs"
+verified: 2026-09-12
 ---
 # DM Schedule
 

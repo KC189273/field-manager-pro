@@ -10,7 +10,7 @@ import crypto from 'crypto'
 const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
 // ─── Roles allowed to author accountability docs ──────────────────────────────
-const AUTHOR_ROLES = ['manager', 'sales_director', 'owner', 'developer']
+const AUTHOR_ROLES = ['manager', 'ops_manager', 'sales_director', 'owner', 'developer']
 const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'ops_field_leader', 'developer']
 
 // ─── Table setup ─────────────────────────────────────────────────────────────
@@ -618,7 +618,7 @@ export async function GET(req: NextRequest) {
          WHERE is_active = TRUE AND role NOT IN ('developer')
          ORDER BY full_name`, []
       )
-    } else if (session.role === 'owner') {
+    } else if (session.role === 'owner' || session.role === 'ops_manager') {
       if (orgFilter.filterByOrg && orgFilter.orgId) {
         subjects = await query<UserRow>(
           `SELECT id, full_name, role FROM users

@@ -34,8 +34,9 @@ export async function GET(req: NextRequest) {
     const stores = await query<{
       id: string; address: string; org_id: string | null
       open_time: string; close_time: string
+      lat: number | null; lng: number | null
     }>(
-      `SELECT s.id, s.address, s.org_id, h.open_time::text, h.close_time::text
+      `SELECT s.id, s.address, s.org_id, h.open_time::text, h.close_time::text, s.lat, s.lng
        FROM dm_store_locations s
        JOIN store_hours h ON h.store_id = s.id
        WHERE s.active = TRUE
@@ -84,9 +85,36 @@ export async function GET(req: NextRequest) {
          AND is_dm_shift = TRUE`,
       [storeIds, todayCST]
     ).catch(() => [] as { store_location_id: string }[])
+
+    // Check if any DM is physically near the store (GPS breadcrumb within 500ft in last 15 min)
+    const dmNearby: string[] = []
+    try {
+      const { haversineDistanceFt } = await import('@/lib/geofence')
+      const dmCrumbs = await query<{ user_id: string; lat: number; lng: number }>(`
+        SELECT DISTINCT ON (g.user_id) g.user_id, g.lat, g.lng
+        FROM gps_breadcrumbs g
+        JOIN users u ON u.id = g.user_id
+        WHERE u.role = 'manager' AND g.recorded_at > NOW() - INTERVAL '15 minutes'
+          AND g.lat IS NOT NULL AND g.lng IS NOT NULL
+        ORDER BY g.user_id, g.recorded_at DESC
+      `).catch(() => [])
+
+      for (const store of openStores) {
+        if (!store.lat || !store.lng) continue
+        for (const crumb of dmCrumbs) {
+          const dist = haversineDistanceFt(Number(crumb.lat), Number(crumb.lng), store.lat, store.lng)
+          if (dist <= 500) {
+            dmNearby.push(store.id)
+            break
+          }
+        }
+      }
+    } catch {}
+
     const coveredIds = new Set([
       ...clockedIn.map(r => r.store_location_id),
       ...dmScheduled.map(r => r.store_location_id),
+      ...dmNearby,
     ])
     const unmanned = openStores.filter(s => !coveredIds.has(s.id))
 

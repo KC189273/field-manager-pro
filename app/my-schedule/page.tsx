@@ -142,12 +142,8 @@ export default function MySchedulePage() {
       setAddSaving(false)
       return
     }
-    // Auto-publish so it shows immediately
-    await fetch('/api/staff-schedule/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ storeId: addForm.storeId, weekStart }),
-    }).catch(() => {})
+    // DM shifts don't need to trigger a full store schedule publish
+    // The shift is already saved and visible in the system
     setAddDay(null)
     setAddForm({ storeId: '', startTime: '09:00', endTime: '17:00', note: '' })
     setAddSaving(false)

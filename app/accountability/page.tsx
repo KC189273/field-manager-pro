@@ -131,10 +131,10 @@ function canViewDash(role: Role) {
   return ['employee','manager','sales_director','ops_field_leader','ops_manager','owner','developer'].includes(role)
 }
 function canApprove(role: Role) {
-  return ['sales_director','owner','developer'].includes(role)
+  return ['ops_manager','sales_director','owner','developer'].includes(role)
 }
 function canSubmit(role: Role) {
-  return ['manager','sales_director','owner','developer'].includes(role)
+  return ['manager','ops_manager','sales_director','owner','developer'].includes(role)
 }
 
 function fmtDate(d: string) {

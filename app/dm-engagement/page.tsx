@@ -235,18 +235,19 @@ export default function DmEngagementPage() {
     }
   }, [session])
 
-  // Load coaching rollup — only when coaching tab is selected
-  const [coachingLoaded, setCoachingLoaded] = useState(false)
+  // Load coaching rollup — when coaching tab is selected
   useEffect(() => {
-    if (!session || coachingLoaded || mainTab !== 'coaching') return
-    setCoachingLoaded(true)
+    if (!session || mainTab !== 'coaching' || coachingDms.length > 0) return
     setCoachingLoading(true)
-    fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => {
+    fetch('/api/coaching-grades').then(r => {
+      if (!r.ok) { console.error('coaching-grades API:', r.status); return null }
+      return r.json()
+    }).then(d => {
       if (d?.dmRollup) setCoachingDms(d.dmRollup)
       if (d?.availableMonths) setAvailableMonths(d.availableMonths)
       if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth)
       setCoachingLoading(false)
-    }).catch(() => setCoachingLoading(false))
+    }).catch(err => { console.error('coaching-grades fetch error:', err); setCoachingLoading(false) })
   }, [session, mainTab])
 
   async function loadScorecard(dmId?: string) {

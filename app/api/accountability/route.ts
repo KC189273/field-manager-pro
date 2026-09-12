@@ -687,10 +687,10 @@ export async function GET(req: NextRequest) {
     where.push(`d.org_id = $${params.length}`)
   }
 
-  // DMs see their own docs + docs transferred to them
+  // DMs see docs they authored, transferred to them, OR for their direct reports
   if (session.role === 'manager') {
     params.push(session.id)
-    where.push(`(d.author_id = $${params.length} OR d.transferred_to = $${params.length})`)
+    where.push(`(d.author_id = $${params.length} OR d.transferred_to = $${params.length} OR d.subject_id IN (SELECT id FROM users WHERE manager_id = $${params.length}))`)
   }
 
   if (dateFrom) { params.push(dateFrom); where.push(`d.created_at >= $${params.length}`) }

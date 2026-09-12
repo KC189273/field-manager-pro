@@ -60,15 +60,17 @@ export default function DmSchedulesPage() {
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d) { router.replace('/login'); return }
-      if (!['ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) { router.replace('/dashboard'); return }
+      if (!['manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) { router.replace('/dashboard'); return }
       setSession(d)
     })
   }, [router])
 
   useEffect(() => {
     if (!session) return
+    // DMs only see their own weekly schedule — skip the "today" overview
+    if (session.role === 'manager') return
     setTodayLoading(true)
-    fetch('/api/dm-schedule?today=true').then(r => r.json())
+    fetch('/api/dm-schedule?today=true').then(r => r.ok ? r.json() : { today: [], date: '' })
       .then(d => { setTodayDms(d.today ?? []); setTodayDate(d.date ?? '') })
       .finally(() => setTodayLoading(false))
   }, [session])

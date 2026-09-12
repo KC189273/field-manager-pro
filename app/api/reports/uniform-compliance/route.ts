@@ -15,9 +15,11 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const specificDate = searchParams.get('date')
     const days = Math.min(parseInt(searchParams.get('days') || '7') || 7, 90)
+    const dmId = searchParams.get('dmId')
 
     const orgId = session.org_id
     const orgFilter = orgId ? `AND u.org_id = '${(orgId as string).replace(/'/g, "''")}'` : ''
+    const dmFilter = dmId ? `AND u.manager_id = '${dmId.replace(/'/g, "''")}'` : ''
     const dateFilter = specificDate
       ? `AND (uc.created_at AT TIME ZONE 'America/Chicago')::date = '${specificDate}'::date`
       : `AND uc.created_at >= NOW() - INTERVAL '${days} days'`
@@ -38,6 +40,7 @@ export async function GET(req: NextRequest) {
       JOIN users u ON u.id = uc.user_id
       WHERE uc.created_at >= NOW() - INTERVAL '${days} days'
         ${orgFilter}
+        ${dmFilter}
     `)
 
     // Recent failures
@@ -77,10 +80,16 @@ export async function GET(req: NextRequest) {
       ORDER BY fail_count DESC
     `)
 
+    // DM list for filter dropdown
+    const dms = await query<{ id: string; full_name: string }>(
+      `SELECT id, full_name FROM users WHERE role = 'manager' AND is_active = TRUE ${orgFilter.replace(/u\./g, '')} ORDER BY full_name`
+    ).catch(() => [])
+
     return NextResponse.json({
       stats: stats[0] || { total: 0, passed: 0, failed: 0, unclear: 0, skipped: 0, monthly_cost: 0 },
       failures: failuresWithPhotos,
       offenders,
+      dms,
       days,
     })
   } catch (err) {

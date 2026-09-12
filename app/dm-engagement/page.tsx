@@ -161,8 +161,9 @@ export default function DmEngagementPage() {
   const [uniformMode, setUniformMode] = useState<'range' | 'date'>('range')
   const [uniformDays, setUniformDays] = useState('7')
   const [uniformDate, setUniformDate] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' }))
-  const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string; photo_url?: string | null }>; offenders: Array<{ user_name: string; fail_count: number }> } | null>(null)
+  const [uniformData, setUniformData] = useState<{ stats: { total: number; passed: number; failed: number; unclear: number; skipped: number; monthly_cost: number }; failures: Array<{ user_name: string; details: string; shirt_ok: boolean | null; nametag_ok: boolean | null; created_at: string; photo_url?: string | null }>; offenders: Array<{ user_name: string; fail_count: number }>; dms?: Array<{ id: string; full_name: string }> } | null>(null)
   const [uniformLoading, setUniformLoading] = useState(false)
+  const [uniformDmFilter, setUniformDmFilter] = useState('')
 
   // Coaching compliance state
   const [coachCompRange, setCoachCompRange] = useState('7')
@@ -283,11 +284,14 @@ export default function DmEngagementPage() {
     finally { setIntegrityLoading(false) }
   }
 
-  async function loadUniformCompliance(d?: string, date?: string) {
+  async function loadUniformCompliance(d?: string, date?: string, dm?: string) {
     setUniformLoading(true)
     try {
-      const params = date ? `date=${date}` : `days=${d || uniformDays}`
-      const res = await fetch(`/api/reports/uniform-compliance?${params}`)
+      const p = new URLSearchParams()
+      if (date) { p.set('date', date) } else { p.set('days', d || uniformDays) }
+      const dmVal = dm !== undefined ? dm : uniformDmFilter
+      if (dmVal) p.set('dmId', dmVal)
+      const res = await fetch(`/api/reports/uniform-compliance?${p}`)
       if (res.ok) setUniformData(await res.json())
     } catch { /* ignore */ }
     finally { setUniformLoading(false) }
@@ -945,6 +949,13 @@ export default function DmEngagementPage() {
                   {uniformLoading ? '...' : 'Load'}
                 </button>
               </div>
+              {uniformData?.dms && uniformData.dms.length > 0 && (
+                <select value={uniformDmFilter} onChange={e => { setUniformDmFilter(e.target.value); uniformMode === 'date' ? loadUniformCompliance(undefined, uniformDate, e.target.value) : loadUniformCompliance(uniformDays, undefined, e.target.value) }}
+                  className="w-full bg-gray-900 border border-gray-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 mt-2">
+                  <option value="">All DMs</option>
+                  {uniformData.dms.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                </select>
+              )}
             </div>
 
             {uniformLoading ? (

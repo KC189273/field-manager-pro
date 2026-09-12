@@ -23,7 +23,7 @@ async function ensureTable() {
 }
 
 const canViewAll = (role: string) =>
-  role === 'sales_director' || role === 'owner' || role === 'developer'
+  role === 'ops_field_leader' || role === 'ops_manager' || role === 'sales_director' || role === 'owner' || role === 'developer'
 
 function getWeekMonday(dateStr: string): string {
   const d = new Date(dateStr + 'T12:00:00')

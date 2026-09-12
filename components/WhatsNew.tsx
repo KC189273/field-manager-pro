@@ -17,7 +17,7 @@ const TYPE_COLORS: Record<string, string> = {
   role_change: 'bg-amber-900/40 text-amber-400',
 }
 
-const FIRST_SEEN_KEY = 'fmp_whats_new_first_seen'
+const FIRST_SEEN_KEY = 'fmp_whats_new_first_seen_0912'
 const FIVE_DAYS = 5 * 86400000
 
 export default function WhatsNew() {

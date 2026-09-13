@@ -127,14 +127,52 @@ export async function GET(req: NextRequest) {
 
   const orgFilter = await getOrgFilter(session)
 
-  // For DMs viewing their own (kept for backward compatibility)
+  // For DMs viewing their own — return the same combined format as leadership
   if (!canViewAll(session.role)) {
-    const params: unknown[] = [weekStart, session.id]
-    const schedules = await query<{ id: string; dm_id: string; dm_name: string; week_start: string; schedule: string; updated_at: string }>(`
-      SELECT s.id, s.dm_id, s.dm_name, s.week_start::text, s.schedule::text, s.updated_at::text
-      FROM dm_weekly_schedules s WHERE s.week_start = $1 AND s.dm_id = $2
-    `, params)
-    return NextResponse.json({ schedules: schedules.map(s => ({ ...s, schedule: JSON.parse(s.schedule) })) })
+    const weekEndDm = new Date(weekStart + 'T12:00:00')
+    weekEndDm.setDate(weekEndDm.getDate() + 6)
+    const weekEndDmStr = weekEndDm.toISOString().split('T')[0]
+
+    const myShifts = await query<{
+      shift_date: string; start_time: string; end_time: string
+      store_address: string; role_note: string | null
+    }>(`
+      SELECT ss.shift_date::text, ss.start_time::text, ss.end_time::text,
+        dsl.address AS store_address, ss.role_note
+      FROM scheduled_shifts ss
+      JOIN dm_store_locations dsl ON dsl.id = ss.store_location_id
+      WHERE ss.employee_id = $1 AND ss.shift_date >= $2 AND ss.shift_date <= $3
+      ORDER BY ss.shift_date, ss.start_time
+    `, [session.id, weekStart, weekEndDmStr]).catch(() => [])
+
+    const myNotes = await query<{ schedule: string; updated_at: string }>(`
+      SELECT schedule::text, updated_at::text FROM dm_weekly_schedules
+      WHERE dm_id = $1 AND week_start = $2
+    `, [session.id, weekStart]).catch(() => [])
+
+    const noteData = myNotes[0] ? { schedule: JSON.parse(myNotes[0].schedule) as unknown[], updated_at: myNotes[0].updated_at } : null
+
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(weekStart + 'T12:00:00')
+      d.setDate(d.getDate() + i)
+      const dateStr = d.toISOString().split('T')[0]
+      const dayShifts = myShifts.filter(s => s.shift_date === dateStr)
+      const dayNotes = noteData?.schedule?.[i] as { working?: boolean; locations?: { store_address: string; reason: string }[] } | undefined
+      return {
+        date: dateStr, day_index: i,
+        shifts: dayShifts.map(s => ({ start_time: s.start_time, end_time: s.end_time, store_address: s.store_address, role_note: s.role_note })),
+        visit_notes: (dayNotes?.locations ?? []).filter((l: { store_address?: string; reason?: string }) => l.store_address || l.reason),
+        working: dayShifts.length > 0 || (dayNotes?.working ?? false),
+      }
+    })
+
+    return NextResponse.json({
+      dmSchedules: [{
+        dm_id: session.id, dm_name: session.fullName,
+        has_shifts: myShifts.length > 0, has_notes: !!noteData,
+        notes_updated_at: noteData?.updated_at ?? null, days,
+      }]
+    })
   }
 
   // SD/owner/developer: get all DMs

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { query } from '@/lib/db'
 import { sendEmail } from '@/lib/notifications'
+import { sendPushToUser } from '@/lib/apns'
 
 const APP_URL = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
 
@@ -119,6 +120,12 @@ export async function GET(req: NextRequest) {
   for (const dm of dms) {
     remindedByOrg[dm.org_id] = remindedByOrg[dm.org_id] ?? []
     remindedByOrg[dm.org_id].push(dm.full_name)
+
+    // Send push notification
+    sendPushToUser(dm.id, 'Payroll Reminder',
+      `Submit timecards for ${periodLabel}. Deadline: Today at noon CST.`,
+      'payroll'
+    ).catch(() => {})
 
     // Send reminder email
     sendEmail(

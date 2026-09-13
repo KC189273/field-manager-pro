@@ -56,11 +56,24 @@ export default function DmSchedulesPage() {
   const [weekLoading, setWeekLoading] = useState(false)
   const [filterDmId, setFilterDmId] = useState('')
   const [expandedDm, setExpandedDm] = useState<string | null>(null)
+  const [editNotes, setEditNotes] = useState<Record<number, { store: string; reason: string }>>({})
+  const [saving, setSaving] = useState(false)
+  const [stores, setStores] = useState<{ id: string; address: string }[]>([])
+
+  // Load stores for DM edit mode
+  useEffect(() => {
+    if (session?.role === 'manager') {
+      fetch('/api/clock/my-stores').then(r => r.ok ? r.json() : null).then(d => {
+        if (d?.stores) setStores(d.stores)
+      }).catch(() => {})
+    }
+  }, [session])
 
   useEffect(() => {
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => {
       if (!d) { router.replace('/login'); return }
       if (!['manager', 'ops_field_leader', 'ops_manager', 'sales_director', 'owner', 'developer'].includes(d.role)) { router.replace('/dashboard'); return }
+      if (d.role === 'manager') { setTab('week'); setExpandedDm(d.id) }
       setSession(d)
     })
   }, [router])
@@ -86,6 +99,34 @@ export default function DmSchedulesPage() {
   }, [session, weekStart, filterDmId])
 
   useEffect(() => { if (tab === 'week') loadWeek() }, [tab, loadWeek])
+
+  // Save DM schedule notes
+  async function saveNotes() {
+    if (!session || session.role !== 'manager') return
+    setSaving(true)
+    const mySchedule = dmSchedules[0]
+    const schedule = Array.from({ length: 7 }, (_, i) => {
+      const existing = mySchedule?.days?.[i]
+      const note = editNotes[i]
+      const locations = [...(existing?.visit_notes ?? [])]
+      if (note?.store && note?.reason) {
+        locations.push({ store_address: note.store, reason: note.reason })
+      }
+      return {
+        day: i,
+        working: existing?.working || locations.length > 0,
+        locations,
+      }
+    })
+    await fetch('/api/dm-schedule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weekStart, schedule }),
+    }).catch(() => {})
+    setEditNotes({})
+    setSaving(false)
+    loadWeek()
+  }
 
   if (!session) return <div className="min-h-screen bg-gray-950" />
 
@@ -239,11 +280,33 @@ export default function DmSchedulesPage() {
                                         )}
                                       </>
                                     ) : <p className="text-xs text-gray-600 italic">Off</p>}
+                                    {/* DM inline add note */}
+                                    {session.role === 'manager' && (
+                                      <div className="mt-1.5 flex gap-1.5 items-center">
+                                        <select value={editNotes[i]?.store ?? ''} onChange={e => setEditNotes(n => ({ ...n, [i]: { ...n[i], store: e.target.value, reason: n[i]?.reason ?? '' } }))}
+                                          className="bg-gray-800 border border-gray-700 text-white text-[11px] rounded-lg px-2 py-1 flex-1 focus:outline-none focus:border-violet-500">
+                                          <option value="">Store...</option>
+                                          {stores.map(s => <option key={s.id} value={s.address}>{shortAddr(s.address)}</option>)}
+                                        </select>
+                                        <input type="text" placeholder="Visit reason" value={editNotes[i]?.reason ?? ''}
+                                          onChange={e => setEditNotes(n => ({ ...n, [i]: { ...n[i], store: n[i]?.store ?? '', reason: e.target.value } }))}
+                                          className="bg-gray-800 border border-gray-700 text-white text-[11px] rounded-lg px-2 py-1 flex-1 focus:outline-none focus:border-violet-500" />
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
                             )
                           })}
+                          {/* DM save button */}
+                          {session.role === 'manager' && Object.values(editNotes).some(n => n.store || n.reason) && (
+                            <div className="px-4 py-2 border-t border-gray-800/50">
+                              <button onClick={saveNotes} disabled={saving}
+                                className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors">
+                                {saving ? 'Saving...' : 'Save Visit Notes'}
+                              </button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

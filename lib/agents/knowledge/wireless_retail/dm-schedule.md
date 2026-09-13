@@ -4,47 +4,44 @@ sources:
   - app/dm-schedule/page.tsx
 features:
   - dm-schedule
-  - auto-save
-  - blur-save
+  - weekly-planning
+  - copy-last-week
+  - today-summary
 permissions:
   - "DMs view and edit their own schedule"
   - "ops_field_leader/ops_manager/SD/owner/dev view all DMs"
-verified: 2026-09-12
+verified: 2026-09-13
 ---
 # DM Schedule
 
 ## What is the DM Schedule?
-A weekly planner where DMs plan which stores they'll visit each day, with reasons for each visit. This is separate from the employee schedule — it's the DM's own field plan.
+A weekly planner where DMs plan which stores they'll visit each day, with reasons for each visit. Leadership uses it to see where DMs are working.
 
-## How do I fill out my schedule?
-1. Go to **DM Schedule** from the nav.
-2. You'll see Monday through Sunday.
-3. For each day, toggle whether you're working.
-4. Tap **Add Location** to add a store visit.
-5. Select the store from the dropdown.
-6. Type your reason/plan for visiting that store (e.g., "Go over MIM gaps with Chris").
-7. Repeat for additional stores that day.
+## How do DMs fill out their schedule?
+1. Go to **More menu → DM Schedules**.
+2. Tap **Edit Schedule** to enter edit mode.
+3. For each day:
+   - Toggle **Working/Off** with the button on the right.
+   - Select a store from the dropdown and type a visit reason.
+   - Tap **+ Add Store Visit** to add additional stores for that day.
+   - Tap the X to remove a store visit.
+4. Tap **Save Schedule** when done.
 
-## How does saving work?
-- **Store selection** saves automatically after 2 seconds.
-- **Notes/reasons** save when you tap out of the text field (on blur). If you type a note and immediately navigate away without tapping out, it may not save.
-- There is also a **Save** button you can tap manually to force a save.
-- A "Saved" indicator appears briefly when the save completes.
+## Can I copy last week's schedule?
+Yes. Tap **Copy Last Week** next to the Edit Schedule button. It pre-fills your current week with last week's plan. You can then adjust individual days before saving.
 
-**Tip:** After typing your reason, tap on a different field or area of the screen before navigating to another week. This ensures the note is saved.
+## What is the Today summary?
+When you open DM Schedules, a card at the top shows your plan for today — which stores you're visiting and why. This gives you a quick reference without scrolling through the full week.
 
-## Can I plan multiple weeks ahead?
-Yes. Use the arrow buttons to navigate to future weeks and fill in your schedule in advance.
+## Who can see my schedule?
+- **You** see only your own schedule.
+- **Field Leaders, Ops Managers, Owners, Sales Directors, Developers** see all DMs. They have a Today tab (who's working where today) and a Weekly View tab with DM filter chips.
 
-## Who can see my DM Schedule?
-| Role | Can see |
-|------|---------|
-| DM (manager) | Their own schedule only |
-| Sales Director | All DMs' schedules |
-| Owner | All DMs' schedules |
-| Developer | All DMs' schedules |
+## What about My Schedule?
+My Schedule shows your clock-in/clock-out shifts. It is NOT where you plan store visits. If you are a DM and go to My Schedule, a banner will redirect you to DM Schedules for planning.
 
-The SD/Owner view includes a dropdown to filter by specific DM.
+## Can I plan multiple stores in one day?
+Yes. Each day supports multiple store visits. Tap **+ Add Store Visit** to add as many as you need.
 
-## Why did my schedule entries disappear?
-If your stores and notes didn't save, you may have navigated to a different week too quickly. The auto-save fires when you tap out of the reason field. If you switch weeks before tapping out, the save may not have completed. Always wait for the "Saved" indicator or tap the Save button before changing weeks.
+## Can I edit or delete a visit after saving?
+Yes. Tap **Edit Schedule** and you'll see your saved visits. Change stores, update reasons, remove visits with the X button, or toggle days off. Save again when done.

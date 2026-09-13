@@ -214,6 +214,14 @@ export default function MySchedulePage() {
       {session && <NavBar role={session.role} fullName={session.fullName} />}
 
       <div className="px-4 pt-6 max-w-lg mx-auto">
+        {/* DM redirect banner */}
+        {isDm && (
+          <a href="/dm-schedule" className="block bg-violet-900/30 border border-violet-700/40 rounded-2xl px-4 py-3 mb-4 hover:bg-violet-900/40 transition-colors">
+            <p className="text-sm font-semibold text-violet-300">Plan your store visits in DM Schedules</p>
+            <p className="text-xs text-violet-400/70 mt-0.5">Go to DM Schedules to add your weekly visit plan with stores and reasons.</p>
+          </a>
+        )}
+
         {/* Header + week nav */}
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl font-bold text-white">My Schedule</h1>

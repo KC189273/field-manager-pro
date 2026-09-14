@@ -407,5 +407,23 @@ The goal is development, not punishment. Build them up while guiding them to be 
     emailHtml
   ).catch(err => console.error('Coaching grade email error:', err))
 
+  // If this is a stretch DM, also email their actual DM
+  const stretchInfo = await queryOne<{ is_stretch_dm: boolean; manager_id: string | null }>(
+    `SELECT COALESCE(is_stretch_dm, FALSE) as is_stretch_dm, manager_id FROM users WHERE id = $1`,
+    [params.dmId]
+  ).catch(() => null)
+  if (stretchInfo?.is_stretch_dm && stretchInfo.manager_id) {
+    const actualDm = await queryOne<{ email: string; full_name: string }>(
+      `SELECT email, full_name FROM users WHERE id = $1`, [stretchInfo.manager_id]
+    ).catch(() => null)
+    if (actualDm?.email) {
+      sendEmail(
+        actualDm.email,
+        `Stretch Coaching Grade: ${result.overall_grade} — ${params.dmName} coached ${params.employeeCoachedName || 'employee'} at ${params.storeAddress}`,
+        emailHtml
+      ).catch(() => {})
+    }
+  }
+
   return result
 }

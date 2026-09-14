@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { sendPushToUsers } from '@/lib/apns'
+import { logScheduleChange } from '@/lib/schedule-audit'
 import { GET as validateSchedule } from '@/app/api/schedule/validate/route'
 
 // POST — publish a (store, week) pair
@@ -55,6 +56,13 @@ export async function POST(req: NextRequest) {
      ON CONFLICT (store_location_id, week_start) DO NOTHING`,
     [storeId, weekStart, session.id]
   )
+
+  const storeRow = await queryOne<{ address: string }>(`SELECT address FROM dm_store_locations WHERE id = $1`, [storeId])
+  logScheduleChange({
+    action: 'publish', performedBy: session.id, performedByName: session.fullName,
+    storeLocationId: storeId, storeAddress: storeRow?.address,
+    metadata: { week_start: weekStart },
+  })
 
   // Run schedule validation and persist any flags found
   try {

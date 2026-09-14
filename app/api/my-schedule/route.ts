@@ -117,5 +117,25 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ shifts, stores, storeShifts })
+  // Server verification watermark — hash of user+time+shift data for screenshot verification
+  const crypto = await import('crypto')
+  const serverTime = new Date().toISOString()
+  const shiftHash = crypto.createHash('sha256')
+    .update(`${session.id}|${serverTime}|${JSON.stringify(shifts.map(s => s.shift_date + s.start_time))}`)
+    .digest('hex').slice(0, 12).toUpperCase()
+  const verificationCode = `${shiftHash}-${Date.now().toString(36).toUpperCase()}`
+
+  // Log this verification code so we can validate screenshots later
+  await query(`
+    INSERT INTO schedule_audit_log (action, performed_by, performed_by_name, metadata)
+    VALUES ('view', $1, $2, $3)
+  `, [session.id, session.fullName, JSON.stringify({
+    verification_code: verificationCode,
+    server_time: serverTime,
+    week_start: weekStart,
+    shift_count: shifts.length,
+    shift_dates: shifts.map(s => s.shift_date),
+  })]).catch(() => {})
+
+  return NextResponse.json({ shifts, stores, storeShifts, verificationCode, serverTime })
 }

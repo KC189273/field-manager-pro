@@ -107,6 +107,8 @@ export default function MySchedulePage() {
   }, [session])
 
   const isDm = session?.role === 'manager'
+  const [verificationCode, setVerificationCode] = useState('')
+  const [serverTime, setServerTime] = useState('')
 
   async function addDmShift() {
     if (!addDay || !addForm.storeId) {
@@ -188,6 +190,8 @@ export default function MySchedulePage() {
         setShifts(d.shifts ?? [])
         if (d.stores) setStores(d.stores)
         setStoreShifts(d.storeShifts ?? [])
+        if (d.verificationCode) setVerificationCode(d.verificationCode)
+        if (d.serverTime) setServerTime(d.serverTime)
       })
       .finally(() => setLoading(false))
   }, [weekStart, selectedStore])
@@ -468,6 +472,13 @@ export default function MySchedulePage() {
                 </div>
               )
             )}
+          </div>
+        )}
+        {/* Server verification watermark */}
+        {verificationCode && (
+          <div className="mt-6 mb-2 text-center">
+            <p className="text-[9px] text-gray-700 font-mono tracking-wider">{verificationCode}</p>
+            {serverTime && <p className="text-[8px] text-gray-800">{new Date(serverTime).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}</p>}
           </div>
         )}
       </div>

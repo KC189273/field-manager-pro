@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { logScheduleChange } from '@/lib/schedule-audit'
 
 interface ShiftRow {
   id: string
@@ -229,6 +230,16 @@ export async function POST(req: NextRequest) {
     [store?.org_id ?? null, storeId, employeeId, shiftDate, startTime, endTime, roleNote || null, session.id, breakMinutes ?? 0, isOnCall ? true : false, isDmShift ? true : false]
   )
 
+  // Audit log
+  const empRow = employeeId ? await queryOne<{ full_name: string }>(`SELECT full_name FROM users WHERE id = $1`, [employeeId]) : null
+  const storeRow = storeId ? await queryOne<{ address: string }>(`SELECT address FROM dm_store_locations WHERE id = $1`, [storeId]) : null
+  logScheduleChange({
+    action: 'create', performedBy: session.id, performedByName: session.fullName,
+    employeeId, employeeName: empRow?.full_name, storeLocationId: storeId,
+    storeAddress: storeRow?.address, shiftDate,
+    newStartTime: startTime, newEndTime: endTime, newBreakMinutes: breakMinutes ?? 0,
+  })
+
   return NextResponse.json({ ok: true, id: result?.id })
 }
 
@@ -299,6 +310,11 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
+  // Capture old values for audit
+  const oldShift = await queryOne<{ employee_id: string; shift_date: string; start_time: string; end_time: string; break_minutes: number; store_location_id: string }>(`
+    SELECT employee_id, shift_date::text, start_time::text, end_time::text, COALESCE(break_minutes, 0) as break_minutes, store_location_id FROM scheduled_shifts WHERE id = $1
+  `, [shiftId])
+
   await query(
     `UPDATE scheduled_shifts
      SET employee_id   = COALESCE($1, employee_id),
@@ -313,6 +329,21 @@ export async function PATCH(req: NextRequest) {
      WHERE id = $9`,
     [employeeId ?? null, shiftDate ?? null, startTime ?? null, endTime ?? null, roleNote ?? null, breakMinutes ?? null, isOnCall ?? null, isDmShift ?? null, shiftId]
   )
+
+  // Audit log
+  if (oldShift) {
+    const empRow = await queryOne<{ full_name: string }>(`SELECT full_name FROM users WHERE id = $1`, [employeeId ?? oldShift.employee_id])
+    const storeRow = await queryOne<{ address: string }>(`SELECT address FROM dm_store_locations WHERE id = $1`, [oldShift.store_location_id])
+    logScheduleChange({
+      action: 'update', performedBy: session.id, performedByName: session.fullName,
+      employeeId: employeeId ?? oldShift.employee_id, employeeName: empRow?.full_name,
+      storeLocationId: oldShift.store_location_id, storeAddress: storeRow?.address,
+      shiftDate: shiftDate ?? oldShift.shift_date,
+      oldStartTime: oldShift.start_time, oldEndTime: oldShift.end_time,
+      newStartTime: startTime ?? oldShift.start_time, newEndTime: endTime ?? oldShift.end_time,
+      oldBreakMinutes: oldShift.break_minutes, newBreakMinutes: breakMinutes ?? oldShift.break_minutes,
+    })
+  }
 
   return NextResponse.json({ ok: true })
 }
@@ -342,7 +373,27 @@ export async function DELETE(req: NextRequest) {
 
   }
 
+  // Capture before delete for audit
+  const delShift = await queryOne<{ employee_id: string; shift_date: string; start_time: string; end_time: string; store_location_id: string; break_minutes: number }>(`
+    SELECT employee_id, shift_date::text, start_time::text, end_time::text, store_location_id, COALESCE(break_minutes, 0) as break_minutes FROM scheduled_shifts WHERE id = $1
+  `, [shiftId])
+
   await query(`DELETE FROM scheduled_shifts WHERE id = $1`, [shiftId])
+
+  // Audit log
+  if (delShift) {
+    const empRow = delShift.employee_id ? await queryOne<{ full_name: string }>(`SELECT full_name FROM users WHERE id = $1`, [delShift.employee_id]) : null
+    const storeRow = delShift.store_location_id ? await queryOne<{ address: string }>(`SELECT address FROM dm_store_locations WHERE id = $1`, [delShift.store_location_id]) : null
+    logScheduleChange({
+      action: 'delete', performedBy: session.id, performedByName: session.fullName,
+      employeeId: delShift.employee_id, employeeName: empRow?.full_name,
+      storeLocationId: delShift.store_location_id, storeAddress: storeRow?.address,
+      shiftDate: delShift.shift_date,
+      oldStartTime: delShift.start_time, oldEndTime: delShift.end_time,
+      oldBreakMinutes: delShift.break_minutes,
+    })
+  }
+
   return NextResponse.json({ ok: true })
 }
 

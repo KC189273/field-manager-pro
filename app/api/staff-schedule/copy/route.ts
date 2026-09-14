@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
+import { logScheduleChange } from '@/lib/schedule-audit'
 
 let ensured = false
 async function ensureScheduledShiftsColumns() {
@@ -90,6 +91,13 @@ export async function POST(req: NextRequest) {
       [s.org_id, storeId, newDate, s.start_time, s.end_time, s.role_note, session.id, s.break_minutes, s.is_on_call]
     )
   }
+
+  const storeRow = await queryOne<{ address: string }>(`SELECT address FROM dm_store_locations WHERE id = $1`, [storeId])
+  logScheduleChange({
+    action: 'create', performedBy: session.id, performedByName: session.fullName,
+    storeLocationId: storeId, storeAddress: storeRow?.address,
+    metadata: { bulk_copy: true, source_week: sourceWeekStart, count: sourceShifts.length },
+  })
 
   return NextResponse.json({ ok: true, count: sourceShifts.length })
 }

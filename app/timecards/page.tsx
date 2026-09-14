@@ -289,7 +289,7 @@ function TimecardsPage() {
   const loadTeamShifts = useCallback(async () => {
     setTeamLoading(true)
     try {
-      const r = await fetch(`/api/shifts?team=true&from=${from}&to=${to}T00:00:00`)
+      const r = await fetch(`/api/shifts?team=true&from=${from}&to=${to}T23:59:59`)
       if (r.ok) {
         const d = await r.json()
         setTeamShifts(d.shifts ?? [])
@@ -305,7 +305,7 @@ function TimecardsPage() {
     if (!targetUserId) return
     setLoading(true)
     try {
-      const r = await fetch(`/api/shifts?userId=${targetUserId}&from=${from}&to=${to}T00:00:00`)
+      const r = await fetch(`/api/shifts?userId=${targetUserId}&from=${from}&to=${to}T23:59:59`)
       if (r.ok) {
         const d = await r.json()
         setShifts(d.shifts ?? [])
@@ -575,7 +575,7 @@ function TimecardsPage() {
       })
       const data = await res.json()
       if (!res.ok) { setBreakError(data.error ?? 'Failed to add break'); return }
-      const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T00:00:00`)
+      const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T23:59:59`)
       if (updated.ok) {
         const d = await updated.json()
         const fresh = (d.shifts ?? []).find((s: Shift) => s.id === breakShift.id)
@@ -594,7 +594,7 @@ function TimecardsPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ breakId }),
     })
-    const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T00:00:00`)
+    const updated = await fetch(`/api/shifts?userId=${breakShift.user_id}&from=${from}&to=${to}T23:59:59`)
     if (updated.ok) {
       const d = await updated.json()
       const fresh = (d.shifts ?? []).find((s: Shift) => s.id === breakShift.id)

@@ -494,7 +494,7 @@ export async function POST(req: NextRequest) {
     LEFT JOIN organizations o ON o.id = u.org_id
     LEFT JOIN users mb ON mb.id = s.manual_by
     LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
-    WHERE s.clock_in_at >= $1 AND s.clock_in_at <= $2
+    WHERE s.clock_in_at >= $1 AND s.clock_in_at < ($2::date + 1)
       AND u.role NOT IN ('developer')
   `
   shiftSql += appendOrgFilter(orgFilter, shiftParams, 'u')

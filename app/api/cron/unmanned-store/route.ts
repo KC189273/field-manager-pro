@@ -152,10 +152,10 @@ export async function GET(req: NextRequest) {
         [store.id]
       )
 
-      // Find leadership (ops managers, owners, developers in same org)
+      // Find ops managers + owners (not field leaders or developers — too many emails)
       const leaders = store.org_id ? await query<{ id: string; email: string }>(
         `SELECT id, email FROM users
-         WHERE org_id = $1 AND is_active = TRUE AND role IN ('ops_field_leader','ops_manager','owner','developer')`,
+         WHERE org_id = $1 AND is_active = TRUE AND role IN ('ops_manager','owner')`,
         [store.org_id]
       ) : []
 
@@ -174,8 +174,8 @@ export async function GET(req: NextRequest) {
         )
       }
 
-      // Email to DMs only — leadership can check the dashboard
-      const emailRecipients = dms.map(d => d.email)
+      // Email to DMs + ops managers/owners
+      const emailRecipients = [...dms.map(d => d.email), ...leaders.map(l => l.email)]
       if (emailRecipients.length) {
         const html = buildAlertEmail(store.address, fmtOpen, fmtClose, fmtCurrent, dms.map(d => d.full_name))
         pushPromises.push(

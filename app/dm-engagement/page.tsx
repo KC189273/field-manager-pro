@@ -421,19 +421,19 @@ export default function DmEngagementPage() {
                 onClick={() => { setMainTab('coaching'); setSelectedDmId(null); if (coachingDms.length === 0) loadCoachingRollup() }}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
-                Coaching
+                Grades
               </button>
               <button
                 onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'photos' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                 Photos
-          </button>
+              </button>
               <button
                 onClick={() => { setMainTab('coaching_comp'); if (!coachCompData) loadCoachingCompliance() }}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching_comp' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
-                Coaching
+                Visits
               </button>
               <button
                 onClick={() => { setMainTab('uniform'); if (!uniformData) loadUniformCompliance() }}

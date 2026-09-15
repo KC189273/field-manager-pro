@@ -118,7 +118,7 @@ export async function GET(req: NextRequest) {
     )
     SELECT
       user_id,
-      TRIM(SPLIT_PART(full_name, ' ', 2)) AS last_name,
+      TRIM(SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1)) AS last_name,
       TRIM(SPLIT_PART(full_name, ' ', 1)) AS first_name,
       username,
       org_name,

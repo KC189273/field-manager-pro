@@ -273,13 +273,7 @@ TONE RULES:
 
 The goal is development, not punishment. Build them up while guiding them to be better.`
 
-  const response = await anthropic.messages.create({
-    model: MODEL,
-    max_tokens: 1500,
-    messages: [{ role: 'user', content: prompt }],
-  })
-
-  const text = response.content[0].type === 'text' ? response.content[0].text : ''
+  // Try up to 2 attempts to get valid JSON from the AI
   let parsed: {
     overall_score: number
     specificity: { score: number; feedback: string }
@@ -289,26 +283,43 @@ The goal is development, not punishment. Build them up while guiding them to be 
     prior_reference: { score: number; feedback: string }
     summary: string
     improvement_tips: string[]
+  } | null = null
+
+  let lastText = ''
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const messages: { role: 'user' | 'assistant'; content: string }[] = attempt === 0
+      ? [{ role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }, { role: 'assistant', content: lastText }, { role: 'user', content: 'Your response was not valid JSON. Please respond with ONLY the JSON object, no markdown, no extra text. Start with { and end with }.' }]
+
+    const response = await anthropic.messages.create({
+      model: MODEL,
+      max_tokens: 1500,
+      messages,
+    })
+
+    lastText = response.content[0].type === 'text' ? response.content[0].text : ''
+
+    try {
+      let jsonStr = lastText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+      const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
+      if (jsonMatch) jsonStr = jsonMatch[0]
+      parsed = JSON.parse(jsonStr)
+      break // Success — stop retrying
+    } catch {
+      console.error(`Coaching grade JSON parse failed (attempt ${attempt + 1}). Raw:`, lastText.slice(0, 300))
+    }
   }
 
-  try {
-    // Strip markdown code fences and any text before/after JSON
-    let jsonStr = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-    // Try to extract JSON object if there's surrounding text
-    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/)
-    if (jsonMatch) jsonStr = jsonMatch[0]
-    parsed = JSON.parse(jsonStr)
-  } catch {
-    console.error('Coaching grade JSON parse failed. Raw AI text:', text.slice(0, 500))
-    // Fallback if AI response isn't valid JSON
+  if (!parsed) {
+    console.error('Coaching grade failed after 2 attempts')
     parsed = {
       overall_score: 70,
-      specificity: { score: 70, feedback: 'Could not parse AI response' },
+      specificity: { score: 70, feedback: 'AI grading temporarily failed — please retry.' },
       actionability: { score: 70, feedback: '' },
       follow_up: { score: 70, feedback: '' },
       depth: { score: 70, feedback: '' },
       prior_reference: { score: 70, feedback: '' },
-      summary: 'Grading temporarily unavailable.',
+      summary: 'Grading temporarily unavailable — the AI response could not be processed. This coaching will be automatically re-graded.',
       improvement_tips: [],
     }
   }

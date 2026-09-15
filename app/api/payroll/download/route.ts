@@ -90,10 +90,10 @@ export async function GET(req: NextRequest) {
         u.org_id,
         u.manager_id,
         o.name AS org_name,
-        UPPER(TRIM(REGEXP_REPLACE(
-          COALESCE(dsl.address, dm_dsl.address),
-          '^.* ', ''
-        ))) AS state,
+        UPPER(COALESCE(
+          (regexp_match(COALESCE(dsl.address, dm_dsl.address), '\m([A-Za-z]{2})\M(?:\s+\d{5})?$'))[1],
+          TRIM(REGEXP_REPLACE(COALESCE(dsl.address, dm_dsl.address), '^.* ', ''))
+        )) AS state,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date AS week_start,
         SUM(
           EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0

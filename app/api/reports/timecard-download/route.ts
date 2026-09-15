@@ -372,12 +372,11 @@ export async function buildTimecardWorkbook(
   sSubtitle.value = 'Employees grouped by state for ADP multi-state payroll processing.'
   sSubtitle.font = { size: 9, color: { argb: 'FF6B7280' }, italic: true }
 
-  // Extract state from store address (last word)
+  // Extract 2-letter state abbreviation from store address (handles trailing zip codes)
   function extractState(address: string | null): string {
     if (!address) return 'Unknown'
-    const parts = address.trim().split(' ')
-    const last = parts[parts.length - 1]
-    return last.length === 2 ? last.toUpperCase() : 'Unknown'
+    const match = address.match(/\b([A-Za-z]{2})\b(?:\s+\d{5})?$/)
+    return match ? match[1].toUpperCase() : 'Unknown'
   }
 
   // Group shifts by state → employee

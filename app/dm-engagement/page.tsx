@@ -492,14 +492,20 @@ export default function DmEngagementPage() {
                   className="w-full bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4 text-left hover:border-violet-700/50 transition-colors"
                 >
                   <div className="flex items-center justify-between">
-                    <div>
+                    <div className="flex-1 min-w-0">
                       <p className="text-white font-semibold text-sm">{dm.dm_name}</p>
                       <p className="text-gray-500 text-xs mt-0.5">
                         {dm.count} coaching{dm.count !== 1 ? 's' : ''} this month
                         {dm.prev_grade && ` · Last month: ${dm.prev_grade}`}
                       </p>
+                      {dm.avg_score != null && (
+                        <div className="mt-2 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${dm.avg_score >= 80 ? 'bg-green-500' : dm.avg_score >= 70 ? 'bg-blue-500' : dm.avg_score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`}
+                            style={{ width: `${dm.avg_score}%` }} />
+                        </div>
+                      )}
                     </div>
-                    <div className="text-right flex items-center gap-2">
+                    <div className="text-right flex items-center gap-2 ml-3 shrink-0">
                       {dm.grade ? (
                         <>
                           <span className={`text-2xl font-bold ${gradeColor(dm.grade)}`}>{dm.grade}</span>
@@ -554,16 +560,34 @@ export default function DmEngagementPage() {
               )}
             </div>
 
-            {/* Monthly trend cards */}
+            {/* Coaching trend chart */}
             {coachingMonthlyAvg.length > 1 && (
-              <div className="flex gap-2 overflow-x-auto pb-1">
-                {coachingMonthlyAvg.map(m => (
-                  <div key={m.month} className={`flex-shrink-0 px-3 py-2 rounded-xl border ${gradeBg(m.grade)} text-center min-w-[70px]`}>
-                    <p className={`text-lg font-bold ${gradeColor(m.grade)}`}>{m.grade}</p>
-                    <p className="text-[10px] text-gray-500">{m.month}</p>
-                    <p className="text-[10px] text-gray-600">{m.count} visit{m.count !== 1 ? 's' : ''}</p>
-                  </div>
-                ))}
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
+                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Coaching Trend</p>
+                <div className="flex items-end gap-1.5" style={{ height: 120 }}>
+                  {[...coachingMonthlyAvg].reverse().map(m => {
+                    const pct = Math.max(m.avg_score, 5)
+                    const barColor = m.avg_score >= 80 ? 'bg-green-500' : m.avg_score >= 70 ? 'bg-blue-500' : m.avg_score >= 60 ? 'bg-amber-500' : 'bg-red-500'
+                    return (
+                      <div key={m.month} className="flex-1 flex flex-col items-center gap-1">
+                        <span className="text-[10px] text-gray-400 font-semibold">{m.grade}</span>
+                        <div className="w-full rounded-t-lg relative" style={{ height: `${pct}%` }}>
+                          <div className={`absolute inset-0 rounded-t-lg ${barColor} opacity-80`} />
+                        </div>
+                        <span className="text-[9px] text-gray-600">{new Date(m.month + '-01T12:00:00').toLocaleDateString('en-US', { month: 'short' })}</span>
+                        <span className="text-[8px] text-gray-700">{m.count}x</span>
+                      </div>
+                    )
+                  })}
+                </div>
+                {/* Grade scale reference */}
+                <div className="flex justify-between mt-2 px-1">
+                  <span className="text-[8px] text-gray-700">F</span>
+                  <span className="text-[8px] text-gray-700">D</span>
+                  <span className="text-[8px] text-gray-700">C</span>
+                  <span className="text-[8px] text-gray-700">B</span>
+                  <span className="text-[8px] text-gray-700">A</span>
+                </div>
               </div>
             )}
 

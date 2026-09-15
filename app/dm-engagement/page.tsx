@@ -479,8 +479,10 @@ export default function DmEngagementPage() {
               <p className="text-gray-500 text-sm text-center py-10">Loading coaching data...</p>
             ) : coachingDms.length === 0 ? (
               <div className="text-center py-12">
-                <p className="text-gray-500 text-sm">No coaching grades yet.</p>
+                <p className="text-gray-500 text-sm">No coaching grades found.</p>
                 <p className="text-gray-600 text-xs mt-1">Grades appear after DMs submit Quick Visit w/ Coaching reports.</p>
+                <button onClick={() => { setCoachingLoading(true); fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => { if (d?.dmRollup) setCoachingDms(d.dmRollup); if (d?.availableMonths) setAvailableMonths(d.availableMonths); if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth); }).finally(() => setCoachingLoading(false)) }}
+                  className="mt-3 text-xs text-violet-400 hover:text-violet-300 font-semibold">Retry</button>
               </div>
             ) : (
               coachingDms.map(dm => (

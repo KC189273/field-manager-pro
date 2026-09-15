@@ -19,6 +19,17 @@ export async function GET(req: NextRequest) {
 
   const orgFilter = await getOrgFilter(session)
 
+  // Debug logging for field leader coaching issue
+  if (session.role === 'ops_field_leader') {
+    console.log('[COACHING-DEBUG]', {
+      userId: session.id,
+      role: session.role,
+      org_id: session.org_id,
+      orgFilter,
+      dmId: searchParams.get('dmId'),
+    })
+  }
+
   // ── Single DM detail view ──
   if (dmId) {
     const targetDm = canViewAll(session.role) ? dmId : session.id
@@ -117,6 +128,16 @@ export async function GET(req: NextRequest) {
     WHERE 1=1 ${orgClause.replace(new RegExp(`\\$${monthIdx}`, 'g'), `'${currentMonth}-01'`)}
     ORDER BY month DESC
   `, params.slice(0, monthIdx - 1))
+
+  // Debug logging for field leader coaching issue
+  if (session.role === 'ops_field_leader') {
+    console.log('[COACHING-DEBUG] Response:', {
+      dmRollupCount: dmRollup.length,
+      availableMonths: months.length,
+      orgClause,
+      params: params.map(String),
+    })
+  }
 
   return NextResponse.json({
     currentMonth,

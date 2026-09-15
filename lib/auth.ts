@@ -40,7 +40,7 @@ export async function getSession(): Promise<SessionPayload | null> {
   if (!session) return null
 
   // Force logout field leaders: reject tokens issued before this timestamp to refresh stale org_id
-  const FORCE_LOGOUT_AFTER = 1726444800 // 2026-09-16T00:00:00Z
+  const FORCE_LOGOUT_AFTER = 1789516800 // 2026-09-16T00:00:00Z
   const iat = (session as unknown as { iat?: number }).iat
   if (session.role === 'ops_field_leader' && iat && iat < FORCE_LOGOUT_AFTER) {
     jar.delete(COOKIE)

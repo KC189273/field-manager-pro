@@ -99,11 +99,10 @@ export async function POST(req: NextRequest) {
     const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
     const nowHHMM = new Date().toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour12: false, hour: '2-digit', minute: '2-digit' })
 
-    // Skip late check if this isn't their first clock-in today
+    // Skip late check if this isn't their first clock-in today (use CST date boundaries)
     const priorShiftToday = await queryOne<{ id: string }>(
       `SELECT id FROM shifts WHERE user_id = $1 AND id != $2
-       AND clock_in_at >= ($3 || ' 00:00:00')::timestamptz
-       AND clock_in_at < ($3 || ' 00:00:00')::timestamptz + INTERVAL '1 day'
+       AND (clock_in_at AT TIME ZONE 'America/Chicago')::date = $3::date
        LIMIT 1`,
       [session.id, shift!.id, todayCST]
     ).catch(() => null)
@@ -164,6 +163,20 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // Log what the system saw at clock-in for audit trail
+    query(`
+      INSERT INTO schedule_audit_log (action, performed_by, performed_by_name, shift_date, metadata)
+      VALUES ('view', $1, $2, $3::date, $4)
+    `, [session.id, session.fullName, todayCST, JSON.stringify({
+      type: 'clock_in_check',
+      shift_id: shift!.id,
+      clock_in_time: nowHHMM,
+      scheduled_start: scheduled?.start_time?.slice(0, 5) ?? null,
+      had_prior_shift: !!priorShiftToday,
+      today_cst: todayCST,
+      server_utc: new Date().toISOString(),
+    })]).catch(() => {})
   } catch { /* never block clock-in */ }
 
   // Flag missing clock-in photo (check org setting)

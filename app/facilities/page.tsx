@@ -382,7 +382,7 @@ export default function FacilitiesPage() {
               {/* Photo */}
               <div>
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5 block">Photo <span className="text-red-400">*</span></label>
-                <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPhotoChange} />
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPhotoChange} />
                 {photoPreview ? (
                   <div className="relative">
                     <img src={photoPreview} alt="Preview" className="w-full h-48 object-cover rounded-xl" />

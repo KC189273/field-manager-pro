@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
-import { sendPushToUsers } from '@/lib/apns'
+import { sendPushToUser, sendPushToUsers } from '@/lib/apns'
 import { logScheduleChange } from '@/lib/schedule-audit'
 import { GET as validateSchedule } from '@/app/api/schedule/validate/route'
 
@@ -101,20 +101,37 @@ export async function POST(req: NextRequest) {
     }
   } catch {}
 
-  // Push notification to all employees with shifts for this store/week
-  const employees = await query<{ employee_id: string }>(
-    `SELECT DISTINCT employee_id FROM scheduled_shifts
-     WHERE store_location_id = $1 AND shift_date >= $2 AND shift_date <= ($2::date + INTERVAL '6 days')`,
+  // Push notification to each employee with their specific shifts
+  const empShifts = await query<{ employee_id: string; shift_date: string; start_time: string; end_time: string }>(
+    `SELECT employee_id, shift_date::text, start_time::text, end_time::text
+     FROM scheduled_shifts
+     WHERE store_location_id = $1 AND shift_date >= $2 AND shift_date <= ($2::date + INTERVAL '6 days')
+       AND employee_id IS NOT NULL
+     ORDER BY employee_id, shift_date`,
     [storeId, weekStart]
   )
   const weekDate = new Date(weekStart + 'T12:00:00Z')
   const weekLabel = weekDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-  sendPushToUsers(
-    employees.map(e => e.employee_id),
-    'Schedule Published',
-    `Your schedule for the week of ${weekLabel} is now available.`,
-    'schedule_published'
-  ).catch(() => {})
+  const storeName = storeRow?.address?.split(',')[0] || 'your store'
+
+  // Group shifts by employee
+  const byEmployee = new Map<string, string[]>()
+  for (const s of empShifts) {
+    if (!byEmployee.has(s.employee_id)) byEmployee.set(s.employee_id, [])
+    const dayName = new Date(s.shift_date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short' })
+    const startH = parseInt(s.start_time); const startM = s.start_time.slice(3, 5)
+    const fmtStart = `${startH % 12 || 12}:${startM}${startH >= 12 ? 'PM' : 'AM'}`
+    byEmployee.get(s.employee_id)!.push(`${dayName} ${fmtStart}`)
+  }
+
+  for (const [empId, days] of byEmployee) {
+    sendPushToUser(
+      empId,
+      `Schedule — ${storeName}`,
+      `Week of ${weekLabel}: ${days.join(', ')}. Open My Schedule to view details.`,
+      'schedule_published'
+    ).catch(() => {})
+  }
 
   return NextResponse.json({ ok: true })
 }

@@ -137,5 +137,12 @@ export async function GET(req: NextRequest) {
     shift_dates: shifts.map(s => s.shift_date),
   })]).catch(() => {})
 
-  return NextResponse.json({ shifts, stores, storeShifts, verificationCode, serverTime })
+  // Check if employee has confirmed this week's schedule
+  const confirmed = await queryOne<{ confirmed_at: string }>(
+    `SELECT confirmed_at::text FROM schedule_confirmations
+     WHERE user_id = $1 AND week_start = $2 LIMIT 1`,
+    [session.id, weekStart]
+  ).catch(() => null)
+
+  return NextResponse.json({ shifts, stores, storeShifts, verificationCode, serverTime, confirmed: !!confirmed, confirmedAt: confirmed?.confirmed_at ?? null })
 }

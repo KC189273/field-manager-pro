@@ -268,6 +268,17 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Validation warnings for abnormal entries
+  if (clockOut) {
+    const durationHours = (new Date(clockOut).getTime() - new Date(clockIn).getTime()) / 3600000
+    if (durationHours > 14) {
+      return NextResponse.json({ error: `This entry is ${durationHours.toFixed(1)} hours long. Shifts over 14 hours are unusual — please verify the times are correct and resubmit.`, warning: true }, { status: 400 })
+    }
+    if (durationHours < 0) {
+      return NextResponse.json({ error: 'Clock-out time is before clock-in time. Please check the dates and times.' }, { status: 400 })
+    }
+  }
+
   await query(
     `INSERT INTO shifts (user_id, clock_in_at, clock_out_at, is_manual, manual_note, manual_by)
      VALUES ($1, $2, $3, TRUE, $4, $5)`,
@@ -360,6 +371,17 @@ export async function PATCH(req: NextRequest) {
         error: `These times overlap with an existing shift (${fmtOverlapTime(overlap.clock_in_at)} – ${fmtOverlapTime(overlap.clock_out_at)}). Please adjust the times so they don't overlap.`,
         overlap: { existingIn: overlap.clock_in_at, existingOut: overlap.clock_out_at },
       }, { status: 409 })
+    }
+  }
+
+  // Validation warnings for abnormal edits
+  if (newClockOut) {
+    const editDuration = (new Date(newClockOut).getTime() - new Date(newClockIn).getTime()) / 3600000
+    if (editDuration > 14) {
+      return NextResponse.json({ error: `This edit would make the shift ${editDuration.toFixed(1)} hours long. Shifts over 14 hours are unusual — please verify the times are correct.`, warning: true }, { status: 400 })
+    }
+    if (editDuration < 0) {
+      return NextResponse.json({ error: 'Clock-out time is before clock-in time. Please check the dates and times.' }, { status: 400 })
     }
   }
 

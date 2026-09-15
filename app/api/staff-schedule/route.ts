@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { logScheduleChange } from '@/lib/schedule-audit'
+import { sendPushToUser } from '@/lib/apns'
 
 interface ShiftRow {
   id: string
@@ -343,6 +344,20 @@ export async function PATCH(req: NextRequest) {
       newStartTime: startTime ?? oldShift.start_time, newEndTime: endTime ?? oldShift.end_time,
       oldBreakMinutes: oldShift.break_minutes, newBreakMinutes: breakMinutes ?? oldShift.break_minutes,
     })
+
+    // Notify employee if their shift time changed
+    const targetEmp = employeeId ?? oldShift.employee_id
+    if (targetEmp && (startTime || endTime || shiftDate)) {
+      const newDate = shiftDate ?? oldShift.shift_date
+      const dayName = new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+      const fmtT = (t: string) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}` }
+      const newStart = fmtT(startTime ?? oldShift.start_time)
+      const newEnd = fmtT(endTime ?? oldShift.end_time)
+      sendPushToUser(targetEmp, 'Schedule Changed',
+        `${dayName}: ${newStart} – ${newEnd} at ${storeRow?.address?.split(',')[0] || 'your store'}`,
+        'schedule_changed'
+      ).catch(() => {})
+    }
   }
 
   return NextResponse.json({ ok: true })

@@ -51,6 +51,17 @@ export async function POST(req: NextRequest) {
     if (isNaN(startMs) || isNaN(endMs) || startMs >= endMs) {
       return NextResponse.json({ error: 'Invalid break times — end must be after start' }, { status: 400 })
     }
+    const breakMins = (endMs - startMs) / 60000
+    if (breakMins > 120) {
+      return NextResponse.json({ error: `This break is ${Math.round(breakMins)} minutes (${(breakMins / 60).toFixed(1)} hours). Breaks over 2 hours are unusual — please verify the times are correct.`, warning: true }, { status: 400 })
+    }
+    // Check for duplicate break times on the same shift
+    const dupBreak = await queryOne<{ id: string }>(`
+      SELECT id FROM shift_breaks WHERE shift_id = $1 AND break_start = $2 AND break_end = $3 LIMIT 1
+    `, [shiftId, breakStart, breakEnd]).catch(() => null)
+    if (dupBreak) {
+      return NextResponse.json({ error: 'A break with these exact times already exists on this shift.' }, { status: 400 })
+    }
     try { await ensureBreaksTable() } catch {}
     const shift = await queryOne<{ id: string; user_id: string }>(
       `SELECT id, user_id FROM shifts WHERE id = $1`, [shiftId]

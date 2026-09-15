@@ -109,6 +109,8 @@ export default function MySchedulePage() {
   const isDm = session?.role === 'manager'
   const [verificationCode, setVerificationCode] = useState('')
   const [serverTime, setServerTime] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const [confirming, setConfirming] = useState(false)
 
   async function addDmShift() {
     if (!addDay || !addForm.storeId) {
@@ -192,6 +194,7 @@ export default function MySchedulePage() {
         setStoreShifts(d.storeShifts ?? [])
         if (d.verificationCode) setVerificationCode(d.verificationCode)
         if (d.serverTime) setServerTime(d.serverTime)
+        setConfirmed(!!d.confirmed)
       })
       .finally(() => setLoading(false))
   }, [weekStart, selectedStore])
@@ -275,6 +278,26 @@ export default function MySchedulePage() {
               <p className="text-xs text-gray-500 mt-0.5">Days Scheduled</p>
             </div>
           </div>
+        )}
+
+        {/* Schedule confirmation */}
+        {!loading && shifts.length > 0 && session?.role === 'employee' && (
+          confirmed ? (
+            <div className="flex items-center gap-2 bg-green-900/20 border border-green-800/30 rounded-xl px-4 py-2.5 mb-3">
+              <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              <p className="text-xs text-green-400 font-medium">Schedule confirmed</p>
+            </div>
+          ) : (
+            <button onClick={async () => {
+              setConfirming(true)
+              await fetch('/api/my-schedule/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ weekStart }) }).catch(() => {})
+              setConfirmed(true)
+              setConfirming(false)
+            }} disabled={confirming}
+              className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors mb-3">
+              {confirming ? 'Confirming...' : 'Got It — I\'ve Seen My Schedule'}
+            </button>
+          )
         )}
 
         {loading ? (

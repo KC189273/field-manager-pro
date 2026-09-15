@@ -39,6 +39,14 @@ export async function getSession(): Promise<SessionPayload | null> {
   const session = await verifyToken(token)
   if (!session) return null
 
+  // Force logout: reject tokens issued before this timestamp (set to force all users to re-login)
+  const FORCE_LOGOUT_AFTER = 1726444800 // 2026-09-16T00:00:00Z — all tokens before this are invalid
+  const iat = (session as unknown as { iat?: number }).iat
+  if (iat && iat < FORCE_LOGOUT_AFTER) {
+    jar.delete(COOKIE)
+    return null
+  }
+
   // Check if user is still active or role has changed (catches terminated users and stale role JWTs)
   try {
     const { queryOne } = await import('@/lib/db')

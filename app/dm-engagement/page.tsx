@@ -236,19 +236,23 @@ export default function DmEngagementPage() {
     }
   }, [session])
 
-  // Load coaching rollup — when coaching tab is selected
-  useEffect(() => {
-    if (!session || mainTab !== 'coaching' || coachingDms.length > 0) return
+  // Load coaching rollup
+  const loadCoachingRollup = useCallback(async () => {
     setCoachingLoading(true)
-    fetch('/api/coaching-grades').then(r => {
-      if (!r.ok) { console.error('coaching-grades API:', r.status); return null }
-      return r.json()
-    }).then(d => {
+    try {
+      const r = await fetch('/api/coaching-grades')
+      if (!r.ok) { console.error('coaching-grades API:', r.status); setCoachingLoading(false); return }
+      const d = await r.json()
       if (d?.dmRollup) setCoachingDms(d.dmRollup)
       if (d?.availableMonths) setAvailableMonths(d.availableMonths)
       if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth)
-      setCoachingLoading(false)
-    }).catch(err => { console.error('coaching-grades fetch error:', err); setCoachingLoading(false) })
+    } catch (err) { console.error('coaching-grades error:', err) }
+    setCoachingLoading(false)
+  }, [selectedMonth])
+
+  useEffect(() => {
+    if (!session || mainTab !== 'coaching' || coachingDms.length > 0) return
+    loadCoachingRollup()
   }, [session, mainTab])
 
   async function loadScorecard(dmId?: string) {
@@ -414,7 +418,7 @@ export default function DmEngagementPage() {
                 Scorecard
               </button>
               <button
-                onClick={() => { setMainTab('coaching'); setSelectedDmId(null) }}
+                onClick={() => { setMainTab('coaching'); setSelectedDmId(null); if (coachingDms.length === 0) loadCoachingRollup() }}
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                 Coaching
@@ -481,7 +485,7 @@ export default function DmEngagementPage() {
               <div className="text-center py-12">
                 <p className="text-gray-500 text-sm">No coaching grades found.</p>
                 <p className="text-gray-600 text-xs mt-1">Grades appear after DMs submit Quick Visit w/ Coaching reports.</p>
-                <button onClick={() => { setCoachingLoading(true); fetch('/api/coaching-grades').then(r => r.ok ? r.json() : null).then(d => { if (d?.dmRollup) setCoachingDms(d.dmRollup); if (d?.availableMonths) setAvailableMonths(d.availableMonths); if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth); }).finally(() => setCoachingLoading(false)) }}
+                <button onClick={loadCoachingRollup}
                   className="mt-3 text-xs text-violet-400 hover:text-violet-300 font-semibold">Retry</button>
               </div>
             ) : (

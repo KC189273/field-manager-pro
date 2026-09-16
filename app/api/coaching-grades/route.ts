@@ -111,27 +111,34 @@ export async function GET(req: NextRequest) {
   params.push(`${currentMonth}-01`)
   const monthIdx = params.length
 
-  const dmRollup = await query<{
-    dm_id: string; dm_name: string; avg_score: number; count: number
-    prev_avg_score: number | null
-  }>(`
-    SELECT cg.dm_id, cg.dm_name,
-           ROUND(AVG(cg.overall_score) FILTER (WHERE cg.graded_at >= $${monthIdx}::date AND cg.graded_at < $${monthIdx}::date + INTERVAL '1 month'))::int as avg_score,
-           COUNT(*) FILTER (WHERE cg.graded_at >= $${monthIdx}::date AND cg.graded_at < $${monthIdx}::date + INTERVAL '1 month')::int as count,
-           ROUND(AVG(cg.overall_score) FILTER (WHERE cg.graded_at >= $${monthIdx}::date - INTERVAL '1 month' AND cg.graded_at < $${monthIdx}::date))::int as prev_avg_score
-    FROM coaching_grades cg
-    WHERE 1=1 ${orgClause}
-    GROUP BY cg.dm_id, cg.dm_name
-    ORDER BY avg_score ASC NULLS LAST
-  `, params)
+  let dmRollup: { dm_id: string; dm_name: string; avg_score: number; count: number; prev_avg_score: number | null }[]
+  let months: { month: string }[]
 
-  // Available months
-  const months = await query<{ month: string }>(`
-    SELECT DISTINCT TO_CHAR(graded_at, 'YYYY-MM') as month
-    FROM coaching_grades
-    WHERE 1=1 ${orgClause.replace(new RegExp(`\\$${monthIdx}`, 'g'), `'${currentMonth}-01'`)}
-    ORDER BY month DESC
-  `, params.slice(0, monthIdx - 1))
+  try {
+    dmRollup = await query(`
+      SELECT cg.dm_id, cg.dm_name,
+             ROUND(AVG(cg.overall_score) FILTER (WHERE cg.graded_at >= $${monthIdx}::date AND cg.graded_at < $${monthIdx}::date + INTERVAL '1 month'))::int as avg_score,
+             COUNT(*) FILTER (WHERE cg.graded_at >= $${monthIdx}::date AND cg.graded_at < $${monthIdx}::date + INTERVAL '1 month')::int as count,
+             ROUND(AVG(cg.overall_score) FILTER (WHERE cg.graded_at >= $${monthIdx}::date - INTERVAL '1 month' AND cg.graded_at < $${monthIdx}::date))::int as prev_avg_score
+      FROM coaching_grades cg
+      WHERE 1=1 ${orgClause}
+      GROUP BY cg.dm_id, cg.dm_name
+      ORDER BY avg_score ASC NULLS LAST
+    `, params)
+  } catch (err) {
+    return NextResponse.json({ error: `dmRollup query failed: ${String(err).slice(0, 200)}`, orgClause, params: params.map(String), monthIdx }, { status: 500 })
+  }
+
+  try {
+    months = await query(`
+      SELECT DISTINCT TO_CHAR(graded_at, 'YYYY-MM') as month
+      FROM coaching_grades
+      WHERE 1=1 ${orgClause.replace(new RegExp(`\\$${monthIdx}`, 'g'), `'${currentMonth}-01'`)}
+      ORDER BY month DESC
+    `, params.slice(0, monthIdx - 1))
+  } catch (err) {
+    return NextResponse.json({ error: `months query failed: ${String(err).slice(0, 200)}`, orgClause, monthIdx }, { status: 500 })
+  }
 
   // Debug logging for field leader coaching issue — write to DB
   if (session.role === 'ops_field_leader') {

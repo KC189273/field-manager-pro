@@ -332,8 +332,7 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json()
 
-  // Stretch DMs can only submit remote coaching
-  // Stretch DMs can submit all coaching form types
+  // Stretch DMs can submit all coaching form types (quick visit + remote coaching)
 
   // ── Quick Visit (with optional coaching) ─────────────────────────────────
   if (body.visit_type === 'quick' || body.visit_type === 'quick_coaching') {

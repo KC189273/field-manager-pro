@@ -4,7 +4,7 @@ import { sendPushToUser } from '@/lib/apns'
 import { sendEmail } from '@/lib/notifications'
 
 // Runs every 15 minutes — detects employees whose GPS went silent while clocked in
-// If GPS has been dark for 5+ minutes, auto clock them out
+// If GPS has been dark for 15+ minutes, auto clock them out
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -34,13 +34,13 @@ export async function GET(req: NextRequest) {
         AND u.role = 'employee'
         AND s.store_location_id IS NOT NULL
         AND (
-          -- No breadcrumb at all in 5+ minutes, OR no breadcrumbs ever for this shift
+          -- No breadcrumb at all in 15+ minutes, OR no breadcrumbs ever for this shift
           NOT EXISTS (
             SELECT 1 FROM gps_breadcrumbs g
-            WHERE g.shift_id = s.id AND g.recorded_at > NOW() - INTERVAL '5 minutes'
+            WHERE g.shift_id = s.id AND g.recorded_at > NOW() - INTERVAL '15 minutes'
           )
         )
-        AND s.clock_in_at < NOW() - INTERVAL '5 minutes'
+        AND s.clock_in_at < NOW() - INTERVAL '15 minutes'
     `)
 
     if (!silent.length) {

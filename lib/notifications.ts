@@ -6,18 +6,34 @@ export async function sendEmail(
   to: string | string[],
   subject: string,
   html: string,
-  attachments?: { filename: string; content: string }[]
+  attachments?: { filename: string; content: string }[],
+  opts?: { userId?: string; category?: string }
 ): Promise<void> {
+  const recipients = Array.isArray(to) ? to : [to]
   try {
-    await resend.emails.send({
+    const result = await resend.emails.send({
       from: process.env.REPORT_EMAIL_FROM!,
-      to: Array.isArray(to) ? to : [to],
+      to: recipients,
       subject,
       html,
       ...(attachments?.length ? { attachments } : {}),
     })
+    // Log successful send
+    const { query } = await import('./db')
+    query(`INSERT INTO email_log (to_addresses, subject, status, resend_id, user_id, category)
+      VALUES ($1, $2, 'sent', $3, $4, $5)`,
+      [recipients, subject, (result as { data?: { id?: string } })?.data?.id ?? null, opts?.userId ?? null, opts?.category ?? null]
+    ).catch(() => {})
   } catch (e) {
     console.error('Email send failed:', e)
+    // Log failed send
+    try {
+      const { query } = await import('./db')
+      query(`INSERT INTO email_log (to_addresses, subject, status, error, user_id, category)
+        VALUES ($1, $2, 'failed', $3, $4, $5)`,
+        [recipients, subject, String(e).slice(0, 500), opts?.userId ?? null, opts?.category ?? null]
+      ).catch(() => {})
+    } catch {}
   }
 }
 

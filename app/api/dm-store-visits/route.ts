@@ -333,9 +333,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
 
   // Stretch DMs can only submit remote coaching
-  if (isStretchDm && body.visit_type !== 'remote_coaching') {
-    return NextResponse.json({ error: 'Stretch DMs can only submit Remote Coaching' }, { status: 403 })
-  }
+  // Stretch DMs can submit all coaching form types
 
   // ── Quick Visit (with optional coaching) ─────────────────────────────────
   if (body.visit_type === 'quick' || body.visit_type === 'quick_coaching') {

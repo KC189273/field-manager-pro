@@ -332,9 +332,9 @@ export default function DmVisitPage() {
       if (d.role === 'employee' && !d.isStretchDm) { router.replace('/dashboard'); return }
       setSession(d)
       setForm(f => ({ ...f, dm_name: d.fullName }))
-      // Stretch DMs: force to Remote Coaching tab and load their DM's stores
+      // Stretch DMs: default to Quick Visit tab (can access all forms)
       if (d.role === 'employee' && d.isStretchDm) {
-        setTab('remote')
+        setTab('quick')
       }
       if (d.role === 'developer') {
         fetch('/api/orgs').then(r => r.json()).then(o => { if (o.orgs) setOrgs(o.orgs) })
@@ -798,7 +798,10 @@ export default function DmVisitPage() {
 
   const isStretchEmployee = session.role === 'employee' && (session as unknown as { isStretchDm?: boolean }).isStretchDm
   const tabs: { id: Tab; label: string }[] = isStretchEmployee
-    ? [{ id: 'remote', label: 'Remote Coaching' }]
+    ? [
+        { id: 'quick', label: 'Quick Visit' },
+        { id: 'remote', label: 'Remote Coaching' },
+      ]
     : [
         ...(session.role === 'developer' ? [{ id: 'new' as Tab, label: 'New Checklist (dev)' }] : []),
         { id: 'quick', label: 'Quick Visit' },

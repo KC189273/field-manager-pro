@@ -3,7 +3,7 @@ import { query, queryOne } from '@/lib/db'
 import { sendPushToUser } from '@/lib/apns'
 
 // Runs every 15 minutes — detects employees whose GPS went silent while clocked in
-// If GPS has been dark for 30+ minutes, auto clock them out
+// If GPS has been dark for 5+ minutes, auto clock them out
 export async function GET(req: NextRequest) {
   const auth = req.headers.get('authorization')
   if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -29,13 +29,13 @@ export async function GET(req: NextRequest) {
         AND u.role = 'employee'
         AND s.store_location_id IS NOT NULL
         AND (
-          -- No breadcrumb at all in 30+ minutes, OR no breadcrumbs ever for this shift
+          -- No breadcrumb at all in 5+ minutes, OR no breadcrumbs ever for this shift
           NOT EXISTS (
             SELECT 1 FROM gps_breadcrumbs g
-            WHERE g.shift_id = s.id AND g.recorded_at > NOW() - INTERVAL '30 minutes'
+            WHERE g.shift_id = s.id AND g.recorded_at > NOW() - INTERVAL '5 minutes'
           )
         )
-        AND s.clock_in_at < NOW() - INTERVAL '30 minutes'
+        AND s.clock_in_at < NOW() - INTERVAL '5 minutes'
     `)
 
     if (!silent.length) {
@@ -80,14 +80,14 @@ export async function GET(req: NextRequest) {
 
       // Notify employee
       sendPushToUser(emp.user_id, 'Auto Clock-Out',
-        'You were clocked out because your GPS signal was lost. If you are still working, please clock back in.',
+        'You were clocked out because the app was closed or GPS was turned off. Keep the app open and GPS enabled during your shift.',
         'geofence'
       ).catch(() => {})
 
       // Notify DM
       if (emp.manager_id) {
-        sendPushToUser(emp.manager_id, 'GPS Signal Lost',
-          `${emp.user_name} was auto clocked out — GPS signal lost for 30+ minutes.`,
+        sendPushToUser(emp.manager_id, 'Employee App Closed',
+          `${emp.user_name} was auto clocked out — app closed or GPS turned off.`,
           'flag_created'
         ).catch(() => {})
       }

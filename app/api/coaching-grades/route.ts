@@ -3,6 +3,7 @@ import { getSession, isOwner, type Role } from '@/lib/auth'
 import { query } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { scoreToGrade } from '@/lib/coaching-grader'
+import { logApiError } from '@/lib/api-error-log'
 
 const canViewAll = (role: Role) => role === 'ops_field_leader' || role === 'ops_manager' || isOwner(role) || role === 'developer'
 
@@ -126,7 +127,8 @@ export async function GET(req: NextRequest) {
       ORDER BY avg_score ASC NULLS LAST
     `, params)
   } catch (err) {
-    return NextResponse.json({ error: `dmRollup query failed: ${String(err).slice(0, 200)}`, orgClause, params: params.map(String), monthIdx }, { status: 500 })
+    logApiError('/api/coaching-grades', `dmRollup: ${String(err)}`, session.id)
+    return NextResponse.json({ error: 'Failed to load coaching grades' }, { status: 500 })
   }
 
   try {
@@ -137,7 +139,8 @@ export async function GET(req: NextRequest) {
       ORDER BY month DESC
     `, params.slice(0, monthIdx - 1))
   } catch (err) {
-    return NextResponse.json({ error: `months query failed: ${String(err).slice(0, 200)}`, orgClause, monthIdx }, { status: 500 })
+    logApiError('/api/coaching-grades', `months: ${String(err)}`, session.id)
+    return NextResponse.json({ error: 'Failed to load coaching grades' }, { status: 500 })
   }
 
   // Debug logging for field leader coaching issue — write to DB

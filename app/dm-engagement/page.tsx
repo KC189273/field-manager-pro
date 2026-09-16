@@ -244,8 +244,7 @@ export default function DmEngagementPage() {
     try {
       const r = await fetch('/api/coaching-grades')
       if (!r.ok) {
-        const txt = await r.text().catch(() => '')
-        setCoachingError(`API ${r.status}: ${txt.slice(0, 100)}`)
+        setCoachingError(`Error ${r.status} — tap Retry`)
         setCoachingLoading(false)
         return
       }

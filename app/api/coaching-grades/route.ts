@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isOwner, type Role } from '@/lib/auth'
-import { query } from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 import { scoreToGrade } from '@/lib/coaching-grader'
 import { logApiError } from '@/lib/api-error-log'
@@ -37,7 +37,12 @@ export async function GET(req: NextRequest) {
 
   // ── Single DM detail view ──
   if (dmId) {
-    const targetDm = canViewAll(session.role) ? dmId : session.id
+    let targetDm = canViewAll(session.role) ? dmId : session.id
+    // DMs can also view their stretch DMs' grades
+    if (session.role === 'manager' && dmId !== session.id) {
+      const isStretch = await queryOne<{ id: string }>(`SELECT id FROM users WHERE id = $1 AND manager_id = $2 AND COALESCE(is_stretch_dm, FALSE) = TRUE`, [dmId, session.id]).catch(() => null)
+      if (isStretch) targetDm = dmId
+    }
     const params: unknown[] = [targetDm]
     let dateFilter = ''
     if (month) {
@@ -100,10 +105,10 @@ export async function GET(req: NextRequest) {
     orgClause = ` AND cg.org_id = $${params.length}`
   }
 
-  // If DM, only show own data
+  // If DM, show own data + stretch DMs who report to them
   if (session.role === 'manager') {
     params.push(session.id)
-    orgClause += ` AND cg.dm_id = $${params.length}`
+    orgClause += ` AND (cg.dm_id = $${params.length} OR cg.dm_id IN (SELECT id FROM users WHERE manager_id = $${params.length} AND COALESCE(is_stretch_dm, FALSE) = TRUE))`
   }
 
   // Current month grades per DM

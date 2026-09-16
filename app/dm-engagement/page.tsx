@@ -419,6 +419,13 @@ export default function DmEngagementPage() {
 
         {/* Main Tab Switcher */}
         <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-xl p-1 overflow-x-auto">
+          {/* Grades tab visible to everyone including DMs */}
+          <button
+            onClick={() => { setMainTab('coaching'); setSelectedDmId(null); if (coachingDms.length === 0) loadCoachingRollup() }}
+            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
+          >
+            Grades
+          </button>
           {session.role !== 'manager' && (
             <>
               <button
@@ -426,12 +433,6 @@ export default function DmEngagementPage() {
                 className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'scorecard' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
               >
                 Scorecard
-              </button>
-              <button
-                onClick={() => { setMainTab('coaching'); setSelectedDmId(null); if (coachingDms.length === 0) loadCoachingRollup() }}
-                className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-colors whitespace-nowrap ${mainTab === 'coaching' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-white'}`}
-              >
-                Grades
               </button>
               <button
                 onClick={() => { setMainTab('photos'); if (!photoData) loadPhotoCompliance() }}

@@ -237,16 +237,27 @@ export default function DmEngagementPage() {
   }, [session])
 
   // Load coaching rollup
+  const [coachingError, setCoachingError] = useState('')
   const loadCoachingRollup = useCallback(async () => {
     setCoachingLoading(true)
+    setCoachingError('')
     try {
       const r = await fetch('/api/coaching-grades')
-      if (!r.ok) { console.error('coaching-grades API:', r.status); setCoachingLoading(false); return }
+      if (!r.ok) {
+        const txt = await r.text().catch(() => '')
+        setCoachingError(`API ${r.status}: ${txt.slice(0, 100)}`)
+        setCoachingLoading(false)
+        return
+      }
       const d = await r.json()
-      if (d?.dmRollup) setCoachingDms(d.dmRollup)
+      if (d?.dmRollup?.length > 0) {
+        setCoachingDms(d.dmRollup)
+      } else {
+        setCoachingError(`API returned ${d?.dmRollup?.length ?? 0} DMs`)
+      }
       if (d?.availableMonths) setAvailableMonths(d.availableMonths)
       if (d?.currentMonth && !selectedMonth) setSelectedMonth(d.currentMonth)
-    } catch (err) { console.error('coaching-grades error:', err) }
+    } catch (err) { setCoachingError(`Fetch error: ${String(err).slice(0, 100)}`) }
     setCoachingLoading(false)
   }, [selectedMonth])
 
@@ -485,6 +496,7 @@ export default function DmEngagementPage() {
               <div className="text-center py-12">
                 <p className="text-gray-500 text-sm">No coaching grades found.</p>
                 <p className="text-gray-600 text-xs mt-1">Grades appear after DMs submit Quick Visit w/ Coaching reports.</p>
+                {coachingError && <p className="text-red-400 text-xs mt-2 bg-red-900/20 rounded-lg px-3 py-2 mx-4">{coachingError}</p>}
                 <button onClick={loadCoachingRollup}
                   className="mt-3 text-xs text-violet-400 hover:text-violet-300 font-semibold">Retry</button>
               </div>

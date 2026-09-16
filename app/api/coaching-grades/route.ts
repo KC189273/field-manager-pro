@@ -19,15 +19,19 @@ export async function GET(req: NextRequest) {
 
   const orgFilter = await getOrgFilter(session)
 
-  // Debug logging for field leader coaching issue
+  // Debug logging for field leader coaching issue — write to DB
   if (session.role === 'ops_field_leader') {
-    console.log('[COACHING-DEBUG]', {
-      userId: session.id,
-      role: session.role,
-      org_id: session.org_id,
-      orgFilter,
-      dmId: searchParams.get('dmId'),
-    })
+    query(`INSERT INTO schedule_audit_log (action, performed_by, performed_by_name, metadata)
+      VALUES ('view', $1, $2, $3)`,
+      [session.id, session.fullName, JSON.stringify({
+        type: 'coaching_debug_request',
+        role: session.role,
+        org_id: session.org_id,
+        orgFilter,
+        dmId: searchParams.get('dmId'),
+        timestamp: new Date().toISOString(),
+      })]
+    ).catch(() => {})
   }
 
   // ── Single DM detail view ──
@@ -129,14 +133,20 @@ export async function GET(req: NextRequest) {
     ORDER BY month DESC
   `, params.slice(0, monthIdx - 1))
 
-  // Debug logging for field leader coaching issue
+  // Debug logging for field leader coaching issue — write to DB
   if (session.role === 'ops_field_leader') {
-    console.log('[COACHING-DEBUG] Response:', {
-      dmRollupCount: dmRollup.length,
-      availableMonths: months.length,
-      orgClause,
-      params: params.map(String),
-    })
+    query(`INSERT INTO schedule_audit_log (action, performed_by, performed_by_name, metadata)
+      VALUES ('view', $1, $2, $3)`,
+      [session.id, session.fullName, JSON.stringify({
+        type: 'coaching_debug_response',
+        dmRollupCount: dmRollup.length,
+        availableMonthsCount: months.length,
+        orgClause,
+        params: params.map(String),
+        firstDm: dmRollup[0] ? { name: dmRollup[0].dm_name, score: dmRollup[0].avg_score, count: dmRollup[0].count } : null,
+        timestamp: new Date().toISOString(),
+      })]
+    ).catch(() => {})
   }
 
   return NextResponse.json({

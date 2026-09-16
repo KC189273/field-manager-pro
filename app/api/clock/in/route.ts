@@ -212,5 +212,9 @@ export async function POST(req: NextRequest) {
     } catch { /* never block clock-in */ }
   }
 
-  return NextResponse.json({ ok: true, shiftId: shift!.id })
+  return NextResponse.json({
+    ok: true,
+    shiftId: shift!.id,
+    notice: 'Keep the Field Manager Pro app open and GPS enabled during your entire shift. Closing the app or turning off GPS will result in an automatic clock-out.',
+  })
 }

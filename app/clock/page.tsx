@@ -218,7 +218,7 @@ export default function ClockPage() {
         setMessage({ text: data.error || 'Failed to clock in', type: 'error' })
       } else {
         setGeofenceBlocked(null)
-        setMessage({ text: 'Clocked in successfully', type: 'success' })
+        setMessage({ text: data.notice || 'Clocked in successfully', type: 'success' })
         setClockInPhoto(null)
         setPhotoPreview(null)
         await fetchStatus()

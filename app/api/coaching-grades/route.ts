@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
   try {
     months = await query(`
       SELECT DISTINCT TO_CHAR(graded_at, 'YYYY-MM') as month
-      FROM coaching_grades
+      FROM coaching_grades cg
       WHERE 1=1 ${orgClause.replace(new RegExp(`\\$${monthIdx}`, 'g'), `'${currentMonth}-01'`)}
       ORDER BY month DESC
     `, params.slice(0, monthIdx - 1))

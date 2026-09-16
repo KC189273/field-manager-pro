@@ -386,7 +386,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const shift = await query<{ user_id: string }>(
-    `UPDATE shifts SET clock_in_at = COALESCE($1, clock_in_at), clock_out_at = $2,
+    `UPDATE shifts SET clock_in_at = COALESCE($1, clock_in_at), clock_out_at = COALESCE($2, clock_out_at),
      is_manual = TRUE, manual_note = $3, manual_by = $4
      WHERE id = $5 RETURNING user_id`,
     [clockIn ?? null, clockOut ?? null, note, session.id, shiftId]

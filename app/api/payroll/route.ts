@@ -83,6 +83,8 @@ async function getPeriodHours(orgId: string, periodStart: string, periodEnd: str
     regular_hours: number
     ot_hours: number
     total_hours: number
+    gross_hours: number
+    break_hours: number
   }>(`
     WITH weekly_hours AS (
       SELECT
@@ -92,6 +94,8 @@ async function getPeriodHours(orgId: string, periodStart: string, periodEnd: str
         u.manager_id,
         u.avatar_key,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $4)::date AS week_start,
+        SUM(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0) AS gross_hours,
+        SUM(COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)) AS break_hours,
         SUM(
           EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
           - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start))) / 3600.0 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
@@ -109,7 +113,9 @@ async function getPeriodHours(orgId: string, periodStart: string, periodEnd: str
       user_id, full_name, username, manager_id, avatar_key,
       ROUND(SUM(LEAST(total_hours, 40))::numeric, 2)::float AS regular_hours,
       ROUND(SUM(GREATEST(total_hours - 40, 0))::numeric, 2)::float AS ot_hours,
-      ROUND(SUM(total_hours)::numeric, 2)::float AS total_hours
+      ROUND(SUM(total_hours)::numeric, 2)::float AS total_hours,
+      ROUND(SUM(gross_hours)::numeric, 2)::float AS gross_hours,
+      ROUND(SUM(break_hours)::numeric, 2)::float AS break_hours
     FROM weekly_hours
     GROUP BY user_id, full_name, username, manager_id, avatar_key
     ORDER BY full_name

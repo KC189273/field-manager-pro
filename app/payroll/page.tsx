@@ -54,6 +54,8 @@ interface EmployeeHours {
   regular_hours: number
   ot_hours: number
   total_hours: number
+  gross_hours?: number
+  break_hours?: number
 }
 
 interface WeeklyHours {
@@ -401,9 +403,11 @@ export default function PayrollPage() {
                                   <thead>
                                     <tr className="border-b border-gray-700">
                                       <th className="text-left px-3 py-2 text-xs text-gray-400 font-medium">Employee</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Gross</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Break</th>
                                       <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Reg</th>
                                       <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">OT</th>
-                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Total</th>
+                                      <th className="text-right px-3 py-2 text-xs text-gray-400 font-medium">Net</th>
                                     </tr>
                                   </thead>
                                   <tbody>
@@ -418,6 +422,8 @@ export default function PayrollPage() {
                                             {emp.full_name}
                                           </div>
                                         </td>
+                                        <td className="px-3 py-2 text-right text-gray-500">{emp.gross_hours?.toFixed(2) ?? '—'}</td>
+                                        <td className={`px-3 py-2 text-right ${(emp.break_hours ?? 0) > 0 ? 'text-amber-400' : 'text-gray-600'}`}>{(emp.break_hours ?? 0).toFixed(2)}</td>
                                         <td className="px-3 py-2 text-right text-gray-300">{emp.regular_hours.toFixed(2)}</td>
                                         <td className={`px-3 py-2 text-right font-medium ${emp.ot_hours > 0 ? 'text-amber-400' : 'text-gray-500'}`}>
                                           {emp.ot_hours.toFixed(2)}

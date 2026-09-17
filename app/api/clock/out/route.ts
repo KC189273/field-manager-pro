@@ -171,7 +171,7 @@ export async function POST(req: NextRequest) {
     const notifyUsers = await query<{ id: string }>(
       `SELECT u.id FROM users u
        LEFT JOIN notification_preferences np ON np.user_id = u.id
-       WHERE u.role IN ('ops_field_leader','ops_manager','owner','sales_director','developer') AND u.is_active = TRUE AND u.org_id = $1
+       WHERE u.role IN ('ops_manager','sales_director') AND u.is_active = TRUE AND u.org_id = $1
          AND COALESCE(np.dm_clockout_alerts, TRUE) = TRUE
          AND COALESCE(np.push_enabled, TRUE) = TRUE`,
       [session.org_id]

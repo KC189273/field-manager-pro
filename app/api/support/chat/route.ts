@@ -617,30 +617,6 @@ async function escalateConversation(convId: string, reason: string, userName: st
       </div>`
     : ''
 
-  // Email to developer + owner with triage included
-  const admins = await query<{ email: string; full_name: string }>(`
-    SELECT email, full_name FROM users WHERE role IN ('developer', 'owner') AND is_active = TRUE
-  `)
-  const appUrl = process.env.APP_URL ?? 'https://fieldmanagerpro.app'
-  for (const admin of admins) {
-    sendEmail(
-      admin.email,
-      `[Support Escalation] ${conv?.user_name ?? userName}: ${firstUserMsg.slice(0, 60)}`,
-      `<div style="font-family:-apple-system,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
-        <div style="background:#7c3aed;padding:20px 24px;border-radius:12px 12px 0 0;">
-          <h1 style="color:white;margin:0;font-size:20px;">Support Escalation</h1>
-          <p style="color:rgba(255,255,255,0.8);margin:4px 0 0;font-size:14px;">${conv?.user_name ?? userName} (${conv?.user_role ?? 'unknown'})</p>
-        </div>
-        <div style="background:white;border:1px solid #e5e5ea;border-radius:0 0 12px 12px;padding:24px;">
-          <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Question:</strong> ${firstUserMsg}</p>
-          <p style="font-size:14px;color:#555;margin:0 0 8px;"><strong>Reason:</strong> ${reason}</p>
-          ${triageHtml}
-          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;" />
-          <p style="font-size:12px;color:#888;margin:0 0 4px;"><strong>Full Transcript:</strong></p>
-          <pre style="font-size:12px;color:#555;background:#f9f9f9;padding:12px;border-radius:8px;white-space:pre-wrap;">${transcript.slice(0, 2000)}</pre>
-          <a href="${appUrl}/admin/agents" style="display:inline-block;background:#7c3aed;color:white;text-decoration:none;font-weight:600;font-size:14px;padding:12px 24px;border-radius:10px;margin-top:16px;">Reply in App</a>
-        </div>
-      </div>`
-    ).catch(() => {})
-  }
+  // Escalation email already sent above (AI Escalation email to developers + owners)
+  // No duplicate email needed here
 }

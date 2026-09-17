@@ -41,10 +41,6 @@
       "schedule": "0 14 * * *"
     },
     {
-      "path": "/api/cron/gps-silence",
-      "schedule": "*/15 * * * *"
-    },
-    {
       "path": "/api/cron/auto-clockout",
       "schedule": "0 3 * * *"
     },

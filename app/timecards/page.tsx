@@ -443,12 +443,20 @@ function TimecardsPage() {
     return payCodes.filter(pc => pc.date.slice(0, 10) === dateStr)
   }
 
+  // Only count shifts that fall within the displayed week (CST dates)
+  const displayedShifts = shifts.filter(s => {
+    const d = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
+    const fromStr = toLocalDateStr(monday)
+    const toStr = toLocalDateStr(sunday)
+    return d >= fromStr && d <= toStr
+  })
+
   // Week total includes PTO but not sick
   const ptoSeconds = payCodes
     .filter(pc => pc.type === 'pto')
     .reduce((sum, pc) => sum + Number(pc.hours ?? 0) * 3600, 0)
-  const totalSeconds = shifts.reduce((sum, s) => sum + shiftDuration(s, now), 0) + ptoSeconds
-  const manualCount = shifts.filter(s => s.is_manual).length
+  const totalSeconds = displayedShifts.reduce((sum, s) => sum + shiftDuration(s, now), 0) + ptoSeconds
+  const manualCount = displayedShifts.filter(s => s.is_manual).length
 
   function openEdit(shift: Shift) {
     setEditShift(shift)
@@ -1026,7 +1034,7 @@ function TimecardsPage() {
               </div>
               <div className="flex-1 bg-gray-900 border border-gray-800 rounded-xl p-3 text-center">
                 <p className="text-xs text-gray-500 mb-1">Shifts</p>
-                <p className="font-bold text-white">{shifts.length}</p>
+                <p className="font-bold text-white">{displayedShifts.length}</p>
               </div>
               {manualCount > 0 && (
                 <div className="flex-1 bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-center">

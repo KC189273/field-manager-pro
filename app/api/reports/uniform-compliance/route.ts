@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
       WHERE uc.result = 'fail'
         ${dateFilter}
         ${orgFilter}
+        ${dmFilter}
       ORDER BY uc.created_at DESC
       LIMIT 50
     `)
@@ -75,6 +76,7 @@ export async function GET(req: NextRequest) {
       WHERE uc.result = 'fail'
         AND uc.created_at >= NOW() - INTERVAL '30 days'
         ${orgFilter}
+        ${dmFilter}
       GROUP BY u.id, u.full_name
       HAVING COUNT(*) >= 2
       ORDER BY fail_count DESC

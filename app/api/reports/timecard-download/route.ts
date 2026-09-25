@@ -497,6 +497,10 @@ export async function POST(req: NextRequest) {
       AND u.role NOT IN ('developer')
   `
   shiftSql += appendOrgFilter(orgFilter, shiftParams, 'u')
+  if (session.role === 'manager') {
+    shiftParams.push(session.id)
+    shiftSql += ` AND u.manager_id = $${shiftParams.length}`
+  }
   shiftSql += ` ORDER BY u.full_name, s.clock_in_at`
 
   const shifts = await query<ShiftRow>(shiftSql, shiftParams)
@@ -521,6 +525,10 @@ export async function POST(req: NextRequest) {
       AND u.role NOT IN ('developer')
   `
   pcSql += appendOrgFilter(orgFilter, pcParams, 'u')
+  if (session.role === 'manager') {
+    pcParams.push(session.id)
+    pcSql += ` AND u.manager_id = $${pcParams.length}`
+  }
   pcSql += ` ORDER BY u.full_name, pc.date`
 
   const payCodes = await query<PayCodeRow>(pcSql, pcParams)

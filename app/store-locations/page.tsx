@@ -119,7 +119,7 @@ export default function StoreLocationsPage() {
     if (session) loadStores()
   }, [session, loadStores])
 
-  const canManage = session && (session.role === 'owner' || session.role === 'sales_director' || session.role === 'developer')
+  const canManage = session && (session.role === 'owner' || session.role === 'sales_director' || session.role === 'ops_manager' || session.role === 'developer')
 
   async function handleAdd() {
     if (!addAddress.trim()) { setAddError('Address is required.'); return }

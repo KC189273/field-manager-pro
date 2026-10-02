@@ -104,11 +104,22 @@ export default function PayrollPage() {
   const [dmHours, setDmHours] = useState<EmployeeHours[]>([])
 
   const [from, setFrom] = useState(() => {
-    const d = new Date()
-    d.setDate(d.getDate() - 13)
-    return d.toISOString().split('T')[0]
+    // Align to Monday-Sunday: find most recent Monday, go back 1 more week for 2-week range
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    const day = now.getDay()
+    const daysToMonday = day === 0 ? 6 : day - 1
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - daysToMonday - 7) // Previous week's Monday
+    return monday.toLocaleDateString('en-CA') // YYYY-MM-DD in local time
   })
-  const [to, setTo] = useState(() => new Date().toISOString().split('T')[0])
+  const [to, setTo] = useState(() => {
+    const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }))
+    const day = now.getDay()
+    const daysToSunday = day === 0 ? 0 : 7 - day
+    const sunday = new Date(now)
+    sunday.setDate(now.getDate() + daysToSunday)
+    return sunday.toLocaleDateString('en-CA')
+  })
   const [downloading, setDownloading] = useState(false)
 
   // Track which DM timecards have been downloaded this session (per period)
@@ -394,8 +405,8 @@ export default function PayrollPage() {
                             <StatusBadge status={period.status} myApproval={!!myApproval} />
                           </div>
 
-                          {/* Employee hours table — show for last closed period */}
-                          {isClosed && myHours.length > 0 && (
+                          {/* Employee hours table — show only for the current actionable period */}
+                          {isClosed && myHours.length > 0 && currentPeriod && period.id === currentPeriod.id && (
                             <div className="mb-4">
                               <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">Period Hours Summary</p>
                               <div className="bg-gray-800/60 rounded-xl overflow-hidden">
@@ -437,7 +448,7 @@ export default function PayrollPage() {
                             </div>
                           )}
 
-                          {isClosed && myHours.length === 0 && !myApproval && (
+                          {isClosed && myHours.length === 0 && !myApproval && currentPeriod && period.id === currentPeriod.id && (
                             <p className="text-gray-600 text-sm mb-4">No employee hours found for this period.</p>
                           )}
 

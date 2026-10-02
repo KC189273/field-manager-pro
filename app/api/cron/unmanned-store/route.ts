@@ -86,10 +86,19 @@ export async function GET(req: NextRequest) {
       [storeIds, todayCST]
     ).catch(() => [] as { store_location_id: string }[])
 
-    // Check if any DM is physically near the store (GPS breadcrumb within 500ft in last 15 min)
-    const dmNearby: string[] = []
+    // Check for clocked-in users near stores (covers DMs who clock in without selecting a store)
+    const nearbyClockIn: string[] = []
     try {
       const { haversineDistanceFt } = await import('@/lib/geofence')
+      const clockedInUsers = await query<{ lat: number; lng: number }>(`
+        SELECT s.clock_in_lat AS lat, s.clock_in_lng AS lng
+        FROM shifts s
+        WHERE s.clock_in_at IS NOT NULL AND s.clock_out_at IS NULL
+          AND s.clock_in_lat IS NOT NULL AND s.clock_in_lng IS NOT NULL
+          AND s.store_location_id IS NULL
+      `).catch(() => [])
+
+      // Also check DM GPS breadcrumbs (within last 15 min)
       const dmCrumbs = await query<{ user_id: string; lat: number; lng: number }>(`
         SELECT DISTINCT ON (g.user_id) g.user_id, g.lat, g.lng
         FROM gps_breadcrumbs g
@@ -99,12 +108,13 @@ export async function GET(req: NextRequest) {
         ORDER BY g.user_id, g.recorded_at DESC
       `).catch(() => [])
 
+      const allCoords = [...clockedInUsers, ...dmCrumbs]
       for (const store of openStores) {
         if (!store.lat || !store.lng) continue
-        for (const crumb of dmCrumbs) {
-          const dist = haversineDistanceFt(Number(crumb.lat), Number(crumb.lng), store.lat, store.lng)
+        for (const coords of allCoords) {
+          const dist = haversineDistanceFt(Number(coords.lat), Number(coords.lng), store.lat, store.lng)
           if (dist <= 500) {
-            dmNearby.push(store.id)
+            nearbyClockIn.push(store.id)
             break
           }
         }
@@ -114,7 +124,7 @@ export async function GET(req: NextRequest) {
     const coveredIds = new Set([
       ...clockedIn.map(r => r.store_location_id),
       ...dmScheduled.map(r => r.store_location_id),
-      ...dmNearby,
+      ...nearbyClockIn,
     ])
     const unmanned = openStores.filter(s => !coveredIds.has(s.id))
 

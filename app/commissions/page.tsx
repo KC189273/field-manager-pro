@@ -33,31 +33,35 @@ function currentMonth(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
-// ── September 2026 Comp Plan ────────────────────────────────────────────────
+// ── October 2026 Comp Plan (payout 10/30) ───────────────────────────────────
 
-// Revenue Multiplier — based on TOTAL monthly revenue generated
-function getMultiplier(totalRevenue: number): { pct: number; label: string; color: string } {
-  if (totalRevenue >= 5000) return { pct: 1.30, label: '130%', color: 'text-emerald-400' }
-  if (totalRevenue >= 3500) return { pct: 1.20, label: '120%', color: 'text-emerald-400' }
-  if (totalRevenue >= 2500) return { pct: 1.20, label: '120%', color: 'text-emerald-400' }
-  if (totalRevenue >= 1500) return { pct: 1.00, label: '100%', color: 'text-white' }
-  if (totalRevenue >= 1000) return { pct: 0.75, label: '75%', color: 'text-amber-400' }
+// Accessory Revenue Multiplier — based on monthly ACCESSORY revenue
+function getMultiplier(accessoryRevenue: number): { pct: number; label: string; color: string } {
+  if (accessoryRevenue >= 5000) return { pct: 1.30, label: '130%', color: 'text-emerald-400' }
+  if (accessoryRevenue >= 3500) return { pct: 1.20, label: '120%', color: 'text-emerald-400' }
+  if (accessoryRevenue >= 2500) return { pct: 1.10, label: '110%', color: 'text-emerald-400' }
+  if (accessoryRevenue >= 1500) return { pct: 1.00, label: '100%', color: 'text-white' }
+  if (accessoryRevenue >= 750) return { pct: 0.75, label: '75%', color: 'text-amber-400' }
   return { pct: 0.50, label: '50%', color: 'text-red-400' }
 }
 
-function getNextMultiplierTier(totalRevenue: number): { target: number; label: string } | null {
-  if (totalRevenue >= 5000) return null
-  if (totalRevenue >= 3500) return { target: 5000, label: '130%' }
-  if (totalRevenue >= 2500) return { target: 3500, label: '120%+' }
-  if (totalRevenue >= 1500) return { target: 2500, label: '120%' }
-  if (totalRevenue >= 1000) return { target: 1500, label: '100%' }
-  return { target: 1000, label: '75%' }
+function getNextMultiplierTier(accessoryRevenue: number): { target: number; label: string } | null {
+  if (accessoryRevenue >= 5000) return null
+  if (accessoryRevenue >= 3500) return { target: 5000, label: '130%' }
+  if (accessoryRevenue >= 2500) return { target: 3500, label: '120%' }
+  if (accessoryRevenue >= 1500) return { target: 2500, label: '110%' }
+  if (accessoryRevenue >= 750) return { target: 1500, label: '100%' }
+  return { target: 750, label: '75%' }
 }
 
-// Voice Boost — requires $2,500 accessory revenue + 50 voice boxes
-function getVoiceBoostRate(accessoryRevenue: number, voiceBoxes: number): number | null {
-  if (accessoryRevenue < 2500 || voiceBoxes < 50) return null
-  return voiceBoxes >= 75 ? 8 : 6
+// Voice Boost — total New + React + BTS + HSI determines tier
+// Requires $1,500 accessory revenue to qualify
+function getVoiceBoostRate(accessoryRevenue: number, totalActivations: number): number | null {
+  if (accessoryRevenue < 1500) return null
+  if (totalActivations >= 90) return 8
+  if (totalActivations >= 60) return 7
+  if (totalActivations >= 45) return 6
+  return 5 // 0-44 tier is same as base rate, so no boost
 }
 
 const BASE_VOICE_RATE = 5
@@ -85,19 +89,22 @@ function calcCommission(entries: Entry[]) {
     totalTotalRevenue += Number(e.total_revenue) || 0
   }
 
-  // Voice activations paid at voice rate (excludes Promo10)
+  // Voice activations paid at voice rate (New + BYOD + React — excludes Promo10)
   const totalVoiceActivations = totalNewAct + totalByod + totalReacts
 
-  // Voice box count for Voice Boost threshold (includes Promo10)
+  // Total activations for Voice Boost tier (New + React + BTS + HSI)
+  const boostActivations = totalNewAct + totalReacts + totalBts + totalHsi
+
+  // Legacy voice box count for display
   const voiceBoxes = totalNewAct + totalByod + totalReacts + totalPromo10
 
-  // Revenue Multiplier (based on total revenue)
-  const multiplier = getMultiplier(totalTotalRevenue)
+  // Accessory Revenue Multiplier (based on accessory revenue)
+  const multiplier = getMultiplier(totalAccessoryRevenue)
 
-  // Voice Boost (requires $2,500 accessory revenue)
-  const voiceBoostRate = getVoiceBoostRate(totalAccessoryRevenue, voiceBoxes)
+  // Voice Boost (tiered by activation count, requires $1,500 accessory revenue)
+  const voiceBoostRate = getVoiceBoostRate(totalAccessoryRevenue, boostActivations)
   const baseVoiceRate = voiceBoostRate ?? BASE_VOICE_RATE
-  const voiceBoostActive = voiceBoostRate !== null
+  const voiceBoostActive = voiceBoostRate !== null && voiceBoostRate > BASE_VOICE_RATE
 
   // Apply multiplier to base rates
   const effectiveVoiceRate = baseVoiceRate * multiplier.pct
@@ -108,17 +115,17 @@ function calcCommission(entries: Entry[]) {
   const upgradeCommission = totalUpgrades * effectiveUpgradeRate
   const hsiBoxCommission = totalHsi * effectiveUpgradeRate
   const btsCommission = totalBts * effectiveUpgradeRate
+  const promo10Commission = totalPromo10 * effectiveUpgradeRate
 
-  const tierRatedTotal = voiceCommission + upgradeCommission + hsiBoxCommission + btsCommission
+  const tierRatedTotal = voiceCommission + upgradeCommission + hsiBoxCommission + btsCommission + promo10Commission
 
-  // Bonus Accelerator (flat rates — NOT affected by multiplier)
-  const promo10Commission = totalPromo10 * 2
+  // Additional Bonuses & Adjustments (flat rates — NOT affected by multiplier)
   const mimSpiffCommission = totalMimLines * 10
   const attachmentCommission = (totalCP + totalHdVideo) * 1
-  const homeInternetCommission = totalHomeInternet * 15
+  const hsiBonus = totalHsi * 5
+  const homeInternetCommission = totalHomeInternet * 5 // Legacy field — kept for existing data
 
-  const bonusStackTotal = promo10Commission + mimSpiffCommission +
-    attachmentCommission + homeInternetCommission
+  const bonusStackTotal = mimSpiffCommission + attachmentCommission + hsiBonus + homeInternetCommission
 
   // MiM penalty
   const mimPenalty = totalMimLines === 0 ? -100 : 0
@@ -127,14 +134,15 @@ function calcCommission(entries: Entry[]) {
 
   return {
     totalNewAct, totalByod, totalReacts, totalPromo10,
-    totalVoiceActivations, voiceBoxes,
+    totalVoiceActivations, voiceBoxes, boostActivations,
     totalUpgrades, totalHsi, totalBts, totalMimLines,
     totalHomeInternet, totalCP, totalHdVideo, totalAccessoryRevenue, totalTotalRevenue,
     multiplier, baseVoiceRate, effectiveVoiceRate, effectiveUpgradeRate,
     voiceBoostActive, voiceBoostRate,
     voiceCommission, upgradeCommission, hsiBoxCommission, btsCommission,
+    promo10Commission,
     tierRatedTotal,
-    promo10Commission, mimSpiffCommission,
+    mimSpiffCommission, hsiBonus,
     attachmentCommission, homeInternetCommission, bonusStackTotal,
     mimPenalty, totalCommission,
   }
@@ -146,15 +154,16 @@ function calcDayPayout(entry: Entry, effectiveVoiceRate: number, effectiveUpgrad
   const upgrades = (entry.upgrades ?? 0) * effectiveUpgradeRate
   const hsiBox = (entry.hsi ?? 0) * effectiveUpgradeRate
   const bts = (entry.bts ?? 0) * effectiveUpgradeRate
-  const tierTotal = voice + upgrades + hsiBox + bts
+  const promo10 = (entry.promo10 ?? 0) * effectiveUpgradeRate
+  const tierTotal = voice + upgrades + hsiBox + bts + promo10
 
-  // Bonus Accelerator (flat)
-  const promo10 = (entry.promo10 ?? 0) * 2
+  // Additional Bonuses (flat)
   const mimSpiff = (entry.mim_lines ?? 0) * 10
   const attachments = ((entry.complete_protection ?? 0) + (entry.hd_video ?? 0)) * 1
-  const homeInternet = (entry.home_internet ?? 0) * 15
+  const hsiBonus = (entry.hsi ?? 0) * 5
+  const homeInternet = (entry.home_internet ?? 0) * 5
 
-  return tierTotal + promo10 + mimSpiff + attachments + homeInternet
+  return tierTotal + mimSpiff + attachments + hsiBonus + homeInternet
 }
 
 export default function CommissionsPage() {
@@ -254,7 +263,7 @@ export default function CommissionsPage() {
   }
   const dayPayout = calcDayPayout(todayEntry, commission.effectiveVoiceRate, commission.effectiveUpgradeRate)
 
-  const nextTier = getNextMultiplierTier(commission.totalTotalRevenue)
+  const nextTier = getNextMultiplierTier(commission.totalAccessoryRevenue)
 
   if (!session) return null
 
@@ -340,7 +349,7 @@ export default function CommissionsPage() {
                 {numInput('new_activations', 'New Activations', 'New lines')}
                 {numInput('byod', 'BYOD', 'Bring your own device')}
                 {numInput('reacts', 'Reactivations', 'Reacts')}
-                {numInput('promo10', 'Promo10 AAL', '$2 flat / counts toward voice boost')}
+                {numInput('promo10', 'Promo10 AAL', '$3 base rate')}
               </div>
             </div>
 
@@ -357,14 +366,13 @@ export default function CommissionsPage() {
               </div>
             </div>
 
-            {/* Bonus Accelerator */}
+            {/* Additional Bonuses */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">Bonus Accelerator</p>
-              <p className="text-[10px] text-gray-600 mb-3">Not affected by multiplier</p>
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">Additional Bonuses</p>
+              <p className="text-[10px] text-gray-600 mb-3">Flat rates — not affected by multiplier</p>
               <div className="grid grid-cols-2 gap-3">
-                {numInput('mim_lines', 'MiM Lines', '$10/line flat')}
-                {numInput('home_internet', 'Home Internet', '$15/account flat')}
-                {numInput('complete_protection', 'Complete Protection', '$1/attachment')}
+                {numInput('mim_lines', 'MiM Lines', '$10/line')}
+                {numInput('complete_protection', 'Complete/HD Attach', '$1/attachment')}
                 {numInput('hd_video', 'HD Video', '$1/attachment')}
               </div>
             </div>
@@ -375,7 +383,7 @@ export default function CommissionsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className={labelCls}>Total Revenue</p>
-                  <p className="text-[10px] text-gray-600 mb-1">Drives your multiplier</p>
+                  <p className="text-[10px] text-gray-600 mb-1">For tracking only</p>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input type="number" inputMode="decimal" step="0.01" min="0"
@@ -386,7 +394,7 @@ export default function CommissionsPage() {
                 </div>
                 <div>
                   <p className={labelCls}>Accessory Revenue</p>
-                  <p className="text-[10px] text-gray-600 mb-1">$2,500 unlocks Voice Boost</p>
+                  <p className="text-[10px] text-gray-600 mb-1">Drives multiplier + Voice Boost</p>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">$</span>
                     <input type="number" inputMode="decimal" step="0.01" min="0"
@@ -437,13 +445,13 @@ export default function CommissionsPage() {
             {/* Key Stats */}
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-cyan-400">{commission.voiceBoxes}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Voice Boxes</p>
+                <p className="text-2xl font-bold text-cyan-400">{commission.boostActivations}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Boost Acts</p>
                 {commission.voiceBoostActive && (
-                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">${commission.baseVoiceRate}/BOX BOOST</p>
+                  <p className="text-[10px] text-emerald-400 font-semibold mt-0.5">${commission.baseVoiceRate}/VOICE BOOST</p>
                 )}
-                {!commission.voiceBoostActive && commission.voiceBoxes >= 50 && commission.totalAccessoryRevenue < 2500 && (
-                  <p className="text-[10px] text-amber-400 mt-0.5">Need $2,500 acc.</p>
+                {!commission.voiceBoostActive && commission.totalAccessoryRevenue < 1500 && (
+                  <p className="text-[10px] text-amber-400 mt-0.5">Need $1,500 acc.</p>
                 )}
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
@@ -451,8 +459,8 @@ export default function CommissionsPage() {
                 <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Multiplier</p>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
-                <p className="text-2xl font-bold text-violet-400">${commission.totalTotalRevenue.toFixed(0)}</p>
-                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Total Rev.</p>
+                <p className="text-2xl font-bold text-violet-400">${commission.totalAccessoryRevenue.toFixed(0)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-1">Acc. Rev.</p>
               </div>
             </div>
 
@@ -460,14 +468,14 @@ export default function CommissionsPage() {
             {nextTier && (
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs text-gray-400">${commission.totalTotalRevenue.toFixed(0)} of ${nextTier.target.toLocaleString()}</p>
+                  <p className="text-xs text-gray-400">${commission.totalAccessoryRevenue.toFixed(0)} of ${nextTier.target.toLocaleString()}</p>
                   <p className="text-xs font-semibold text-violet-400">Next: {nextTier.label}</p>
                 </div>
                 <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
                   <div className="h-full bg-violet-500 rounded-full transition-all"
-                    style={{ width: `${Math.min(100, (commission.totalTotalRevenue / nextTier.target) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (commission.totalAccessoryRevenue / nextTier.target) * 100)}%` }} />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">${(nextTier.target - commission.totalTotalRevenue).toFixed(0)} to go</p>
+                <p className="text-xs text-gray-500 mt-1">${(nextTier.target - commission.totalAccessoryRevenue).toFixed(0)} to go</p>
               </div>
             )}
 
@@ -476,19 +484,22 @@ export default function CommissionsPage() {
               <div className="flex items-center justify-between">
                 <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Voice Boost</p>
                 {commission.voiceBoostActive ? (
-                  <span className="text-xs font-bold text-emerald-400 bg-emerald-900/40 px-2 py-0.5 rounded-full">${commission.baseVoiceRate}/BOX x {commission.multiplier.label}</span>
+                  <span className="text-xs font-bold text-emerald-400 bg-emerald-900/40 px-2 py-0.5 rounded-full">${commission.baseVoiceRate}/voice x {commission.multiplier.label}</span>
                 ) : (
-                  <span className="text-xs text-gray-500">Inactive</span>
+                  <span className="text-xs text-gray-500">${commission.baseVoiceRate}/voice (base tier)</span>
                 )}
               </div>
-              {commission.totalAccessoryRevenue < 2500 && (
-                <p className="text-xs text-gray-500 mt-2">Requires $2,500 accessory revenue to unlock (${commission.totalAccessoryRevenue.toFixed(0)} / $2,500)</p>
+              {commission.totalAccessoryRevenue < 1500 && (
+                <p className="text-xs text-gray-500 mt-2">Requires $1,500 accessory revenue to qualify (${commission.totalAccessoryRevenue.toFixed(0)} / $1,500)</p>
               )}
-              {commission.totalAccessoryRevenue >= 2500 && !commission.voiceBoostActive && (
-                <p className="text-xs text-gray-500 mt-2">{50 - commission.voiceBoxes} more voice boxes for $6/box boost</p>
-              )}
-              {commission.voiceBoostActive && commission.voiceBoxes < 75 && (
-                <p className="text-xs text-gray-300 mt-2">{75 - commission.voiceBoxes} more for $8/box</p>
+              {commission.totalAccessoryRevenue >= 1500 && (
+                <p className="text-xs text-gray-300 mt-2">
+                  {commission.boostActivations} activations (New+React+BTS+HSI) —
+                  {commission.boostActivations < 45 ? ` ${45 - commission.boostActivations} more for $6/voice` :
+                   commission.boostActivations < 60 ? ` ${60 - commission.boostActivations} more for $7/voice` :
+                   commission.boostActivations < 90 ? ` ${90 - commission.boostActivations} more for $8/voice` :
+                   ' Max tier!'}
+                </p>
               )}
             </div>
 
@@ -517,6 +528,7 @@ export default function CommissionsPage() {
                 ['Upgrades', `${commission.totalUpgrades} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.upgradeCommission],
                 ['HSI', `${commission.totalHsi} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.hsiBoxCommission],
                 ['BTS', `${commission.totalBts} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.btsCommission],
+                ['Promo10', `${commission.totalPromo10} x $${BASE_UPGRADE_RATE} x ${commission.multiplier.label}`, commission.promo10Commission],
               ].filter(([, , val]) => (val as number) > 0).map(([label, detail, val]) => (
                 <div key={label as string} className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 last:border-0">
                   <div>
@@ -532,13 +544,12 @@ export default function CommissionsPage() {
               </div>
 
               <div className="px-4 py-3 border-t border-gray-700">
-                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Bonus Accelerator (flat rates)</p>
+                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Additional Bonuses (flat rates)</p>
               </div>
               {[
-                ['Promo10 AAL', `${commission.totalPromo10} x $2`, commission.promo10Commission],
                 ['MiM Lines', `${commission.totalMimLines} x $10/line`, commission.mimSpiffCommission],
+                ['HSI Bonus', `${commission.totalHsi} x $5`, commission.hsiBonus],
                 ['Attachments', `${commission.totalCP + commission.totalHdVideo} x $1`, commission.attachmentCommission],
-                ['Home Internet', `${commission.totalHomeInternet} x $15`, commission.homeInternetCommission],
               ].filter(([, , val]) => (val as number) > 0).map(([label, detail, val]) => (
                 <div key={label as string} className="flex items-center justify-between px-4 py-2 border-b border-gray-800/50 last:border-0">
                   <div>

@@ -6,8 +6,8 @@ features:
   - commissions-estimator
 permissions:
   - "all retail roles"
-  - "September 2026 comp plan"
-verified: 2026-09-03
+  - "October 2026 comp plan"
+verified: 2026-10-07
 ---
 # Commissions Estimator
 
@@ -22,43 +22,41 @@ All retail roles can access the Commissions Estimator from the More menu.
 2. Use the **Daily Entry** tab to enter your sales numbers for each day.
 3. Switch to the **Monthly Summary** tab to see your full monthly commission breakdown.
 
-## Current Comp Plan (September 2026)
+## Current Comp Plan (October 2026 — payout 10/30)
 
-### Base Pay (per box/per line)
-- **$5** per voice activation (New Activations + BYOD + Reactivations). Promo10 is excluded from base pay.
-- **$3** per Upgrade, HSI, or BTS line.
+### Base Pay (per activation)
+- **$5** per voice activation (New Activations + BYOD + Reactivations).
+- **$3** per Upgrade, HSI, BTS, or Promo10.
 
-### Revenue Multiplier
-Your base pay is multiplied by a percentage based on your **total monthly revenue generated**:
-- Under $1,000 → 50%
-- $1,000–$1,499 → 75%
+### Accessory Revenue Multiplier
+Your base pay is multiplied by a percentage based on your **monthly accessory revenue**:
+- Under $750 → 50%
+- $750–$1,499 → 75%
 - $1,500–$2,499 → 100%
-- $2,500–$4,999 → 120%
+- $2,500–$3,499 → 110%
+- $3,500–$4,999 → 120%
 - $5,000+ → 130%
 
 ### Voice Boost
-Requires **$2,500 in accessory revenue** to unlock:
-- 50+ voice boxes → **$6/box** (replaces the $5 base rate)
-- 75+ voice boxes → **$8/box**
-- Voice Boost **stacks with** the Revenue Multiplier.
-- Reacts, BYOD, new activations, and Promo10 all count toward voice box thresholds.
+Your total **New + React + BTS + HSI activations** for the month determine your tier. All eligible voice activations pay at the tier rate. Must achieve **$1,500 in accessory revenue** to qualify.
+- 0–44 activations → **$5/voice** (base rate, no boost)
+- 45–59 activations → **$6/voice**
+- 60–89 activations → **$7/voice**
+- 90+ activations → **$8/voice**
+- Voice Boost **stacks with** the Accessory Revenue Multiplier.
 
-### Bonus Accelerator (flat rates — NOT affected by multiplier)
-- **$2** per Promo10 (Add-A-Line)
+### Additional Bonuses & Adjustments (flat rates — NOT affected by multiplier)
+- **$1** per Complete Protection or HD attachment
 - **$10** per MiM line
-- **$1** per attachment (Complete Protection or HD Video)
-- **$15** per Home Internet account
-
-### Monthly Minimum
-- Must sell at least **1 MiM account** per month.
-- No MiM = **-$100 penalty**.
+- **$5** per HSI
+- **-$100** if no MiM sold for the month
 
 ## Revenue Inputs
 The estimator has two revenue fields:
-- **Total Revenue** — Your total monthly revenue generated. This drives your Revenue Multiplier tier.
-- **Accessory Revenue** — Your accessory sales revenue. $2,500 unlocks Voice Boost.
+- **Total Revenue** — For tracking purposes only.
+- **Accessory Revenue** — Drives your Multiplier tier and Voice Boost qualification ($1,500 minimum).
 
 ## Is this my actual pay?
 No. The estimator gives you an approximate estimate based on the compensation plan loaded into the app. Your actual commissions are calculated by payroll. Use this as a guide to track your daily performance.
 
-The calculator is hardcoded to the **September 2026 comp plan**. It does not auto-update when the comp plan changes — it requires a code update. If the rates look wrong, the comp plan in the app may need to be updated to match the current plan.
+The calculator is hardcoded to the **October 2026 comp plan**. It does not auto-update when the comp plan changes — it requires a code update. If the rates look wrong, the comp plan in the app may need to be updated to match the current plan.

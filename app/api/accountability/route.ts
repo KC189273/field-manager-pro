@@ -792,8 +792,17 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const {
     subjectId, subjectIds, level, title, incidentDate, notes, expectations,
-    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode, attachment_key, authorOverrideId,
+    priorConvos, linkedVerbalIds, reminderAcknowledged, testMode, attachment_key, attachment_keys, authorOverrideId,
   } = body
+  // Support both single attachment_key (legacy) and multiple attachment_keys
+  const allAttachmentKeys: Array<{ key: string; filename: string }> = []
+  if (Array.isArray(attachment_keys)) {
+    for (const ak of attachment_keys) {
+      if (ak.key) allAttachmentKeys.push({ key: ak.key, filename: ak.filename || ak.key.split('/').pop() || 'file' })
+    }
+  } else if (attachment_key) {
+    allAttachmentKeys.push({ key: attachment_key, filename: attachment_key.split('/').pop() || 'file' })
+  }
   const isTestMode = session.role === 'developer' && testMode === true
 
   // Author override: owner/ops_manager/developer can submit on behalf of a DM
@@ -873,6 +882,12 @@ export async function POST(req: NextRequest) {
         }
       }
       if (!doc) continue
+
+      // Save attachments
+      for (const ak of allAttachmentKeys) {
+        await query(`INSERT INTO accountability_doc_attachments (doc_id, s3_key, filename) VALUES ($1, $2, $3)`,
+          [doc.id, ak.key, ak.filename]).catch(() => {})
+      }
 
       await auditLog(doc.id, 'submitted', session.id, session.fullName, 'Documented Conversation')
 
@@ -1008,6 +1023,12 @@ export async function POST(req: NextRequest) {
     }
   }
   doc = doc!
+
+  // Save attachments
+  for (const ak of allAttachmentKeys) {
+    await query(`INSERT INTO accountability_doc_attachments (doc_id, s3_key, filename) VALUES ($1, $2, $3)`,
+      [doc.id, ak.key, ak.filename]).catch(() => {})
+  }
 
   // Insert prior convos
   if (Array.isArray(priorConvos) && priorConvos.length) {

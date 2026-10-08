@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
+import { getReceiptViewUrl } from '@/lib/s3'
 
 const VIEWER_ROLES = ['manager', 'sales_director', 'owner', 'ops_manager', 'ops_field_leader', 'developer']
 
@@ -67,6 +68,18 @@ export async function GET(
     [id]
   )
 
+  // Attachments
+  const rawAttachments = await query<{ id: string; s3_key: string; filename: string; created_at: string }>(
+    `SELECT id, s3_key, filename, created_at FROM accountability_doc_attachments WHERE doc_id = $1 ORDER BY created_at`,
+    [id]
+  ).catch(() => [])
+  const attachments = await Promise.all(
+    rawAttachments.map(async a => ({
+      ...a,
+      url: await getReceiptViewUrl(a.s3_key).catch(() => null),
+    }))
+  )
+
   // Audit log
   const auditLog = await query<{ action: string; actor_name: string | null; notes: string | null; created_at: string }>(
     `SELECT action, actor_name, notes, created_at FROM accountability_audit_log
@@ -74,7 +87,7 @@ export async function GET(
     [id]
   )
 
-  return NextResponse.json({ ...doc, priorConvos, linkedVerbals, auditLog })
+  return NextResponse.json({ ...doc, priorConvos, linkedVerbals, attachments, auditLog })
 }
 
 export async function PATCH(

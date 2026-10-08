@@ -52,6 +52,7 @@ interface DetailDoc extends Doc {
   revision_requested_at: string | null
   priorConvos: Array<{ id: string; convo_date: string; notes: string }>
   linkedVerbals: Array<{ ref_number: string; level: string; title: string; incident_date: string; status: string }>
+  attachments: Array<{ id: string; filename: string; url: string | null }>
   auditLog: Array<{ action: string; actor_name: string | null; notes: string | null; created_at: string }>
 }
 
@@ -616,6 +617,24 @@ function DetailModal({
                 </div>
               </div>
 
+              {/* Attachments */}
+              {doc.attachments?.length > 0 && (
+                <div>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Attachments ({doc.attachments.length})</p>
+                  <div className="space-y-1.5">
+                    {doc.attachments.map((a: { id: string; filename: string; url: string | null }) => (
+                      <a key={a.id} href={a.url ?? '#'} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-2 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 hover:bg-gray-700 transition-colors">
+                        <svg className="w-4 h-4 text-violet-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                        </svg>
+                        <span className="text-sm text-gray-300 truncate">{a.filename}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Final warning callout */}
               {doc.level === 'final' && (
                 <div className="bg-red-900/30 border border-red-700 rounded-xl px-4 py-3">
@@ -964,7 +983,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
   const [incidentDate, setIncidentDate] = useState('')
   const [notes, setNotes] = useState('')
   const [expectations, setExpectations] = useState('')
-  const [docAttachKey, setDocAttachKey] = useState('')
+  const [docAttachments, setDocAttachments] = useState<Array<{ key: string; filename: string }>>([])
   const [docAttachUploading, setDocAttachUploading] = useState(false)
   const [priorConvos, setPriorConvos] = useState<PriorConvo[]>([])
   const [linkedVerbalIds, setLinkedVerbalIds] = useState<string[]>([])
@@ -1067,7 +1086,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
       const payload = isDocConvo
         ? {
             subjectIds, level, title: title.trim(), notes: notes.trim(),
-            attachment_key: docAttachKey || undefined,
+            attachment_keys: docAttachments.length ? docAttachments : undefined,
             authorOverrideId: authorOverrideId || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
@@ -1077,7 +1096,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
             priorConvos: priorConvos.filter(c => c.convo_date && c.notes.trim()),
             linkedVerbalIds,
             reminderAcknowledged,
-            attachment_key: docAttachKey || undefined,
+            attachment_keys: docAttachments.length ? docAttachments : undefined,
             authorOverrideId: authorOverrideId || undefined,
             testMode: session.role === 'developer' ? testMode : false,
           }
@@ -1118,7 +1137,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
           <button type="button" onClick={() => {
             try { localStorage.removeItem(DRAFT_KEY) } catch { /* ignore */ }
             setSubjectId(''); setSubjectIds([]); setSubjectSearch(''); setLevel('verbal')
-            setTitle(''); setIncidentDate(''); setNotes(''); setExpectations(''); setDocAttachKey('')
+            setTitle(''); setIncidentDate(''); setNotes(''); setExpectations(''); setDocAttachments([])
             setPriorConvos([]); setLinkedVerbalIds([]); setReminderAcknowledged(false)
             setHasDraft(false)
           }} className="text-xs text-amber-400 hover:text-amber-200 underline shrink-0">
@@ -1374,33 +1393,45 @@ function SubmitForm({ session, subjects, onSuccess }: {
         </div>
       )}
 
-      {/* Attachment upload (optional) */}
+      {/* Attachment upload (optional, multiple) */}
       <div>
         <label className="block text-xs text-gray-500 mb-1">Attach Evidence (optional — photos, documents, screenshots)</label>
         <div className="flex items-center gap-2">
-          <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" onChange={async (e) => {
-            const file = e.target.files?.[0]
-            if (!file) return
+          <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" multiple onChange={async (e) => {
+            const files = e.target.files
+            if (!files?.length) return
             setDocAttachUploading(true)
             try {
-              const key = `accountability-docs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
-              const urlRes = await fetch('/api/expenses/upload-url', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ key, contentType: file.type }),
-              })
-              if (urlRes.ok) {
-                const { url } = await urlRes.json()
-                await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
-                setDocAttachKey(key)
+              for (const file of Array.from(files)) {
+                const key = `accountability-docs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+                const urlRes = await fetch('/api/expenses/upload-url', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ key, contentType: file.type }),
+                })
+                if (urlRes.ok) {
+                  const { url } = await urlRes.json()
+                  await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+                  setDocAttachments(prev => [...prev, { key, filename: file.name }])
+                }
               }
             } catch { /* ignore */ }
-            finally { setDocAttachUploading(false) }
+            finally { setDocAttachUploading(false); e.target.value = '' }
           }}
             className="text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-800 file:text-gray-300 file:text-xs file:font-semibold hover:file:bg-gray-700" />
           {docAttachUploading && <span className="text-xs text-violet-400">Uploading...</span>}
-          {docAttachKey && !docAttachUploading && <span className="text-xs text-green-400">Attached</span>}
         </div>
+        {docAttachments.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {docAttachments.map((a, i) => (
+              <div key={i} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-1.5">
+                <span className="text-xs text-green-400 truncate">{a.filename}</span>
+                <button type="button" onClick={() => setDocAttachments(prev => prev.filter((_, j) => j !== i))}
+                  className="text-xs text-red-400 hover:text-red-300 ml-2 shrink-0">Remove</button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {error && (

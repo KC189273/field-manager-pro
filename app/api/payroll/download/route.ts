@@ -90,9 +90,6 @@ export async function GET(req: NextRequest) {
         u.org_id,
         u.manager_id,
         o.name AS org_name,
-        COALESCE(UPPER(
-          (regexp_match(COALESCE(dsl.address, dm_dsl.address), '\m([A-Za-z]{2})\M(?:\s+\d{5})?$'))[1]
-        ), 'Unknown') AS state,
         DATE_TRUNC('week', s.clock_in_at AT TIME ZONE $3)::date AS week_start,
         SUM(
           EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600.0
@@ -101,33 +98,43 @@ export async function GET(req: NextRequest) {
       FROM shifts s
       JOIN users u ON u.id = s.user_id
       LEFT JOIN organizations o ON o.id = u.org_id
-      LEFT JOIN dm_store_locations dsl ON dsl.id = s.store_location_id
-      LEFT JOIN LATERAL (
-        SELECT dsl2.address FROM dm_manager_stores dms2
-        JOIN dm_store_locations dsl2 ON dsl2.id = dms2.store_location_id
-        WHERE dms2.manager_id = CASE WHEN u.role = 'manager' THEN u.id ELSE u.manager_id END LIMIT 1
-      ) dm_dsl ON s.store_location_id IS NULL
       WHERE s.clock_out_at IS NOT NULL
         AND (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
         AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
         AND u.role IN ('employee', 'manager')
         ${orgFilter}
         ${dmFilter}
-      GROUP BY s.user_id, u.legal_name, u.full_name, u.username, u.org_id, u.manager_id, o.name, COALESCE(dsl.address, dm_dsl.address), week_start
+      GROUP BY s.user_id, u.legal_name, u.full_name, u.username, u.org_id, u.manager_id, o.name, week_start
+    ),
+    user_state AS (
+      SELECT DISTINCT ON (u.id)
+        u.id AS user_id,
+        COALESCE(UPPER(SUBSTRING(COALESCE(dsl.address, dm_dsl.address) FROM '\\y([A-Za-z]{2})\\y(?:\\s+\\d{5})?$')), 'Unknown') AS state
+      FROM users u
+      LEFT JOIN dm_manager_stores ms ON ms.manager_id = CASE WHEN u.role = 'manager' THEN u.id ELSE u.manager_id END
+      LEFT JOIN dm_store_locations dsl ON dsl.id = ms.store_location_id
+      LEFT JOIN LATERAL (
+        SELECT dsl2.address FROM dm_manager_stores dms2
+        JOIN dm_store_locations dsl2 ON dsl2.id = dms2.store_location_id
+        WHERE dms2.manager_id = CASE WHEN u.role = 'manager' THEN u.id ELSE u.manager_id END LIMIT 1
+      ) dm_dsl ON TRUE
+      WHERE u.id IN (SELECT DISTINCT user_id FROM weekly_hours)
+      ORDER BY u.id, dsl.address NULLS LAST
     )
     SELECT
-      user_id,
-      TRIM(SUBSTRING(full_name FROM POSITION(' ' IN full_name) + 1)) AS last_name,
-      TRIM(SPLIT_PART(full_name, ' ', 1)) AS first_name,
-      username,
-      org_name,
-      state,
-      ROUND(SUM(LEAST(total_hours, 40))::numeric, 2)::float AS regular_hours,
-      ROUND(SUM(GREATEST(total_hours - 40, 0))::numeric, 2)::float AS ot_hours,
-      ROUND(SUM(total_hours)::numeric, 2)::float AS total_hours
-    FROM weekly_hours
-    GROUP BY user_id, full_name, username, org_name, state
-    ORDER BY state, last_name, first_name
+      wh.user_id,
+      TRIM(SUBSTRING(wh.full_name FROM POSITION(' ' IN wh.full_name) + 1)) AS last_name,
+      TRIM(SPLIT_PART(wh.full_name, ' ', 1)) AS first_name,
+      wh.username,
+      wh.org_name,
+      COALESCE(us.state, 'Unknown') AS state,
+      ROUND(SUM(LEAST(wh.total_hours, 40))::numeric, 2)::float AS regular_hours,
+      ROUND(SUM(GREATEST(wh.total_hours - 40, 0))::numeric, 2)::float AS ot_hours,
+      ROUND(SUM(wh.total_hours)::numeric, 2)::float AS total_hours
+    FROM weekly_hours wh
+    LEFT JOIN user_state us ON us.user_id = wh.user_id
+    GROUP BY wh.user_id, wh.full_name, wh.username, wh.org_name, us.state
+    ORDER BY us.state, last_name, first_name
   `, [from, to, CST])
 
   if (rows.length === 0 && !detailed) {

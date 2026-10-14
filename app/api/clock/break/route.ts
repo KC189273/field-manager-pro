@@ -136,8 +136,8 @@ export async function POST(req: NextRequest) {
       if (!existingBreakLong) {
         await query(
           `INSERT INTO flags (user_id, shift_id, type, date, detail)
-           VALUES ($1, $2, 'break_long', CURRENT_DATE, $3)`,
-          [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (${breakLimit} min allowed)`]
+           VALUES ($1, $2, 'break_long', $4::date, $3)`,
+          [session.id, shift.id, `Break lasted ${Math.round(breakMinutes)} min (${breakLimit} min allowed)`, todayCST]
         )
       }
       flagsRaised.push('break_long')
@@ -161,8 +161,8 @@ export async function POST(req: NextRequest) {
       try {
         await query(
           `INSERT INTO flags (user_id, shift_id, type, date, detail)
-           VALUES ($1, $2, 'break_multiple', CURRENT_DATE, $3)`,
-          [session.id, shift.id, `${totalBreaks} breaks taken this shift`]
+           VALUES ($1, $2, 'break_multiple', $4::date, $3)`,
+          [session.id, shift.id, `${totalBreaks} breaks taken this shift`, todayCST]
         )
         flagsRaised.push('break_multiple')
       } catch {}

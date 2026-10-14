@@ -224,8 +224,8 @@ export async function POST(req: NextRequest) {
     )
     if (!existing) {
       await query(
-        `INSERT INTO flags (user_id, shift_id, type, date, detail) VALUES ($1, $2, 'overtime', CURRENT_DATE, $3)`,
-        [session.id, shift.id, `${totalHours.toFixed(1)} hours this week`]
+        `INSERT INTO flags (user_id, shift_id, type, date, detail) VALUES ($1, $2, 'overtime', $4::date, $3)`,
+        [session.id, shift.id, `${totalHours.toFixed(1)} hours this week`, new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })]
       )
       // Only notify the employee's direct DM (by manager_id), plus ops managers in the org
       const managers = await query<{ id: string; email: string }>(

@@ -715,6 +715,7 @@ export async function POST(req: NextRequest) {
       resend.emails.send({
         from: 'Field Manager Pro <noreply@fieldmanagerpro.app>',
         to: [rdmEmail, dmEmail],
+        cc: ['Shaun.Gephart@t-mobile.com'],
         subject: `Remote Coaching — ${body.store_address} — ${visitDate}`,
         html,
       }).catch(err => console.error('Remote coaching email error:', err))

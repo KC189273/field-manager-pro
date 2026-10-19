@@ -1456,7 +1456,7 @@ function SubmitForm({ session, subjects, onSuccess }: {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-type MainTab = 'submit' | 'my-records' | 'my-notices' | 'pending' | 'all-records' | 'dm-records' | 'termination'
+type MainTab = 'submit' | 'my-records' | 'my-notices' | 'pending' | 'all-records' | 'dm-records' | 'termination' | 'self-quit'
 
 export default function AccountabilityPage() {
   const [session, setSession] = useState<Session | null>(null)
@@ -1501,6 +1501,26 @@ export default function AccountabilityPage() {
   const [resignSubmitting, setResignSubmitting] = useState(false)
   const [directTermSubmitting, setDirectTermSubmitting] = useState(false)
   const [allActiveUsers, setAllActiveUsers] = useState<Array<{ id: string; full_name: string; role: string }>>([])
+
+  // Self-quit state
+  const [sqRecords, setSqRecords] = useState<Array<{
+    id: string; employee_id: string; employee_name: string; employee_email: string
+    submitted_by_name: string; last_day_worked: string | null
+    two_week_notice: boolean; rehireable: boolean
+    reason: string; employee_notes: string | null; created_at: string
+    attachments: Array<{ id: string; filename: string; url: string | null }>
+  }>>([])
+  const [sqLoading, setSqLoading] = useState(false)
+  const [sqEmpId, setSqEmpId] = useState('')
+  const [sqReason, setSqReason] = useState('')
+  const [sqLastDay, setSqLastDay] = useState('')
+  const [sqTwoWeek, setSqTwoWeek] = useState(false)
+  const [sqRehireable, setSqRehireable] = useState(false)
+  const [sqNotes, setSqNotes] = useState('')
+  const [sqAttachments, setSqAttachments] = useState<Array<{ key: string; filename: string }>>([])
+  const [sqUploading, setSqUploading] = useState(false)
+  const [sqSubmitting, setSqSubmitting] = useState(false)
+  const [sqSuccess, setSqSuccess] = useState('')
 
   // Filters
   const [dateFrom, setDateFrom] = useState('')
@@ -1560,6 +1580,18 @@ export default function AccountabilityPage() {
       .catch(() => {})
       .finally(() => setTermEmpLoading(false))
   }, [])
+
+  const loadSelfQuits = useCallback(() => {
+    setSqLoading(true)
+    const params = new URLSearchParams()
+    if (dateFrom) params.set('dateFrom', dateFrom)
+    if (dateTo) params.set('dateTo', dateTo)
+    fetch(`/api/accountability/self-quit?${params}`)
+      .then(r => r.json())
+      .then(d => setSqRecords(d.records ?? []))
+      .catch(() => {})
+      .finally(() => setSqLoading(false))
+  }, [dateFrom, dateTo])
 
   async function openTermProfile(emp: TerminatedEmployee) {
     setTermProfileLoading(true)
@@ -1639,6 +1671,44 @@ export default function AccountabilityPage() {
       }
     }
   }, [session, tab, loadTermRequests, loadTerminatedEmps])
+
+  useEffect(() => {
+    if (session && tab === 'self-quit') {
+      loadSelfQuits()
+    }
+  }, [session, tab, loadSelfQuits])
+
+  async function handleSelfQuitSubmit() {
+    if (!sqEmpId || !sqReason.trim()) return
+    setSqSubmitting(true)
+    setSqSuccess('')
+    try {
+      const res = await fetch('/api/accountability/self-quit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employeeId: sqEmpId,
+          reason: sqReason.trim(),
+          lastDayWorked: sqLastDay || null,
+          twoWeekNotice: sqTwoWeek,
+          rehireable: sqRehireable,
+          employeeNotes: sqNotes.trim() || null,
+          attachmentKeys: sqAttachments.length ? sqAttachments : undefined,
+        }),
+      })
+      const d = await res.json()
+      if (res.ok) {
+        setSqSuccess(`Self-quit recorded. ${subjects.find(s => s.id === sqEmpId)?.full_name ?? 'Employee'} has been deactivated.`)
+        setSqEmpId(''); setSqReason(''); setSqLastDay(''); setSqTwoWeek(false)
+        setSqRehireable(false); setSqNotes(''); setSqAttachments([])
+        loadSelfQuits()
+        loadDocs() // refresh subjects list
+      } else {
+        alert(d.error ?? 'Submission failed')
+      }
+    } catch { alert('Submission failed') }
+    finally { setSqSubmitting(false) }
+  }
 
   async function handleResignUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -1730,6 +1800,9 @@ export default function AccountabilityPage() {
   if (['sales_director','ops_field_leader','ops_manager','owner','developer'].includes(session.role)) {
     tabs.push({ key: 'all-records', label: 'All Records' })
     tabs.push({ key: 'dm-records', label: 'DM Records' })
+  }
+  if (canSubmit(session.role)) {
+    tabs.push({ key: 'self-quit', label: 'Self-Quit' })
   }
   if (['sales_director','owner','developer'].includes(session.role)) {
     const pendingTermCount = termRequests.filter(r => r.status === 'pending_approval').length
@@ -1934,6 +2007,186 @@ export default function AccountabilityPage() {
                 {dmOnlyDocs.map(d => <DocCard key={d.id} doc={d} onClick={() => setDetailId(d.id)} />)}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Self-Quit Tab ── */}
+        {tab === 'self-quit' && canSubmit(session.role) && (
+          <div className="pt-5 space-y-5">
+            <h1 className="text-xl font-bold text-white">Self-Quit / Resignation</h1>
+
+            {sqSuccess && (
+              <div className="bg-green-900/30 border border-green-700 text-green-400 text-sm rounded-xl px-4 py-3">{sqSuccess}</div>
+            )}
+
+            {/* Submit form */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+              <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Record Self-Quit</p>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Employee <span className="text-red-400">*</span></label>
+                <select value={sqEmpId} onChange={e => setSqEmpId(e.target.value)}
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                  <option value="">Select employee…</option>
+                  {subjects.filter(s => s.role === 'employee' || s.role === 'manager').map(s => (
+                    <option key={s.id} value={s.id}>{s.full_name} ({s.role === 'manager' ? 'DM' : 'Rep'})</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Reason for Leaving <span className="text-red-400">*</span></label>
+                <textarea value={sqReason} onChange={e => setSqReason(e.target.value)} rows={3} placeholder="e.g., Resigned via text, no-show for 3 consecutive days, verbal resignation..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Last Day Worked</label>
+                  <input type="date" value={sqLastDay} onChange={e => setSqLastDay(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
+                </div>
+                <div className="flex flex-col justify-end gap-3 pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={sqTwoWeek} onChange={e => setSqTwoWeek(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500" />
+                    <span className="text-sm text-gray-300">Gave 2-week notice</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={sqRehireable} onChange={e => setSqRehireable(e.target.checked)}
+                      className="w-4 h-4 rounded border-gray-600 bg-gray-800 text-violet-500 focus:ring-violet-500" />
+                    <span className="text-sm text-gray-300">Rehireable</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">Notes About Employee</label>
+                <textarea value={sqNotes} onChange={e => setSqNotes(e.target.value)} rows={3} placeholder="How was this employee? Work ethic, attitude, strengths, areas of concern..."
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 resize-none" />
+              </div>
+
+              {/* Attachments */}
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Attach Evidence (optional — resignation letter, screenshots)</label>
+                <div className="flex items-center gap-2">
+                  <input type="file" accept="image/*,.pdf,.doc,.docx,.txt" multiple onChange={async (e) => {
+                    const files = e.target.files
+                    if (!files?.length) return
+                    setSqUploading(true)
+                    try {
+                      for (const file of Array.from(files)) {
+                        const key = `self-quit-docs/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`
+                        const urlRes = await fetch('/api/expenses/upload-url', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ key, contentType: file.type }),
+                        })
+                        if (urlRes.ok) {
+                          const { url } = await urlRes.json()
+                          await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } })
+                          setSqAttachments(prev => [...prev, { key, filename: file.name }])
+                        }
+                      }
+                    } catch { /* ignore */ }
+                    finally { setSqUploading(false); e.target.value = '' }
+                  }}
+                    className="text-xs text-gray-400 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-gray-800 file:text-gray-300 file:text-xs file:font-semibold hover:file:bg-gray-700" />
+                  {sqUploading && <span className="text-xs text-violet-400">Uploading...</span>}
+                </div>
+                {sqAttachments.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {sqAttachments.map((a, i) => (
+                      <div key={i} className="flex items-center justify-between bg-gray-800 rounded-lg px-3 py-1.5">
+                        <span className="text-xs text-green-400 truncate">{a.filename}</span>
+                        <button type="button" onClick={() => setSqAttachments(prev => prev.filter((_, j) => j !== i))}
+                          className="text-xs text-red-400 hover:text-red-300 ml-2 shrink-0">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <button onClick={handleSelfQuitSubmit} disabled={sqSubmitting || !sqEmpId || !sqReason.trim()}
+                className="w-full bg-red-600 hover:bg-red-500 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-colors text-sm">
+                {sqSubmitting ? 'Submitting…' : 'Submit Self-Quit & Deactivate Account'}
+              </button>
+              <p className="text-xs text-gray-600 text-center">This will permanently deactivate the employee&apos;s account and notify leadership.</p>
+            </div>
+
+            {/* Self-Quit Report */}
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">Self-Quit Report</p>
+                <button onClick={loadSelfQuits} className="text-xs text-violet-400 hover:text-violet-300">Refresh</button>
+              </div>
+
+              {sqLoading ? (
+                <p className="text-center text-gray-500 py-8 text-sm">Loading…</p>
+              ) : sqRecords.length === 0 ? (
+                <p className="text-center text-gray-500 py-8 text-sm">No self-quit records found.</p>
+              ) : (
+                <div>
+                  {/* Summary stats */}
+                  <div className="grid grid-cols-3 gap-px bg-gray-800 border-b border-gray-800">
+                    <div className="bg-gray-900 p-3 text-center">
+                      <p className="text-lg font-bold text-white">{sqRecords.length}</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Total</p>
+                    </div>
+                    <div className="bg-gray-900 p-3 text-center">
+                      <p className="text-lg font-bold text-green-400">{sqRecords.filter(r => r.two_week_notice).length}</p>
+                      <p className="text-[10px] text-gray-500 uppercase">2-Week Notice</p>
+                    </div>
+                    <div className="bg-gray-900 p-3 text-center">
+                      <p className="text-lg font-bold text-cyan-400">{sqRecords.filter(r => r.rehireable).length}</p>
+                      <p className="text-[10px] text-gray-500 uppercase">Rehireable</p>
+                    </div>
+                  </div>
+
+                  {/* Records list */}
+                  {sqRecords.map(r => {
+                    const dateStr = new Date(r.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                    return (
+                      <div key={r.id} className="border-b border-gray-800/50 last:border-0 px-4 py-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white truncate">{r.employee_name}</p>
+                            <p className="text-xs text-gray-500">{dateStr} · by {r.submitted_by_name}</p>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            {r.two_week_notice ? (
+                              <span className="text-[10px] font-bold text-green-400 bg-green-900/40 px-2 py-0.5 rounded-full">2-WK</span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-red-400 bg-red-900/40 px-2 py-0.5 rounded-full">NO NOTICE</span>
+                            )}
+                            {r.rehireable ? (
+                              <span className="text-[10px] font-bold text-cyan-400 bg-cyan-900/40 px-2 py-0.5 rounded-full">REHIRE</span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-gray-400 bg-gray-800 px-2 py-0.5 rounded-full">NO REHIRE</span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">{r.reason}</p>
+                        {r.employee_notes && (
+                          <p className="text-xs text-gray-500 mt-1 italic">{r.employee_notes}</p>
+                        )}
+                        {r.last_day_worked && (
+                          <p className="text-[10px] text-gray-600 mt-1">Last day: {new Date(r.last_day_worked + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                        )}
+                        {r.attachments?.length > 0 && (
+                          <div className="flex gap-2 mt-1.5">
+                            {r.attachments.map(a => (
+                              <a key={a.id} href={a.url ?? '#'} target="_blank" rel="noopener noreferrer"
+                                className="text-[10px] text-violet-400 hover:text-violet-300 underline truncate max-w-[150px]">{a.filename}</a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 

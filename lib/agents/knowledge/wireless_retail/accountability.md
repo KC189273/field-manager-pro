@@ -4,19 +4,22 @@ sources:
   - app/api/accountability/[id]/approve/route.ts
   - app/api/accountability/[id]/reject/route.ts
   - app/api/accountability/termination/route.ts
+  - app/api/accountability/self-quit/route.ts
   - app/accountability/page.tsx
 features:
   - accountability-docs
   - documented-conversation
   - approval-chain
   - termination
+  - self-quit
   - acknowledgment
 permissions:
   - "DMs/SD/owner/dev can author"
-  - "ops_field_leader/ops_manager view only"
+  - "DMs+ can submit self-quits"
+  - "ops_field_leader/ops_manager view only for docs, can submit self-quits"
   - "employees receive only"
   - "DMs can only doc direct reports"
-verified: 2026-08-31
+verified: 2026-10-19
 ---
 # Accountability Documents
 
@@ -66,24 +69,37 @@ Termination is the final step after a Final Warning (or can be initiated directl
 - They are removed from all active views but their data is preserved.
 - A formal termination notice email is sent to the employee and all management.
 
-## Resignations / Self-Quits
-For employees who resign or self-quit, use the **"+ Submit Resignation / Self-Quit"** button on the Termination tab:
+## Self-Quit / Resignations
+For employees who resign or self-quit, use the dedicated **Self-Quit** tab in Accountability:
 
-1. Go to **Accountability** → **Termination** tab
-2. Click **"+ Submit Resignation / Self-Quit"**
-3. Select the employee
-4. Enter the last day worked (optional)
-5. Describe the circumstances (resignation letter received, verbal notice, no-show, etc.)
-6. Optionally attach evidence (resignation letter, text screenshot, photo)
-7. Submit for approval
+1. Go to **Accountability** → **Self-Quit** tab
+2. Select the employee
+3. Enter the **reason for leaving** (resignation letter, verbal notice, no-show, etc.)
+4. Set the **last day worked** (optional)
+5. Toggle **2-week notice given** (Yes/No) — used for bonus eligibility tracking
+6. Toggle **Rehireable** (Yes/No)
+7. Add **notes about the employee** — work ethic, attitude, strengths, concerns
+8. Optionally attach evidence (resignation letter, text screenshot, photo)
+9. Submit — account is **immediately deactivated** (no approval needed)
 
-**Key differences from termination:**
-- **No email is sent to the employee** — they already know they quit
-- Management still gets notified (push + email)
-- Same approval flow (SD/Owner/Developer approves)
-- On approval, account is deactivated and hidden just like a termination
-- Shows with green styling and "Resignation" badge in the requests list
-- Any role that can submit terminations can also submit resignations (DM+)
+**Key features:**
+- **No approval workflow** — employee already quit, no need for approval chain
+- **No email to the employee** — they already know they quit
+- **Auto-deactivation** — account is set to inactive, hidden, and terminated on submission
+- **Leadership notified** via push + email with full details
+- **DM gets a retained copy** via email
+- **2-week notice tracking** — for bonus eligibility reporting
+- **Rehireable flag** — for future hiring decisions
+- **DM notes** — record how the employee performed
+
+### Self-Quit Report
+Below the submission form on the Self-Quit tab, there's a **Self-Quit Report** showing:
+- **Summary stats**: total self-quits, how many gave 2-week notice, how many are rehireable
+- **All records** with employee name, date, submitter, notice status, rehire status, reason, and notes
+- Badges: green "2-WK" for 2-week notice, red "NO NOTICE" for no notice, cyan "REHIRE" or gray "NO REHIRE"
+
+### Who can submit self-quits?
+DMs, Field Leaders, Ops Managers, SD, Owner, and Developer. DMs can only submit for their direct reports.
 
 ## Attaching Evidence
 All accountability documents (documented conversations, verbal, written, final) support optional file attachments. When creating a document, you can upload photos, PDFs, screenshots, or other files as evidence. The attachment is stored with the document permanently.

@@ -163,6 +163,10 @@
     {
       "path": "/api/cron/uniform-compliance",
       "schedule": "30 2 * * *"
+    },
+    {
+      "path": "/api/cron/demo-reset",
+      "schedule": "0 5 * * 0"
     }
   ]
 }

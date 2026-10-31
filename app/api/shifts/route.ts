@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, isManager, isOwner, type Role } from '@/lib/auth'
 import { getOrgFilter, appendOrgFilter } from '@/lib/org'
 
-const canManageShifts = (role: Role) => isManager(role) || isOwner(role) || role === 'developer'
+const canManageShifts = (role: Role) => isManager(role) || isOwner(role) || role === 'developer' || role === 'prospect'
 import { query, queryOne } from '@/lib/db'
 import { sendEmail, manualTimeEntryHtml } from '@/lib/notifications'
 import { getReceiptViewUrl } from '@/lib/s3'

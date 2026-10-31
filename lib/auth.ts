@@ -4,7 +4,7 @@ import { cookies } from 'next/headers'
 const COOKIE = 'fmp-session'
 const SECRET = new TextEncoder().encode(process.env.JWT_SECRET!)
 
-export type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
+export type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner' | 'prospect'
 
 export interface SessionPayload {
   id: string

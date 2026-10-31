@@ -23,6 +23,7 @@ const PUBLIC_PATHS = [
   '/api/barbershop/respond',
   '/api/barbershop/availability',
   '/service-analysis.pdf',
+  '/api/demo/start',
 ]
 
 export async function proxy(request: NextRequest) {
@@ -34,7 +35,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // Cron and agent cron routes protected by secret header, not session
-  if (pathname.startsWith('/api/cron') || pathname.startsWith('/api/agents/run') || pathname.startsWith('/api/agents/digest')) {
+  if (pathname.startsWith('/api/cron') || pathname.startsWith('/api/agents/run') || pathname.startsWith('/api/agents/digest') || pathname.startsWith('/api/demo/')) {
     return NextResponse.next()
   }
 
@@ -57,6 +58,7 @@ export async function proxy(request: NextRequest) {
 
   // Redirect root based on role
   if (pathname === '/') {
+    if (session.role === 'prospect') return NextResponse.redirect(new URL('/demo', request.url))
     if (session.role === 'customer') return NextResponse.redirect(new URL('/book', request.url))
     if (session.role === 'barber' || session.role === 'shop_owner') return NextResponse.redirect(new URL('/barber-dashboard', request.url))
     return NextResponse.redirect(new URL('/dashboard', request.url))

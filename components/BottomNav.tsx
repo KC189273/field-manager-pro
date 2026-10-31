@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useRef } from 'react'
 
-type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner'
+type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'customer' | 'barber' | 'shop_owner' | 'prospect'
 
 const STORAGE_KEY = 'fmp_pinned_tabs_v2'
 const ROLE_CACHE_KEY = 'fmp_role_cache'
@@ -19,7 +19,8 @@ const NO_NAV_PREFIXES = [
 
 const BARBERSHOP_ROLES: Role[] = ['customer', 'barber', 'shop_owner']
 function isBarbershop(role: Role) { return BARBERSHOP_ROLES.includes(role) }
-function isRetail(role: Role) { return !isBarbershop(role) }
+function isRetail(role: Role) { return !isBarbershop(role) && role !== 'prospect' }
+function isProspectOrRetail(role: Role) { return !isBarbershop(role) }
 function canViewTeam(role: Role) {
   return ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer'].includes(role)
 }
@@ -39,36 +40,37 @@ interface Feature {
 
 const ALL_FEATURES: Feature[] = [
   // ── Retail / workforce features ──
-  { href: '/dashboard',       label: 'Dashboard',        short: 'Home',      Icon: HomeIcon,           show: isRetail },
-  { href: '/clock',           label: 'Clock In/Out',     short: 'Clock',     Icon: ClockIcon,          show: isRetail },
-  { href: '/chat',            label: 'Messages',         short: 'Chat',      Icon: ChatIcon,           show: r => isRetail(r) && r !== 'employee' },
-  { href: '/my-schedule',     label: 'My Schedule',      short: 'Schedule',  Icon: ScheduleIcon,       show: isRetail },
-  { href: '/staff-schedule',  label: 'Store Schedule',   short: 'Shifts',    Icon: StaffSchedIcon,     show: r => isRetail(r) && r !== 'employee' },
-  { href: '/tasks',           label: 'Tasks',            short: 'Tasks',     Icon: TasksIcon,          show: isRetail },
-  { href: '/coverage',        label: 'Live Coverage',     short: 'Coverage',  Icon: TeamIcon,           show: r => isRetail(r) && r !== 'employee' },
-  { href: '/checklist',       label: 'Checklist',        short: 'Checklist', Icon: ChecklistIcon,      show: isRetail },
-  { href: '/map',             label: 'Live Map',         short: 'Map',       Icon: MapIcon,            show: r => r === 'sales_director' || r === 'owner' || r === 'developer' },
+  { href: '/demo',            label: 'Demo Home',         short: 'Demo',      Icon: HomeIcon,           show: r => r === 'prospect' },
+  { href: '/dashboard',       label: 'Dashboard',        short: 'Home',      Icon: HomeIcon,           show: isProspectOrRetail },
+  { href: '/clock',           label: 'Clock In/Out',     short: 'Clock',     Icon: ClockIcon,          show: isProspectOrRetail },
+  { href: '/chat',            label: 'Messages',         short: 'Chat',      Icon: ChatIcon,           show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/my-schedule',     label: 'My Schedule',      short: 'Schedule',  Icon: ScheduleIcon,       show: isProspectOrRetail },
+  { href: '/staff-schedule',  label: 'Store Schedule',   short: 'Shifts',    Icon: StaffSchedIcon,     show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/tasks',           label: 'Tasks',            short: 'Tasks',     Icon: TasksIcon,          show: isProspectOrRetail },
+  { href: '/coverage',        label: 'Live Coverage',     short: 'Coverage',  Icon: TeamIcon,           show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/checklist',       label: 'Checklist',        short: 'Checklist', Icon: ChecklistIcon,      show: isProspectOrRetail },
+  { href: '/map',             label: 'Live Map',         short: 'Map',       Icon: MapIcon,            show: r => r === 'sales_director' || r === 'owner' || r === 'developer' || r === 'prospect' },
   { href: '/team',            label: 'Team',             short: 'Team',      Icon: TeamIcon,           show: canViewTeam },
   { href: '/payroll',         label: 'Payroll',          short: 'Payroll',   Icon: PayrollIcon,        show: canViewTeam },
   { href: '/flags',           label: 'Flags',            short: 'Flags',     Icon: FlagIcon,           show: canViewTeam },
-  { href: '/timecards',       label: 'Timecards',        short: 'Timecards', Icon: TimecardIcon,       show: isRetail },
-  { href: '/time-history',    label: 'Time History',     short: 'History',   Icon: HistoryIcon,        show: isRetail },
-  { href: '/time-off',        label: 'Time Off',         short: 'Time Off',  Icon: TimeOffIcon,        show: isRetail },
-  { href: '/shift-swaps',     label: 'Shift Swaps',      short: 'Swaps',     Icon: SwapIcon,           show: isRetail },
-  { href: '/expenses',        label: 'Expenses',         short: 'Expenses',  Icon: ExpenseIcon,        show: r => isRetail(r) && r !== 'employee' },
-  { href: '/facilities',      label: 'Facilities',       short: 'Facilities',Icon: FacilitiesIcon,     show: isRetail },
-  { href: '/supply-requests', label: 'Supplies',         short: 'Supplies',  Icon: SupplyIcon,         show: isRetail },
-  { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: isRetail },
-  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: isRetail },
+  { href: '/timecards',       label: 'Timecards',        short: 'Timecards', Icon: TimecardIcon,       show: isProspectOrRetail },
+  { href: '/time-history',    label: 'Time History',     short: 'History',   Icon: HistoryIcon,        show: isProspectOrRetail },
+  { href: '/time-off',        label: 'Time Off',         short: 'Time Off',  Icon: TimeOffIcon,        show: isProspectOrRetail },
+  { href: '/shift-swaps',     label: 'Shift Swaps',      short: 'Swaps',     Icon: SwapIcon,           show: isProspectOrRetail },
+  { href: '/expenses',        label: 'Expenses',         short: 'Expenses',  Icon: ExpenseIcon,        show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/facilities',      label: 'Facilities',       short: 'Facilities',Icon: FacilitiesIcon,     show: isProspectOrRetail },
+  { href: '/supply-requests', label: 'Supplies',         short: 'Supplies',  Icon: SupplyIcon,         show: isProspectOrRetail },
+  { href: '/merch-orders',    label: 'Merch Orders',     short: 'Merch',     Icon: MerchIcon,          show: isProspectOrRetail },
+  { href: '/accountability',  label: 'Accountability',   short: 'Acct.',     Icon: AccountabilityIcon, show: isProspectOrRetail },
   { href: '/dm-visit',        label: 'DM Store Visit',   short: 'DM Visit',  Icon: StoreIcon,          show: canViewTeam },
   { href: '/dm-schedule',     label: 'DM Schedules',     short: 'DM Sched',  Icon: ScheduleIcon,       show: canViewTeam },
   { href: '/dm-engagement',   label: 'DM Engagement',    short: 'Engagement',Icon: EngagementIcon,     show: canViewTeam },
-  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => isRetail(r) && r !== 'employee' },
-  { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isRetail },
-  { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isRetail },
-  { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: isRetail },
+  { href: '/calendar',        label: 'Calendar',         short: 'Calendar',  Icon: CalendarIcon,       show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/resources',       label: 'Resources',        short: 'Resources', Icon: ResourcesIcon,      show: isProspectOrRetail },
+  { href: '/commissions',     label: 'Commissions Estimator', short: 'Comm.',  Icon: ServiceIcon,        show: isProspectOrRetail },
+  { href: '/service-analysis',label: 'Service Analysis', short: 'Service',   Icon: ServiceIcon,        show: isProspectOrRetail },
   { href: '/store-locations',  label: 'Store Locations',  short: 'Stores',    Icon: StoreIcon,          show: r => r === 'ops_manager' || r === 'owner' || r === 'sales_director' || r === 'developer' },
-  { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: isRetail },
+  { href: '/settings',        label: 'Settings',         short: 'Settings',  Icon: SettingsIcon,       show: isProspectOrRetail },
   { href: '/employee-record', label: 'Employee Record',   short: 'Records',   Icon: AccountabilityIcon, show: r => r === 'ops_manager' || r === 'owner' || r === 'sales_director' || r === 'developer' },
   { href: '/db-health',       label: 'App Health',        short: 'Health',    Icon: GearIcon,           show: r => r === 'developer' || r === 'ops_field_leader' || r === 'ops_manager' || r === 'sales_director' || r === 'owner' },
 
@@ -80,13 +82,14 @@ const ALL_FEATURES: Feature[] = [
   { href: '/shop-setup',      label: 'Shop Setup',       short: 'Setup',     Icon: GearIcon,           show: r => r === 'shop_owner' },
 
   // ── Info ──
-  { href: '/changelog',       label: 'App Changes',       short: 'Changes', Icon: HistoryIcon,        show: isRetail },
+  { href: '/changelog',       label: 'App Changes',       short: 'Changes', Icon: HistoryIcon,        show: isProspectOrRetail },
 
   // ── Help (all roles) ──
   { href: '/help',            label: 'Help & Support',   short: 'Help',      Icon: HelpIcon,           show: () => true },
   { href: '/feature-requests', label: 'App Recommendations', short: 'Recommend', Icon: ExclamationIcon,    show: canViewTeam },
 
   // ── Admin ──
+  { href: '/leads',           label: 'Demo Leads',        short: 'Leads',     Icon: GearIcon,           show: r => r === 'developer' },
   { href: '/super-admin',     label: 'Super Admin',      short: 'Admin',     Icon: GearIcon,           show: r => r === 'developer' },
   { href: '/config',          label: 'Config',           short: 'Config',    Icon: GearIcon,           show: r => r === 'developer' },
   { href: '/admin/agents',    label: 'Agent Inbox',      short: 'Agents',    Icon: GearIcon,           show: r => r === 'developer' },
@@ -104,6 +107,7 @@ const DEFAULT_PINNED_TABS: Record<Role, string[]> = {
   customer:       ['/book', '/my-appointments'],
   barber:         ['/barber-dashboard', '/my-customers'],
   shop_owner:     ['/barber-dashboard', '/my-customers', '/shop-setup'],
+  prospect:       ['/demo', '/map', '/timecards', '/tasks'],
 }
 
 export default function BottomNav() {

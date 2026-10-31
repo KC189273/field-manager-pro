@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
 
-  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'ops_field_leader' || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'ops_manager' || session.role === 'ops_field_leader' || session.role === 'developer' || session.role === 'prospect'
   const isDM = session.role === 'manager'
 
   if (userId && userId !== session.id && !canViewAll && !isDM) {

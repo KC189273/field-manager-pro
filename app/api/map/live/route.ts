@@ -13,10 +13,10 @@ export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const canViewAll = isOwner(session.role) || session.role === 'developer'
+  const canViewAll = isOwner(session.role) || session.role === 'developer' || session.role === 'prospect'
   const isDM = session.role === 'manager'
 
-  // Restrict map access to SD, owner, developer only
+  // Restrict map access to SD, owner, developer, prospect only
   if (!canViewAll && !isDM) {
     return NextResponse.json({ employees: [], breadcrumbs: [], stops: [], stores: [] })
   }

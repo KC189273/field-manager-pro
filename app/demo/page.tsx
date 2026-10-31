@@ -106,6 +106,167 @@ export default function DemoPage() {
           ))}
         </div>
 
+        {/* Feature Gallery */}
+        <p className="text-xs text-gray-500 uppercase tracking-widest font-semibold mb-3 px-1">See It In Action</p>
+        <div className="space-y-4 mb-8">
+
+          {/* GPS Tracking mockup */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-emerald-900/40 to-teal-900/40 px-4 py-3 border-b border-gray-800">
+              <p className="text-sm font-semibold text-white">Real-Time GPS Tracking</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Watch employees move between locations throughout the day</p>
+            </div>
+            <div className="p-4 space-y-2">
+              <div className="bg-gray-800 rounded-xl p-3 flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full bg-green-500 shrink-0" style={{ boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white font-medium">Marcus Johnson</p>
+                  <p className="text-[10px] text-gray-500">Clocked in at Downtown — 2h 15m</p>
+                </div>
+                <span className="text-[10px] text-green-400 font-semibold">ACTIVE</span>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-3 flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full bg-green-500 shrink-0" style={{ boxShadow: '0 0 8px rgba(34,197,94,0.6)' }} />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white font-medium">Sarah Chen (DM)</p>
+                  <p className="text-[10px] text-gray-500">Visiting Mayfair — 45m at store</p>
+                </div>
+                <span className="text-[10px] text-violet-400 font-semibold">3 STOPS</span>
+              </div>
+              <div className="bg-gray-800 rounded-xl p-3 flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-white font-medium">Carlos Ramirez (Tech)</p>
+                  <p className="text-[10px] text-gray-500">En route to West Allis — ETA 12m</p>
+                </div>
+                <span className="text-[10px] text-amber-400 font-semibold">TRAVEL</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Accountability mockup */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 px-4 py-3 border-b border-gray-800">
+              <p className="text-sm font-semibold text-white">Progressive Accountability</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Documented conversations through termination with full audit trail</p>
+            </div>
+            <div className="p-4 space-y-2">
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-cyan-400" /></span>
+                <span className="text-gray-400">Documented Conversation</span>
+                <span className="ml-auto text-cyan-400 font-semibold">Informal</span>
+              </div>
+              <div className="w-px h-3 bg-gray-700 ml-2.5" />
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-amber-400" /></span>
+                <span className="text-gray-400">Verbal Warning</span>
+                <span className="ml-auto text-amber-400 font-semibold">Auto-sent</span>
+              </div>
+              <div className="w-px h-3 bg-gray-700 ml-2.5" />
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-orange-500/20 flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-orange-400" /></span>
+                <span className="text-gray-400">Written Warning</span>
+                <span className="ml-auto text-orange-400 font-semibold">Approval req.</span>
+              </div>
+              <div className="w-px h-3 bg-gray-700 ml-2.5" />
+              <div className="flex items-center gap-2 text-xs">
+                <span className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center shrink-0"><span className="w-2 h-2 rounded-full bg-red-400" /></span>
+                <span className="text-gray-400">Final Warning</span>
+                <span className="ml-auto text-red-400 font-semibold">Word doc</span>
+              </div>
+              <p className="text-[10px] text-gray-600 mt-2 ml-1">Each level includes email notifications, acknowledgment tracking, and downloadable Word documents.</p>
+            </div>
+          </div>
+
+          {/* Timecard mockup */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-violet-900/40 to-purple-900/40 px-4 py-3 border-b border-gray-800">
+              <p className="text-sm font-semibold text-white">Smart Timecards</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">GPS-verified shifts with edit audit trail and payroll export</p>
+            </div>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-xs text-gray-400">Oct 28 — Nov 3</span>
+                <span className="text-xs font-bold text-violet-400">38.5h / 5 shifts</span>
+              </div>
+              {[
+                { day: 'Mon', h: '8.2', t: '9:02a — 5:14p', s: 'Downtown' },
+                { day: 'Tue', h: '7.8', t: '8:45a — 4:35p', s: 'Mayfair' },
+                { day: 'Wed', h: '8.5', t: '9:15a — 5:45p', s: 'Downtown', edited: true },
+                { day: 'Thu', h: '7.0', t: '10:00a — 5:00p', s: 'Greenfield' },
+                { day: 'Fri', h: '7.0', t: '9:30a — 4:30p', s: 'Downtown' },
+              ].map(s => (
+                <div key={s.day} className="flex items-center justify-between py-1.5 border-b border-gray-800/50 last:border-0 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-500 w-7">{s.day}</span>
+                    <span className="text-gray-300">{s.t}</span>
+                    {s.edited && <span className="text-[9px] text-amber-400 bg-amber-900/30 px-1.5 py-0.5 rounded">Corrected</span>}
+                  </div>
+                  <span className="text-gray-400">{s.h}h</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* AI Assistant mockup */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-pink-900/30 to-rose-900/30 px-4 py-3 border-b border-gray-800">
+              <p className="text-sm font-semibold text-white">Built-In AI Assistant</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Answers employee questions, troubleshoots GPS issues, and auto-learns</p>
+            </div>
+            <div className="p-4 space-y-2">
+              <div className="flex justify-end"><div className="bg-violet-600 rounded-2xl rounded-br-sm px-3 py-2 max-w-[75%]"><p className="text-xs text-white">I can&apos;t clock in, it says I&apos;m too far</p></div></div>
+              <div className="flex justify-start"><div className="bg-gray-800 rounded-2xl rounded-bl-sm px-3 py-2 max-w-[75%]"><p className="text-xs text-gray-200">Let me check your GPS. Try force-closing the app and reopening it. Make sure Location is set to &quot;Always&quot; in your phone settings.</p></div></div>
+              <div className="flex justify-end"><div className="bg-violet-600 rounded-2xl rounded-br-sm px-3 py-2 max-w-[75%]"><p className="text-xs text-white">That worked! Thanks</p></div></div>
+              <div className="flex justify-start"><div className="bg-gray-800 rounded-2xl rounded-bl-sm px-3 py-2 max-w-[75%]"><p className="text-xs text-gray-200">Great! You&apos;re clocked in now. Have a good shift!</p></div></div>
+              <p className="text-[10px] text-gray-600 mt-2 text-center">AI learns from every resolved conversation and escalates when it can&apos;t help</p>
+            </div>
+          </div>
+
+          {/* Coaching mockup */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-900/30 to-cyan-900/30 px-4 py-3 border-b border-gray-800">
+              <p className="text-sm font-semibold text-white">AI Coaching Grades</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Every coaching session is AI-graded with actionable feedback</p>
+            </div>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs text-gray-400">Monthly Average</p>
+                  <p className="text-2xl font-bold text-white">B+</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs text-gray-400">Trend</p>
+                  <p className="text-sm font-semibold text-green-400">Improving</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {[
+                  { cat: 'Specificity', pct: 85, color: 'bg-green-500' },
+                  { cat: 'Actionability', pct: 78, color: 'bg-blue-500' },
+                  { cat: 'Follow-Up', pct: 65, color: 'bg-amber-500' },
+                  { cat: 'Depth', pct: 72, color: 'bg-violet-500' },
+                  { cat: 'Prior Reference', pct: 55, color: 'bg-red-500' },
+                ].map(c => (
+                  <div key={c.cat} className="flex items-center gap-2 text-xs">
+                    <span className="text-gray-500 w-24">{c.cat}</span>
+                    <div className="flex-1 h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                      <div className={`h-full ${c.color} rounded-full`} style={{ width: `${c.pct}%` }} />
+                    </div>
+                    <span className="text-gray-400 w-8 text-right">{c.pct}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Custom features callout */}
+          <div className="bg-gradient-to-r from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-5 text-center">
+            <p className="text-white font-semibold">Don&apos;t see a feature you need?</p>
+            <p className="text-gray-400 text-xs mt-1 leading-relaxed">That&apos;s the best part — Field Manager Pro is custom-built. We can add any feature your company needs. Tell us what you&apos;re looking for.</p>
+          </div>
+        </div>
+
         {/* CTA */}
         <div className="bg-gradient-to-r from-violet-600/20 to-purple-600/20 border border-violet-500/30 rounded-2xl p-5 text-center">
           <p className="text-white font-semibold">Ready to use this for your team?</p>

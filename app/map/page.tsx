@@ -6,7 +6,7 @@ import NavBar from '@/components/NavBar'
 interface Session {
   id: string
   fullName: string
-  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer'
+  role: 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'prospect'
 }
 
 interface Shift {
@@ -153,6 +153,7 @@ export default function MapPage() {
   const [isReplaying, setIsReplaying] = useState(false)
   const [replayIdx, setReplayIdx] = useState(0)
   const [replaySpeed, setReplaySpeed] = useState(30)
+  const [dismissedProspectTip, setDismissedProspectTip] = useState(false)
   const replayIdxRef = useRef(0)
   const replayBreadcrumbsRef = useRef<Breadcrumb[]>([])
 
@@ -511,12 +512,15 @@ export default function MapPage() {
 
     // Store breadcrumbs for heat map and replay
     heatCrumbsRef.current = breadcrumbs
-    const dmCrumbs = breadcrumbs.filter(b => {
-      const shift = shifts.find(s => s.id === b.shift_id)
-      return shift?.user_role === 'manager'
-    })
-    setReplayBreadcrumbs(dmCrumbs)
-    replayBreadcrumbsRef.current = dmCrumbs
+    // Prospect/demo: replay all users. Normal: replay DM routes only.
+    const replayCrumbs = session.role === 'prospect'
+      ? breadcrumbs
+      : breadcrumbs.filter(b => {
+          const shift = shifts.find(s => s.id === b.shift_id)
+          return shift?.user_role === 'manager'
+        })
+    setReplayBreadcrumbs(replayCrumbs)
+    replayBreadcrumbsRef.current = replayCrumbs
 
     import('mapbox-gl').then(async mapboxgl => {
       const map = mapRef.current
@@ -529,8 +533,11 @@ export default function MapPage() {
 
       let pathFeatures: object[] = []
       if (canSeePaths(session.role) && breadcrumbs.length > 0) {
-        const dmShifts = shifts.filter(s => s.user_role === 'manager')
-        const matched = await Promise.all(dmShifts.map(async shift => {
+        // Prospect: show paths for all users. Normal: DM routes only.
+        const pathShifts = session.role === 'prospect'
+          ? shifts
+          : shifts.filter(s => s.user_role === 'manager')
+        const matched = await Promise.all(pathShifts.map(async shift => {
           const coords: [number, number][] = []
           if (shift.clock_in_lat && shift.clock_in_lng)
             coords.push([shift.clock_in_lng, shift.clock_in_lat])
@@ -733,6 +740,26 @@ export default function MapPage() {
         }
       `}</style>
 
+      {/* Prospect demo tooltip */}
+      {session?.role === 'prospect' && liveMode && !dismissedProspectTip && (
+        <div className="mx-4 mt-3 bg-violet-600/20 border border-violet-500/40 rounded-xl px-4 py-3 flex items-start gap-3">
+          <div className="shrink-0 mt-0.5">
+            <svg className="w-5 h-5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-semibold">Click the &quot;Live&quot; button below to switch to Historical mode</p>
+            <p className="text-xs text-violet-200 mt-1">Then select an employee and date range to view their GPS route, store visits, and location trail throughout the day.</p>
+          </div>
+          <button onClick={() => setDismissedProspectTip(true)} className="text-gray-400 hover:text-white shrink-0">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {/* Filters */}
       <div className="px-4 py-3 bg-gray-950 border-b border-gray-800 flex flex-wrap gap-2 items-end">
         {session && canViewAll(session.role) && (
@@ -746,6 +773,19 @@ export default function MapPage() {
           >
             <span className={`w-2 h-2 rounded-full ${liveMode ? 'bg-white animate-pulse' : 'bg-gray-500'}`} />
             Live
+          </button>
+        )}
+
+        {/* Exit Demo button */}
+        {session?.role === 'prospect' && (
+          <button
+            onClick={() => {
+              document.cookie = 'fmp-session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'
+              window.location.href = '/login'
+            }}
+            className="ml-auto text-xs text-gray-500 hover:text-gray-300 bg-gray-800 border border-gray-700 px-3 py-2 rounded-xl transition-colors"
+          >
+            Exit Demo
           </button>
         )}
 

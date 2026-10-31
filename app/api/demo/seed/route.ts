@@ -71,6 +71,23 @@ function hashPassword(pw: string): string {
   return crypto.createHash('sha256').update(pw).digest('hex')
 }
 
+// Simulated "home" locations for employees (scattered around Milwaukee)
+const HOME_LOCATIONS = [
+  { lat: 43.055, lng: -87.895 },  // emp1
+  { lat: 43.020, lng: -87.940 },  // emp2
+  { lat: 43.045, lng: -87.970 },  // emp3
+  { lat: 43.070, lng: -87.920 },  // emp4
+  { lat: 42.995, lng: -87.950 },  // emp5
+  { lat: 43.110, lng: -88.000 },  // emp6
+  { lat: 43.080, lng: -87.960 },  // emp7
+  { lat: 42.960, lng: -87.985 },  // emp8
+  { lat: 43.100, lng: -87.930 },  // emp9
+  { lat: 43.035, lng: -87.910 },  // (spare)
+  { lat: 43.025, lng: -87.980 },  // tech
+  { lat: 43.060, lng: -87.905 },  // dm1
+  { lat: 43.090, lng: -87.950 },  // dm2
+]
+
 // Generate GPS breadcrumbs along a route between stores
 function generateBreadcrumbs(
   fromLat: number, fromLng: number,
@@ -187,59 +204,60 @@ export async function POST(req: NextRequest) {
       const dayOfWeek = new Date(Date.now() - daysAgo * 86400000).getDay()
       if (dayOfWeek === 0) continue // Skip Sundays
 
-      // Employee shifts (at their assigned stores)
-      for (let empIdx = 1; empIdx <= 5; empIdx++) { // DM1's team
-        if (Math.random() > 0.8) continue // Some days off
-        const storeIdx = empIdx <= 3 ? 0 : (empIdx <= 4 ? 1 : 2)
+      // Helper: create employee shift with commute + at-store + departure breadcrumbs
+      async function createEmpShift(empIdx: number, storeIdx: number) {
+        const home = HOME_LOCATIONS[empIdx] || HOME_LOCATIONS[0]
+        const store = STORES[storeIdx]
+        const commuteMin = 15 + Math.floor(Math.random() * 15)
         const clockIn = cstDateTime(daysAgo, 9 + Math.floor(Math.random() * 2), Math.floor(Math.random() * 30))
-        const clockOut = new Date(clockIn.getTime() + (7 + Math.random() * 2) * 3600000)
+        const shiftHours = 7 + Math.random() * 2
+        const clockOut = new Date(clockIn.getTime() + shiftHours * 3600000)
 
         const [shift] = await q<{ id: string }>(`
           INSERT INTO shifts (user_id, clock_in_at, clock_out_at, store_location_id, clock_in_lat, clock_in_lng)
           VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-        `, [userIds[empIdx], clockIn.toISOString(), clockOut?.toISOString() ?? null, storeIds[storeIdx],
-            STORES[storeIdx].lat + (Math.random() - 0.5) * 0.0002,
-            STORES[storeIdx].lng + (Math.random() - 0.5) * 0.0002])
+        `, [userIds[empIdx], clockIn.toISOString(), clockOut.toISOString(), storeIds[storeIdx],
+            home.lat + (Math.random() - 0.5) * 0.001, home.lng + (Math.random() - 0.5) * 0.001])
 
-        // Breadcrumbs every 3 min at the store
-        const crumbCount = Math.floor((clockOut.getTime() - clockIn.getTime()) / 180000)
-        for (let c = 0; c < Math.min(crumbCount, 50); c++) {
-          const crumbTime = new Date(clockIn.getTime() + c * 180000)
-          await q(`
-            INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [shift.id, userIds[empIdx],
-              STORES[storeIdx].lat + (Math.random() - 0.5) * 0.0004,
-              STORES[storeIdx].lng + (Math.random() - 0.5) * 0.0004,
-              crumbTime.toISOString()])
+        // Phase 1: Commute from home to store
+        const arrivalTime = new Date(clockIn.getTime() + commuteMin * 60000)
+        const commuteCrumbs = generateBreadcrumbs(home.lat, home.lng, store.lat, store.lng, clockIn, commuteMin, 10)
+        for (const c of commuteCrumbs) {
+          await q(`INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at) VALUES ($1,$2,$3,$4,$5)`,
+            [shift.id, userIds[empIdx], c.lat, c.lng, c.time.toISOString()])
+        }
+
+        // Phase 2: At store (every 3 min)
+        const departureTime = new Date(clockOut.getTime() - commuteMin * 60000)
+        const atStoreMin = (departureTime.getTime() - arrivalTime.getTime()) / 60000
+        for (let m = 0; m < atStoreMin; m += 3) {
+          await q(`INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at) VALUES ($1,$2,$3,$4,$5)`,
+            [shift.id, userIds[empIdx],
+             store.lat + (Math.random() - 0.5) * 0.0004,
+             store.lng + (Math.random() - 0.5) * 0.0004,
+             new Date(arrivalTime.getTime() + m * 60000).toISOString()])
+        }
+
+        // Phase 3: Commute from store back home
+        const returnCrumbs = generateBreadcrumbs(store.lat, store.lng, home.lat, home.lng, departureTime, commuteMin, 10)
+        for (const c of returnCrumbs) {
+          await q(`INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at) VALUES ($1,$2,$3,$4,$5)`,
+            [shift.id, userIds[empIdx], c.lat, c.lng, c.time.toISOString()])
         }
       }
 
-      // DM2's team
+      // DM1's team employees
+      for (let empIdx = 1; empIdx <= 5; empIdx++) {
+        if (Math.random() > 0.8) continue
+        const storeIdx = empIdx <= 3 ? 0 : (empIdx <= 4 ? 1 : 2)
+        await createEmpShift(empIdx, storeIdx)
+      }
+
+      // DM2's team employees
       for (let empIdx = 7; empIdx <= 10; empIdx++) {
         if (Math.random() > 0.8) continue
         const storeIdx = empIdx <= 9 ? 3 : 4
-        const clockIn = cstDateTime(daysAgo, 9 + Math.floor(Math.random() * 2), Math.floor(Math.random() * 30))
-        const clockOut = new Date(clockIn.getTime() + (7 + Math.random() * 2) * 3600000)
-
-        const [shift] = await q<{ id: string }>(`
-          INSERT INTO shifts (user_id, clock_in_at, clock_out_at, store_location_id, clock_in_lat, clock_in_lng)
-          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id
-        `, [userIds[empIdx], clockIn.toISOString(), clockOut?.toISOString() ?? null, storeIds[storeIdx],
-            STORES[storeIdx].lat + (Math.random() - 0.5) * 0.0002,
-            STORES[storeIdx].lng + (Math.random() - 0.5) * 0.0002])
-
-        const crumbCount = Math.floor((clockOut.getTime() - clockIn.getTime()) / 180000)
-        for (let c = 0; c < Math.min(crumbCount, 50); c++) {
-          const crumbTime = new Date(clockIn.getTime() + c * 180000)
-          await q(`
-            INSERT INTO gps_breadcrumbs (shift_id, user_id, lat, lng, recorded_at)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [shift.id, userIds[empIdx],
-              STORES[storeIdx].lat + (Math.random() - 0.5) * 0.0004,
-              STORES[storeIdx].lng + (Math.random() - 0.5) * 0.0004,
-              crumbTime.toISOString()])
-        }
+        await createEmpShift(empIdx, storeIdx)
       }
 
       // DM1 — visits 2-3 stores per day with GPS trail between them

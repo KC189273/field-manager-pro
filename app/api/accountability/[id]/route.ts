@@ -31,7 +31,7 @@ export async function GET(
     ack_token: string | null; ack_status: string; ack_at: string | null
     created_at: string
   }>(
-    `SELECT * FROM accountability_docs WHERE id = $1`,
+    `SELECT *, incident_date::text AS incident_date FROM accountability_docs WHERE id = $1`,
     [id]
   )
 

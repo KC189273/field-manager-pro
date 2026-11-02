@@ -139,7 +139,10 @@ function canSubmit(role: Role) {
 }
 
 function fmtDate(d: string) {
-  return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  if (!d) return ''
+  // Handle both "2026-10-23" date strings and full ISO timestamps
+  const dateStr = typeof d === 'string' ? d.slice(0, 10) : new Date(d).toISOString().slice(0, 10)
+  return new Date(dateStr + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 function fmtDateTime(iso: string) {
   return new Date(iso).toLocaleString('en-US', { timeZone: 'America/Chicago', dateStyle: 'medium', timeStyle: 'short' })
@@ -225,7 +228,7 @@ function EmployeeNoticeCard({ doc, onAcknowledged }: {
       </div>
       <p className="text-sm font-semibold text-white mb-1">{doc.title}</p>
       <p className="text-xs text-gray-500 mb-3">
-        {isDocConvo ? 'Documented by' : 'Issued by'} {doc.author_name} · {new Date(doc.incident_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+        {isDocConvo ? 'Documented by' : 'Issued by'} {doc.author_name} · {fmtDate(doc.incident_date)}
       </p>
       {isDocConvo ? (
         <p className="text-xs text-cyan-500/70">
@@ -1079,6 +1082,11 @@ function SubmitForm({ session, subjects, onSuccess }: {
       if (!reminderAcknowledged) {
         setError('You must acknowledge the documentation reminder before submitting.'); return
       }
+    }
+    // Verbal warnings go directly to the employee — confirm before sending
+    if (!isDocConvo && level === 'verbal') {
+      const subjectName = subjects.find(s => s.id === subjectId)?.full_name ?? 'the employee'
+      if (!confirm(`Verbal Warnings are sent directly to ${subjectName} without SD or leadership approval. Once submitted, the employee will be notified immediately.\n\nAre you sure you want to proceed?`)) return
     }
     setSubmitting(true)
     setError('')

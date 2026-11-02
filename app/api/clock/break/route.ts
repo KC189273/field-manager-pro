@@ -80,8 +80,8 @@ export async function POST(req: NextRequest) {
 
   try { await ensureBreaksTable() } catch {}
 
-  const shift = await queryOne<{ id: string }>(
-    `SELECT id FROM shifts WHERE user_id = $1 AND clock_in_at IS NOT NULL AND clock_out_at IS NULL`,
+  const shift = await queryOne<{ id: string; store_location_id: string | null }>(
+    `SELECT id, store_location_id FROM shifts WHERE user_id = $1 AND clock_in_at IS NOT NULL AND clock_out_at IS NULL`,
     [session.id]
   )
   if (!shift) return NextResponse.json({ error: 'No active shift' }, { status: 404 })
@@ -123,11 +123,23 @@ export async function POST(req: NextRequest) {
 
   // Flag: break exceeds allowed time — check scheduled break first, fallback to 45 min
   const todayCST = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-  const scheduledBreak = await queryOne<{ break_minutes: number | null }>(
-    `SELECT break_minutes FROM scheduled_shifts WHERE employee_id = $1 AND shift_date = $2 LIMIT 1`,
-    [session.id, todayCST]
-  ).catch(() => null)
-  const breakLimit = scheduledBreak?.break_minutes && scheduledBreak.break_minutes > 0 ? scheduledBreak.break_minutes : 45
+  // Look up scheduled break by store + date first (handles shift swaps/coverage)
+  // Then fall back to employee + date, then default 45 min
+  let breakLimit = 45
+  if (shift.store_location_id) {
+    const storeBreak = await queryOne<{ break_minutes: number | null }>(
+      `SELECT break_minutes FROM scheduled_shifts WHERE store_location_id = $1 AND shift_date = $2 AND break_minutes > 0 ORDER BY break_minutes DESC LIMIT 1`,
+      [shift.store_location_id, todayCST]
+    ).catch(() => null)
+    if (storeBreak?.break_minutes) breakLimit = storeBreak.break_minutes
+  }
+  if (breakLimit === 45) {
+    const empBreak = await queryOne<{ break_minutes: number | null }>(
+      `SELECT break_minutes FROM scheduled_shifts WHERE employee_id = $1 AND shift_date = $2 AND break_minutes > 0 LIMIT 1`,
+      [session.id, todayCST]
+    ).catch(() => null)
+    if (empBreak?.break_minutes) breakLimit = empBreak.break_minutes
+  }
 
   if (breakMinutes > breakLimit) {
     try {

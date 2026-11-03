@@ -20,6 +20,7 @@ interface TermEmployee {
   terminated_at: string | null
   shift_count: number
   total_hours: number
+  is_terminated: boolean
 }
 
 export default function TerminatedRecordsPage() {
@@ -143,7 +144,10 @@ export default function TerminatedRecordsPage() {
             <div key={emp.id} className="bg-gray-900 border border-gray-800 rounded-2xl px-5 py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <p className="text-white font-semibold text-sm">{emp.full_name}</p>
+                  <p className="text-white font-semibold text-sm">
+                    {emp.full_name}
+                    {!emp.is_terminated && <span className="ml-2 text-[10px] font-bold text-amber-400 bg-amber-900/40 px-2 py-0.5 rounded-full">PENDING TERMINATION</span>}
+                  </p>
                   <p className="text-gray-500 text-xs mt-0.5">{emp.email}</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                     <span className="text-xs text-gray-400">

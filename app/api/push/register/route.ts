@@ -37,8 +37,13 @@ export async function POST(req: NextRequest) {
     ? rawToken.trim()
     : rawToken.replace(/[<>\s-]/g, '').toLowerCase()
 
+  // Remove this token from ALL other users (prevents cross-account push after login-as-another-user)
+  await query(
+    `DELETE FROM device_tokens WHERE token = $1 AND user_id != $2`,
+    [token, session.id]
+  )
+
   // Remove any stale tokens for this user+platform before inserting the fresh one.
-  // This handles rotated FCM tokens and fixes previously-lowercased bad tokens.
   await query(
     `DELETE FROM device_tokens WHERE user_id = $1 AND platform = $2 AND token != $3`,
     [session.id, platform, token]

@@ -27,17 +27,19 @@ export async function GET() {
     id: string; full_name: string; username: string; email: string
     role: string; manager_name: string | null; created_at: string
     terminated_at: string | null; shift_count: number; total_hours: number
+    is_terminated: boolean
   }>(`
     SELECT u.id, u.full_name, u.username, u.email, u.role,
            m.full_name as manager_name,
-           u.created_at::text,
+           u.created_at::text, u.is_terminated,
            (SELECT MAX(s.clock_out_at)::text FROM shifts s WHERE s.user_id = u.id AND s.clock_out_at IS NOT NULL) as terminated_at,
            (SELECT COUNT(*)::int FROM shifts s WHERE s.user_id = u.id) as shift_count,
            COALESCE((SELECT ROUND(SUM(EXTRACT(EPOCH FROM (s.clock_out_at - s.clock_in_at)) / 3600)::numeric, 2)
             FROM shifts s WHERE s.user_id = u.id AND s.clock_out_at IS NOT NULL), 0)::float as total_hours
     FROM users u
     LEFT JOIN users m ON m.id = u.manager_id
-    WHERE u.is_terminated = TRUE
+    WHERE (u.is_terminated = TRUE
+      OR u.id IN (SELECT employee_id FROM termination_requests WHERE status = 'pending_approval'))
     ORDER BY u.full_name
   `)
 

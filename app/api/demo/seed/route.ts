@@ -174,8 +174,8 @@ export async function POST(req: NextRequest) {
 
     for (const emp of EMPLOYEES) {
       const [row] = await q<{ id: string }>(`
-        INSERT INTO users (org_id, username, password_hash, full_name, legal_name, email, role, is_active)
-        VALUES ($1, $2, $3, $4, $4, $5, $6, TRUE) RETURNING id
+        INSERT INTO users (org_id, username, password_hash, full_name, legal_name, email, role, is_active, is_hidden)
+        VALUES ($1, $2, $3, $4, $4, $5, $6, TRUE, FALSE) RETURNING id
       `, [DEMO_ORG_ID, emp.username, pw, emp.name, emp.email, emp.role])
       userIds.push(row.id)
       if (emp.role === 'manager') dmIds.push(row.id)

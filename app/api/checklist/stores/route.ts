@@ -17,17 +17,34 @@ export async function GET() {
   let stores: StoreRow[]
 
   if (session.role === 'employee') {
-    // Get stores assigned to this employee's DM
-    stores = await query<StoreRow>(`
-      SELECT DISTINCT ON (l.id) l.id, l.address,
-             m.id AS dm_id, m.full_name AS dm_name, m.email AS dm_email
-      FROM dm_store_locations l
-      JOIN dm_manager_stores ms ON ms.store_location_id = l.id
-      JOIN users emp ON emp.id = $1
-      JOIN users m ON m.id = ms.manager_id AND m.id = emp.manager_id
-      WHERE l.active = true
-      ORDER BY l.id, l.address
-    `, [session.id])
+    // Check if floater — floaters see all org stores
+    const emp = await query<{ is_floater: boolean; org_id: string | null }>(`SELECT is_floater, org_id FROM users WHERE id = $1`, [session.id])
+    const isFloater = emp[0]?.is_floater ?? false
+
+    if (isFloater && emp[0]?.org_id) {
+      // Floaters see all active stores in their org
+      stores = await query<StoreRow>(`
+        SELECT DISTINCT ON (l.id) l.id, l.address,
+               m.id AS dm_id, m.full_name AS dm_name, m.email AS dm_email
+        FROM dm_store_locations l
+        LEFT JOIN dm_manager_stores ms ON ms.store_location_id = l.id
+        LEFT JOIN users m ON m.id = ms.manager_id
+        WHERE l.active = true AND l.org_id = $1
+        ORDER BY l.id, m.full_name
+      `, [emp[0].org_id])
+    } else {
+      // Regular employees see stores assigned to their DM
+      stores = await query<StoreRow>(`
+        SELECT DISTINCT ON (l.id) l.id, l.address,
+               m.id AS dm_id, m.full_name AS dm_name, m.email AS dm_email
+        FROM dm_store_locations l
+        JOIN dm_manager_stores ms ON ms.store_location_id = l.id
+        JOIN users emp ON emp.id = $1
+        JOIN users m ON m.id = ms.manager_id AND m.id = emp.manager_id
+        WHERE l.active = true
+        ORDER BY l.id, l.address
+      `, [session.id])
+    }
   } else if (session.role === 'manager') {
     // Get stores assigned to this DM, DM is themselves
     stores = await query<StoreRow>(`

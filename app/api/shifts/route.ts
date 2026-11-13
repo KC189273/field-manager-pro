@@ -236,7 +236,7 @@ export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session || !canManageShifts(session.role)) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const { userId, clockIn, clockOut, note } = await req.json()
+  const { userId, clockIn, clockOut, note, storeId } = await req.json()
   if (!userId || !clockIn || !note) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
 
   // DMs cannot add manual entries for themselves
@@ -280,9 +280,9 @@ export async function POST(req: NextRequest) {
   }
 
   await query(
-    `INSERT INTO shifts (user_id, clock_in_at, clock_out_at, is_manual, manual_note, manual_by)
-     VALUES ($1, $2, $3, TRUE, $4, $5)`,
-    [userId, clockIn, clockOut ?? null, note, session.id]
+    `INSERT INTO shifts (user_id, clock_in_at, clock_out_at, is_manual, manual_note, manual_by, store_location_id)
+     VALUES ($1, $2, $3, TRUE, $4, $5, $6)`,
+    [userId, clockIn, clockOut ?? null, note, session.id, storeId || null]
   )
 
   // Notify employee

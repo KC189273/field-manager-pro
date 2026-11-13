@@ -269,6 +269,9 @@ function TimecardsPage() {
   const [addIn, setAddIn] = useState('')
   const [addOut, setAddOut] = useState('')
   const [addNote, setAddNote] = useState('')
+  const [addStoreId, setAddStoreId] = useState('')
+  const [addStores, setAddStores] = useState<Array<{ id: string; address: string }>>([])
+  const [addStoresLoaded, setAddStoresLoaded] = useState(false)
   const [addSaving, setAddSaving] = useState(false)
 
   // Break management modal
@@ -524,6 +527,13 @@ function TimecardsPage() {
     setAddIn(iso + 'T08:00')
     setAddOut(iso + 'T17:00')
     setAddNote('')
+    setAddStoreId('')
+    if (!addStoresLoaded) {
+      fetch('/api/checklist/stores').then(r => r.json()).then(d => {
+        setAddStores(d.stores?.map((s: { id: string; address: string }) => ({ id: s.id, address: s.address })) ?? [])
+        setAddStoresLoaded(true)
+      }).catch(() => {})
+    }
   }
 
   async function saveAdd() {
@@ -539,6 +549,7 @@ function TimecardsPage() {
           clockIn: toCentralISO(addIn),
           clockOut: addOut ? toCentralISO(addOut) : null,
           note: addNote.trim(),
+          storeId: addStoreId || undefined,
         }),
       })
       if (!res.ok) {
@@ -1373,6 +1384,16 @@ function TimecardsPage() {
                 <input type="datetime-local" value={addOut} onChange={e => setAddOut(e.target.value)}
                   className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500" />
               </div>
+              {addStores.length > 0 && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Store</label>
+                  <select value={addStoreId} onChange={e => setAddStoreId(e.target.value)}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:ring-2 focus:ring-violet-500">
+                    <option value="">Select store (optional)</option>
+                    {addStores.map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Reason <span className="text-red-400">*</span></label>
                 <textarea value={addNote} onChange={e => setAddNote(e.target.value)} rows={2} placeholder="Required — reason for manual entry"

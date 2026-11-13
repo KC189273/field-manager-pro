@@ -6,16 +6,18 @@ import { sendDmEodRecap } from '@/lib/dm-eod-recap'
 export const maxDuration = 60
 
 export async function GET() {
-  // Compute 9:00 PM CST as an explicit timestamp
-  // This cron runs at 03:00 UTC = 21:00 CST. We construct the target time
-  // based on NOW() so any slight scheduling drift is handled gracefully.
-  const nowUtc = new Date()
-  // Represent 9 PM CST (UTC-6) for the current CST calendar day
-  const cstOffsetMs = -6 * 60 * 60 * 1000
-  const cstNow = new Date(nowUtc.getTime() + cstOffsetMs)
-  const cstDate = cstNow.toISOString().split('T')[0] // YYYY-MM-DD in CST
-  // 9 PM CST expressed as UTC
-  const clockOutUtc = new Date(`${cstDate}T21:00:00-06:00`)
+  // Compute 9:00 PM Central Time (CST or CDT depending on DST) as UTC
+  // Uses Intl to get the correct date in Central Time, then constructs
+  // 21:00 in that timezone with proper DST offset detection
+  const cstDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
+  // Detect current Central Time UTC offset (CDT = -5, CST = -6)
+  const cstFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', timeZoneName: 'shortOffset' })
+  const parts = cstFormatter.formatToParts(new Date())
+  const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value ?? '-06:00'
+  // offsetPart is like "GMT-5" or "GMT-6"
+  const offsetHours = parseInt(offsetPart.replace(/[^-\d]/g, '')) || -6
+  const offsetStr = `${offsetHours < 0 ? '-' : '+'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
+  const clockOutUtc = new Date(`${cstDate}T21:00:00${offsetStr}`)
 
   // Find all users still clocked in (shifts with no clock_out_at)
   const activeShifts = await query<{

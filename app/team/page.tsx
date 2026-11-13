@@ -108,10 +108,12 @@ export default function TeamPage() {
   const terminatedCount = users.filter(u => u.is_hidden && u.is_active === false).length
   const presentRoles = Array.from(new Set(allUsersOrdered.map(u => u.role)))
   const searchFiltered = searchQuery.trim()
-    ? allUsersOrdered.filter(u =>
-        u.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        u.username.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+    ? allUsersOrdered.filter(u => {
+        const q = searchQuery.toLowerCase()
+        return u.full_name.toLowerCase().includes(q) ||
+          u.username.toLowerCase().includes(q) ||
+          (u.legal_name && u.legal_name.toLowerCase().includes(q))
+      })
     : allUsersOrdered
   const filteredUsers = roleFilter === 'all' ? searchFiltered : searchFiltered.filter(u => u.role === roleFilter)
 

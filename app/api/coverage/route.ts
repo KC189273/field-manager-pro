@@ -6,7 +6,7 @@ const CST = 'America/Chicago'
 
 export async function GET() {
   const session = await getSession()
-  if (!session || (!isManager(session.role) && session.role !== 'developer')) {
+  if (!session || (!isManager(session.role) && session.role !== 'owner' && session.role !== 'sales_director' && session.role !== 'developer')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

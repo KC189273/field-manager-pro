@@ -6,18 +6,18 @@ import { sendDmEodRecap } from '@/lib/dm-eod-recap'
 export const maxDuration = 60
 
 export async function GET() {
-  // Compute 9:00 PM Central Time (CST or CDT depending on DST) as UTC
-  // Uses Intl to get the correct date in Central Time, then constructs
-  // 21:00 in that timezone with proper DST offset detection
+  // Check if it's actually 9 PM (or later) in Central Time before proceeding.
+  // Cron runs at both 2 AM and 3 AM UTC to cover DST transitions.
+  // During CST (winter): 2 AM UTC = 8 PM CST (too early), 3 AM UTC = 9 PM CST (correct)
+  // During CDT (summer): 2 AM UTC = 9 PM CDT (correct), 3 AM UTC = 10 PM CDT (no-op)
+  const cstHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', hour: 'numeric', hour12: false }))
+  if (cstHour < 21) {
+    return NextResponse.json({ ok: true, skipped: true, reason: `Central time hour is ${cstHour}, waiting for 21:00` })
+  }
+
   const cstDate = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Chicago' })
-  // Detect current Central Time UTC offset (CDT = -5, CST = -6)
-  const cstFormatter = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', timeZoneName: 'shortOffset' })
-  const parts = cstFormatter.formatToParts(new Date())
-  const offsetPart = parts.find(p => p.type === 'timeZoneName')?.value ?? '-06:00'
-  // offsetPart is like "GMT-5" or "GMT-6"
-  const offsetHours = parseInt(offsetPart.replace(/[^-\d]/g, '')) || -6
-  const offsetStr = `${offsetHours < 0 ? '-' : '+'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`
-  const clockOutUtc = new Date(`${cstDate}T21:00:00${offsetStr}`)
+  // Use NOW() as the clock-out time (it's 9 PM Central or later)
+  const clockOutUtc = new Date()
 
   // Find all users still clocked in (shifts with no clock_out_at)
   const activeShifts = await query<{

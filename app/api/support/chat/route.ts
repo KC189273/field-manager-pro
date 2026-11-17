@@ -161,7 +161,7 @@ Set escalate=true when:
 
 IMPORTANT — APP CHANGES: If the auto-triage determines that an app update, code change, or configuration change is needed to fix the issue, this MUST be escalated to the developer for approval. The escalation must include a detailed explanation of what change is recommended and why. No changes should be made to the app without developer approval.
 
-Set resolved=true when the user confirms the fix worked, says thanks, or says goodbye.
+Set resolved=true ONLY when the user explicitly confirms the fix worked, says thanks, or says goodbye. NEVER set resolved=true on the same turn where you give directions or instructions — always wait for the user to confirm first. If you give a detailed answer, end with a question like "Was that helpful?" and wait for their response before resolving.
 
 HELP DOCS (ground every answer in these):
 
@@ -307,7 +307,7 @@ export async function POST(req: NextRequest) {
   // First Claude call
   let response = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: systemPrompt,
     messages: claudeMessages,
   })
@@ -330,7 +330,7 @@ export async function POST(req: NextRequest) {
 
     response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
       messages: claudeMessages,
     })

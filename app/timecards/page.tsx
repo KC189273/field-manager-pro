@@ -166,6 +166,9 @@ function TimecardsPage() {
   const [activeView, setActiveView] = useState<'all' | 'individual'>('individual')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
 
+  // Scheduled shifts (for missed shift flags)
+  const [scheduledShifts, setScheduledShifts] = useState<Array<{ employee_id: string; shift_date: string; start_time: string | null; end_time: string | null; store_address: string | null }>>([])
+
   // OT Watch List
   const [otWatch, setOtWatch] = useState<Array<{ id: string; full_name: string; is_floater: boolean; worked_hours: number; scheduled_remaining: number; projected_hours: number }>>([])
   const [otWeekLabel, setOtWeekLabel] = useState('')
@@ -335,6 +338,15 @@ function TimecardsPage() {
     }
   }, [from, to])
 
+  const loadScheduledShifts = useCallback(async () => {
+    if (!targetUserId) return
+    const r = await fetch(`/api/workforce/employee?id=${targetUserId}&weekStart=${from}&weekEnd=${to}`)
+    if (r.ok) {
+      const d = await r.json()
+      setScheduledShifts(d.schedules ?? [])
+    }
+  }, [targetUserId, from, to])
+
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 60_000)
     return () => clearInterval(interval)
@@ -384,6 +396,7 @@ function TimecardsPage() {
     if (activeView === 'individual') {
       loadShifts()
       loadPayCodes()
+      loadScheduledShifts()
     }
   }, [activeView, loadShifts, loadPayCodes])
 
@@ -1071,6 +1084,10 @@ function TimecardsPage() {
                   const dayShifts = shiftsForDay(day)
                   const dayPayCodes = payCodesForDay(day)
                   const isToday = toLocalDateStr(day) === toLocalDateStr(new Date())
+                  const dayDateStr = toLocalDateStr(day)
+                  const daySchedule = scheduledShifts.find(s => s.shift_date === dayDateStr)
+                  const isPast = day < new Date(new Date().toLocaleDateString('en-CA', { timeZone: CST }) + 'T12:00:00')
+                  const missedShift = daySchedule && dayShifts.length === 0 && isPast
                   const shiftSeconds = dayShifts.reduce((s, sh) => s + shiftDuration(sh, now), 0)
                   const ptoDaySeconds = dayPayCodes
                     .filter(pc => pc.type === 'pto')
@@ -1079,10 +1096,10 @@ function TimecardsPage() {
                   const hasEntries = dayShifts.length > 0 || dayPayCodes.length > 0
 
                   return (
-                    <div key={i} className={`bg-gray-900 border rounded-2xl overflow-hidden ${isToday ? 'border-violet-500/40' : 'border-gray-800'}`}>
+                    <div key={i} className={`bg-gray-900 border rounded-2xl overflow-hidden ${missedShift ? 'border-red-500/30' : isToday ? 'border-violet-500/40' : 'border-gray-800'}`}>
                       <button
-                        className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${isToday ? 'bg-violet-600/10' : ''} ${hasEntries ? 'hover:bg-gray-800/50 active:bg-gray-800' : ''}`}
-                        onClick={() => hasEntries && setDayDetail(day)}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 text-left ${isToday ? 'bg-violet-600/10' : missedShift ? 'bg-red-500/5' : ''} ${hasEntries || missedShift ? 'hover:bg-gray-800/50 active:bg-gray-800' : ''}`}
+                        onClick={() => (hasEntries || missedShift) && setDayDetail(day)}
                       >
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className={`text-sm font-semibold ${isToday ? 'text-violet-400' : 'text-white'}`}>{DAY_NAMES[i]}</p>
@@ -1093,10 +1110,23 @@ function TimecardsPage() {
                           {dayPayCodes.some(pc => pc.type === 'pto') && (
                             <span className="text-[10px] font-semibold bg-blue-500/15 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded-full">PTO</span>
                           )}
+                          {daySchedule && dayShifts.length > 0 && (
+                            <span className="text-[10px] font-semibold bg-green-500/15 text-green-400 border border-green-500/20 px-1.5 py-0.5 rounded-full">
+                              Sched {daySchedule.start_time?.slice(0, 5)}
+                            </span>
+                          )}
+                          {missedShift && (
+                            <span className="text-[10px] font-semibold bg-red-500/15 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full">
+                              Missed Shift
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-3">
                           {daySeconds > 0 && <p className="text-xs font-semibold text-violet-400">{fmtDecimalHours(daySeconds)}</p>}
-                          {hasEntries && <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>}
+                          {missedShift && daySchedule && (
+                            <p className="text-[10px] text-red-400">Was scheduled {daySchedule.start_time?.slice(0, 5)}–{daySchedule.end_time?.slice(0, 5)}{daySchedule.store_address ? ` at ${daySchedule.store_address.split(' ').slice(0, 3).join(' ')}` : ''}</p>
+                          )}
+                          {(hasEntries || missedShift) && <svg className="w-3.5 h-3.5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" /></svg>}
                           {isMgr && selectedUserId && selectedUserId !== session.id && (
                             <>
                               <button

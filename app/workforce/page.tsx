@@ -737,7 +737,16 @@ export default function WorkforcePage() {
                           <td className="px-4 py-3 sticky left-0 bg-gray-900 z-10">
                             <div className="flex items-center gap-1.5">
                               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: storeColorMap.get(store.id) ?? '#6b7280' }} />
-                              <p className="text-white font-medium text-sm truncate max-w-[180px]">{store.address.split(' ').slice(0, 3).join(' ')}</p>
+                              <div className="min-w-0">
+                                <p className="text-white font-medium text-sm truncate max-w-[180px]">{store.address.split(' ').slice(0, 3).join(' ')}</p>
+                                {session.role === 'employee' && (() => {
+                                  const todaySchedNames = schedules
+                                    .filter(s => s.store_id === store.id && s.shift_date === todayStr)
+                                    .map(s => employees.find(e => e.id === s.employee_id)?.full_name?.split(' ')[0])
+                                    .filter(Boolean)
+                                  return todaySchedNames.length > 0 ? <p className="text-[9px] text-gray-400">{todaySchedNames.join(', ')}</p> : null
+                                })()}
+                              </div>
                             </div>
                           </td>
                           {days.map(day => {
@@ -789,6 +798,21 @@ export default function WorkforcePage() {
                   ) : (
                     <p className="text-[10px] text-gray-500 mt-1">Your schedule</p>
                   )}
+
+                  {/* Scheduled today list for employees */}
+                  {session.role === 'employee' && (() => {
+                    const todaySchedNames = schedules
+                      .filter(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id !== session.id)
+                      .map(s => employees.find(e => e.id === s.employee_id)?.full_name)
+                      .filter(Boolean)
+                    if (todaySchedNames.length === 0) return null
+                    return (
+                      <div className="mt-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">Also Scheduled Today</p>
+                        <p className="text-xs text-gray-300">{todaySchedNames.join(', ')}</p>
+                      </div>
+                    )
+                  })()}
                   {/* Schedule actions */}
                   {canEdit && (
                     <div className="flex gap-2 mt-2">
@@ -817,7 +841,8 @@ export default function WorkforcePage() {
                     </thead>
                     <tbody>
                       {(session.role === 'employee' ? storeEmployees.filter(e => e.id === session.id) : storeEmployees).map(emp => (
-                        <tr key={emp.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer" onClick={() => drillTo('employee', { employee: emp.id })}>
+                        <tr key={emp.id} className={`border-b border-gray-800/50 ${session.role !== 'employee' ? 'hover:bg-gray-800/30 cursor-pointer' : ''}`}
+                          onClick={() => { if (session.role !== 'employee' || emp.id === session.id) drillTo('employee', { employee: emp.id }) }}>
                           <td className="px-4 py-2 sticky left-0 bg-gray-900 z-10">
                             <p className="text-white font-medium text-xs">{emp.full_name}</p>
                           </td>

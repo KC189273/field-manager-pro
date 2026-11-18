@@ -24,6 +24,7 @@ export default function GlobalError({
       <p className="text-gray-400 text-sm mb-6 max-w-xs">
         We had trouble loading this page. This is usually temporary — please try again.
       </p>
+      <p className="text-red-400 text-xs mb-4 max-w-sm break-all">{error?.message}</p>
       <button
         onClick={reset}
         className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold rounded-xl transition-colors"

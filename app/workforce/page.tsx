@@ -496,31 +496,26 @@ export default function WorkforcePage() {
   const role = session.role
   const sessionId = session.id
   const isEditRole = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(role)
-  // DMs can only edit employees who are at THEIR stores
-  const myStoreIds = useMemo(() => {
+
+  // Pre-compute DM's store IDs and which employees work at DM's stores (stable refs)
+  const dmEditStoreIds = useMemo(() => {
     if (role !== 'manager') return null
     return new Set((allDms.find(d => d.id === sessionId)?.stores ?? []).map(s => s.id))
   }, [role, sessionId, allDms])
-  // Employees who have a schedule or shift at any of this DM's stores this week
-  const empsAtMyStores = useMemo(() => {
-    if (role !== 'manager' || !myStoreIds) return null
+
+  const dmEditEmpIds = useMemo(() => {
+    if (role !== 'manager' || !dmEditStoreIds || dmEditStoreIds.size === 0) return null
     const ids = new Set<string>()
-    for (const s of schedules) {
-      if (s.store_id && myStoreIds.has(s.store_id)) ids.add(s.employee_id)
-    }
-    for (const s of shifts) {
-      if (s.store_id && myStoreIds.has(s.store_id)) ids.add(s.user_id)
-    }
+    for (const s of schedules) if (s.store_id && dmEditStoreIds.has(s.store_id)) ids.add(s.employee_id)
+    for (const s of shifts) if (s.store_id && dmEditStoreIds.has(s.store_id)) ids.add(s.user_id)
     return ids
-  }, [role, myStoreIds, schedules, shifts])
+  }, [role, dmEditStoreIds, schedules, shifts])
 
   function canEdit(storeId?: string, empId?: string): boolean {
     if (!isEditRole) return false
-    if (role !== 'manager') return true // ops+ can edit everything
-    // DMs: must be at one of their stores
-    if (storeId && myStoreIds && !myStoreIds.has(storeId)) return false
-    // If no store specified, check if employee has worked/scheduled at DM's stores
-    if (empId && empsAtMyStores && !empsAtMyStores.has(empId)) return false
+    if (role !== 'manager') return true
+    if (storeId && dmEditStoreIds && !dmEditStoreIds.has(storeId)) return false
+    if (empId && dmEditEmpIds && !dmEditEmpIds.has(empId)) return false
     return true
   }
 

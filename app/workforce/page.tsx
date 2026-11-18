@@ -168,13 +168,25 @@ export default function WorkforcePage() {
     return employees.filter(e => e.manager_id === selectedDm)
   }, [selectedDm, employees])
 
-  // Employees at a specific store (based on their shifts this week)
+  // Employees at a specific store — show anyone scheduled OR working there any day this week
+  // but sorted so today's employees are first
   const storeEmployees = useMemo(() => {
     if (!selectedStore) return []
     const userIds = new Set(shifts.filter(s => s.store_id === selectedStore).map(s => s.user_id))
     const schedUserIds = new Set(schedules.filter(s => s.store_id === selectedStore).map(s => s.employee_id))
-    return employees.filter(e => userIds.has(e.id) || schedUserIds.has(e.id))
-  }, [selectedStore, shifts, schedules, employees])
+    const all = employees.filter(e => userIds.has(e.id) || schedUserIds.has(e.id))
+    // Sort: employees scheduled/working at this store TODAY first
+    const todaySchedIds = new Set(schedules.filter(s => s.store_id === selectedStore && s.shift_date === todayStr).map(s => s.employee_id))
+    const todayShiftIds = new Set(shifts.filter(s => {
+      const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
+      return s.store_id === selectedStore && sd === todayStr
+    }).map(s => s.user_id))
+    return all.sort((a, b) => {
+      const aToday = todaySchedIds.has(a.id) || todayShiftIds.has(a.id) ? 0 : 1
+      const bToday = todaySchedIds.has(b.id) || todayShiftIds.has(b.id) ? 0 : 1
+      return aToday - bToday || a.full_name.localeCompare(b.full_name)
+    })
+  }, [selectedStore, shifts, schedules, employees, todayStr])
 
   // Summary stats
   const summaryStores = useMemo(() => {
@@ -665,7 +677,16 @@ export default function WorkforcePage() {
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800">
                   <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">{currentStore?.address}</p>
-                  <p className="text-[10px] text-gray-500">{storeEmployees.length} employees</p>
+                  <p className="text-[10px] text-gray-500">
+                    {storeEmployees.filter(e => {
+                      const todaySchedHere = schedules.some(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id === e.id)
+                      const todayShiftHere = shifts.some(s => {
+                        const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
+                        return s.store_id === selectedStore && sd === todayStr && s.user_id === e.id
+                      })
+                      return todaySchedHere || todayShiftHere
+                    }).length} today · {storeEmployees.length} this week
+                  </p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -686,8 +707,12 @@ export default function WorkforcePage() {
                             <p className="text-white font-medium text-xs">{emp.full_name}</p>
                           </td>
                           {days.map(day => {
-                            const sched = empScheduleForDay(emp.id, day)
-                            const dayShifts = empShiftsForDay(emp.id, day)
+                            // Only show schedule/shifts AT THIS STORE for this day
+                            const sched = schedules.find(s => s.employee_id === emp.id && s.shift_date === day && s.store_id === selectedStore)
+                            const dayShifts = shifts.filter(s => {
+                              const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
+                              return s.user_id === emp.id && sd === day && s.store_id === selectedStore
+                            })
                             const worked = dayShifts.length > 0
                             const hours = dayShifts.reduce((s, sh) => s + sh.duration_seconds / 3600, 0)
                             const isActive = dayShifts.some(s => !s.clock_out_at)

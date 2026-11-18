@@ -606,8 +606,8 @@ export default function WorkforcePage() {
           <p className="text-gray-500 text-sm text-center py-16">Loading...</p>
         ) : (
           <>
-            {/* Summary cards */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
+            {/* Summary cards — DM+ only */}
+            {session.role !== 'employee' && <div className="grid grid-cols-3 gap-3 mb-5">
               <button onClick={() => setShowUnmanned(v => !v)} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stores Open</p>
                 <p className="text-xl font-bold text-white">{summaryStores.open} <span className="text-gray-500 text-sm font-normal">of {summaryStores.total}</span></p>
@@ -623,7 +623,7 @@ export default function WorkforcePage() {
                 <p className="text-xl font-bold text-white">{totalExceptions}</p>
                 <p className="text-[10px] text-violet-400">Tap to review</p>
               </button>
-            </div>
+            </div>}
 
             {/* Unmanned stores panel */}
             {showUnmanned && summaryStores.unmanned > 0 && (() => {
@@ -775,16 +775,20 @@ export default function WorkforcePage() {
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800">
                   <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">{currentStore?.address}</p>
-                  <p className="text-[10px] text-gray-500 mt-1">
-                    {storeEmployees.filter(e => {
-                      const todaySchedHere = schedules.some(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id === e.id)
-                      const todayShiftHere = shifts.some(s => {
-                        const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
-                        return s.store_id === selectedStore && sd === todayStr && s.user_id === e.id
-                      })
-                      return todaySchedHere || todayShiftHere
-                    }).length} here today · {storeEmployees.length} team total
-                  </p>
+                  {session.role !== 'employee' ? (
+                    <p className="text-[10px] text-gray-500 mt-1">
+                      {storeEmployees.filter(e => {
+                        const todaySchedHere = schedules.some(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id === e.id)
+                        const todayShiftHere = shifts.some(s => {
+                          const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
+                          return s.store_id === selectedStore && sd === todayStr && s.user_id === e.id
+                        })
+                        return todaySchedHere || todayShiftHere
+                      }).length} here today · {storeEmployees.length} team total
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-gray-500 mt-1">Your schedule</p>
+                  )}
                   {/* Schedule actions */}
                   {canEdit && (
                     <div className="flex gap-2 mt-2">
@@ -812,7 +816,7 @@ export default function WorkforcePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {storeEmployees.map(emp => (
+                      {(session.role === 'employee' ? storeEmployees.filter(e => e.id === session.id) : storeEmployees).map(emp => (
                         <tr key={emp.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer" onClick={() => drillTo('employee', { employee: emp.id })}>
                           <td className="px-4 py-2 sticky left-0 bg-gray-900 z-10">
                             <p className="text-white font-medium text-xs">{emp.full_name}</p>

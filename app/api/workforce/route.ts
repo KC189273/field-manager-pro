@@ -126,8 +126,8 @@ export async function GET(req: NextRequest) {
       ORDER BY s.clock_in_at
     `, [weekStart, weekEnd, CST])
 
-    // Get time exceptions (missed punches, no-shows, manual entries)
-    const exceptions = await query<{ user_id: string; count: string }>(`
+    // Get time exceptions: manual entries + timecard-related flags (auto clock-out, overtime, missed punch)
+    const manualEntries = await query<{ user_id: string; count: string }>(`
       SELECT s.user_id, COUNT(*)::text as count
       FROM shifts s
       JOIN users u ON u.id = s.user_id
@@ -135,8 +135,23 @@ export async function GET(req: NextRequest) {
         AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
         AND s.is_manual = TRUE
         ${orgWhere.replace(/u\./g, 'u.')}
+        ${dmScopeId ? `AND u.manager_id = '${dmScopeId.replace(/'/g, "''")}'` : ''}
       GROUP BY s.user_id
     `, [weekStart, weekEnd, CST])
+    const timecardFlags = await query<{ user_id: string; count: string }>(`
+      SELECT f.user_id, COUNT(*)::text as count
+      FROM flags f
+      JOIN users u ON u.id = f.user_id
+      WHERE f.date >= $1::date AND f.date <= $2::date
+        AND f.type IN ('auto_clockout', 'overtime', 'missing_clock_in_photo', 'break_long', 'break_multiple', 'geofence_exit')
+        ${orgWhere.replace(/u\./g, 'u.')}
+        ${dmScopeId ? `AND u.manager_id = '${dmScopeId.replace(/'/g, "''")}'` : ''}
+      GROUP BY f.user_id
+    `, [weekStart, weekEnd]).catch(() => [])
+    // Merge both counts per user
+    const exceptions: Record<string, number> = {}
+    for (const e of manualEntries) exceptions[e.user_id] = (exceptions[e.user_id] ?? 0) + parseInt(e.count)
+    for (const f of timecardFlags) exceptions[f.user_id] = (exceptions[f.user_id] ?? 0) + parseInt(f.count)
 
     // Store closures for the week
     const closures = await query<{ store_id: string; closure_date: string }>(`
@@ -184,7 +199,7 @@ export async function GET(req: NextRequest) {
       employees,
       schedules,
       shifts,
-      exceptions: Object.fromEntries(exceptions.map(e => [e.user_id, parseInt(e.count)])),
+      exceptions,
       closures,
       weekStart,
       weekEnd,

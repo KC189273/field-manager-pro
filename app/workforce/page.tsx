@@ -487,10 +487,10 @@ export default function WorkforcePage() {
                 <p className="text-xl font-bold text-white">{totalScheduledHours.toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500">{totalEmployees} employees</p>
               </button>
-              <button onClick={() => router.push('/flags')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
+              <button onClick={() => router.push('/timecards')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Time Exceptions</p>
                 <p className="text-xl font-bold text-white">{totalExceptions}</p>
-                <p className="text-[10px] text-violet-400">Tap to view</p>
+                <p className="text-[10px] text-violet-400">Tap to review</p>
               </button>
             </div>
 

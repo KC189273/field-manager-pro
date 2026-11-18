@@ -495,9 +495,23 @@ export default function WorkforcePage() {
 
   const role = session.role
   const sessionId = session.id
-  // Simple edit permission — will add DM restrictions back after fixing render loop
-  function canEdit(_storeId?: string, _empId?: string): boolean {
-    return ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(role)
+  // Edit permission — DMs can only edit at their own stores
+  const canEditRole = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(role)
+  // Cache DM's store IDs as a simple array (no Set, no useMemo — avoids re-render loops)
+  const dmStoreIdList = role === 'manager' ? (allDms.find(d => d.id === sessionId)?.stores ?? []).map(s => s.id) : null
+
+  function canEdit(storeId?: string, empId?: string): boolean {
+    if (!canEditRole) return false
+    if (role !== 'manager') return true
+    // DM: check store ownership
+    if (storeId && dmStoreIdList && !dmStoreIdList.includes(storeId)) return false
+    // DM: check if employee has any schedule/shift at DM's stores
+    if (empId && dmStoreIdList) {
+      const atMyStore = schedules.some(s => s.employee_id === empId && s.store_id && dmStoreIdList.includes(s.store_id))
+        || shifts.some(s => s.user_id === empId && s.store_id && dmStoreIdList.includes(s.store_id))
+      if (!atMyStore) return false
+    }
+    return true
   }
 
   // Helper: get shifts for an employee on a day

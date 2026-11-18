@@ -434,7 +434,11 @@ export default function WorkforcePage() {
 
         {/* Filter dropdowns */}
         {session.role !== 'manager' && session.role !== 'employee' && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+            <button onClick={() => { drillTo('org', { market: '', dm: '', store: '', employee: '' }); setWeekOffset(0) }}
+              className="bg-gray-800 border border-gray-700 hover:border-violet-500/40 rounded-xl px-3 py-2 text-xs text-gray-400 hover:text-white font-medium transition-colors col-span-2 sm:col-span-1">
+              Reset
+            </button>
             <select value={selectedMarket} onChange={e => { drillTo(e.target.value ? 'market' : 'org', { market: e.target.value, dm: '', store: '', employee: '' }) }} className={inputCls}>
               <option value="">All markets</option>
               {markets.map(m => <option key={m.name} value={m.name}>{m.name}</option>)}

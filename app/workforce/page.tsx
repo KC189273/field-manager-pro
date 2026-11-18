@@ -497,7 +497,10 @@ export default function WorkforcePage() {
   const sessionId = session.id
   const isEditRole = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(role)
   // DMs can only edit employees who are at THEIR stores
-  const myStoreIds = role === 'manager' ? new Set((allDms.find(d => d.id === sessionId)?.stores ?? []).map(s => s.id)) : null
+  const myStoreIds = useMemo(() => {
+    if (role !== 'manager') return null
+    return new Set((allDms.find(d => d.id === sessionId)?.stores ?? []).map(s => s.id))
+  }, [role, sessionId, allDms])
   // Employees who have a schedule or shift at any of this DM's stores this week
   const empsAtMyStores = useMemo(() => {
     if (role !== 'manager' || !myStoreIds) return null

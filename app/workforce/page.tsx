@@ -28,6 +28,22 @@ interface Employee {
 const CST = 'America/Chicago'
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+// Store color palette — consistent colors for dot system
+const STORE_COLORS = [
+  '#a855f7', // purple
+  '#3b82f6', // blue
+  '#22c55e', // green
+  '#f59e0b', // amber
+  '#ef4444', // red
+  '#06b6d4', // cyan
+  '#ec4899', // pink
+  '#f97316', // orange
+  '#8b5cf6', // violet
+  '#14b8a6', // teal
+  '#eab308', // yellow
+  '#6366f1', // indigo
+]
+
 function getMonday(offset = 0): string {
   const d = new Date(new Date().toLocaleString('en-US', { timeZone: CST }))
   const day = d.getDay()
@@ -168,25 +184,39 @@ export default function WorkforcePage() {
     return employees.filter(e => e.manager_id === selectedDm)
   }, [selectedDm, employees])
 
-  // Employees at a specific store — show anyone scheduled OR working there any day this week
-  // but sorted so today's employees are first
+  // Store color map — assign a consistent color to each store
+  const storeColorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    const stores = selectedDm ? (allDms.find(d => d.id === selectedDm)?.stores ?? []) : allStores
+    stores.forEach((s, i) => map.set(s.id, STORE_COLORS[i % STORE_COLORS.length]))
+    return map
+  }, [selectedDm, allDms, allStores])
+
+  // Employees at a specific store — show DM's full team so we can show cross-store dots
   const storeEmployees = useMemo(() => {
     if (!selectedStore) return []
-    const userIds = new Set(shifts.filter(s => s.store_id === selectedStore).map(s => s.user_id))
-    const schedUserIds = new Set(schedules.filter(s => s.store_id === selectedStore).map(s => s.employee_id))
-    const all = employees.filter(e => userIds.has(e.id) || schedUserIds.has(e.id))
-    // Sort: employees scheduled/working at this store TODAY first
-    const todaySchedIds = new Set(schedules.filter(s => s.store_id === selectedStore && s.shift_date === todayStr).map(s => s.employee_id))
-    const todayShiftIds = new Set(shifts.filter(s => {
+    // Get the DM who manages this store
+    const storeDm = allDms.find(d => d.stores.some(s => s.id === selectedStore))
+    // Get all employees under that DM
+    const teamEmps = storeDm ? employees.filter(e => e.manager_id === storeDm.id) : employees
+    // Filter to only those with any schedule or shift at ANY of this DM's stores this week
+    const relevantEmpIds = new Set([
+      ...schedules.filter(s => storeDm?.stores.some(st => st.id === s.store_id)).map(s => s.employee_id),
+      ...shifts.filter(s => storeDm?.stores.some(st => st.id === s.store_id)).map(s => s.user_id),
+    ])
+    const all = teamEmps.filter(e => relevantEmpIds.has(e.id))
+    // Sort: employees at THIS store today first
+    const todaySchedHere = new Set(schedules.filter(s => s.store_id === selectedStore && s.shift_date === todayStr).map(s => s.employee_id))
+    const todayShiftHere = new Set(shifts.filter(s => {
       const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
       return s.store_id === selectedStore && sd === todayStr
     }).map(s => s.user_id))
     return all.sort((a, b) => {
-      const aToday = todaySchedIds.has(a.id) || todayShiftIds.has(a.id) ? 0 : 1
-      const bToday = todaySchedIds.has(b.id) || todayShiftIds.has(b.id) ? 0 : 1
-      return aToday - bToday || a.full_name.localeCompare(b.full_name)
+      const aHere = todaySchedHere.has(a.id) || todayShiftHere.has(a.id) ? 0 : 1
+      const bHere = todaySchedHere.has(b.id) || todayShiftHere.has(b.id) ? 0 : 1
+      return aHere - bHere || a.full_name.localeCompare(b.full_name)
     })
-  }, [selectedStore, shifts, schedules, employees, todayStr])
+  }, [selectedStore, shifts, schedules, employees, allDms, todayStr])
 
   // Summary stats
   const summaryStores = useMemo(() => {
@@ -673,11 +703,31 @@ export default function WorkforcePage() {
             )}
 
             {/* ═══ STORE LEVEL — Employee Schedule Grid ═══ */}
-            {level === 'store' && selectedStore && (
+            {level === 'store' && selectedStore && (() => {
+              const storeDm = allDms.find(d => d.stores.some(s => s.id === selectedStore))
+              const dmStoreList = storeDm?.stores ?? []
+              return (
+              <div className="space-y-3">
+                {/* Store color legend */}
+                {dmStoreList.length > 1 && (
+                  <div className="flex flex-wrap gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2">
+                    {dmStoreList.map(s => (
+                      <button key={s.id} onClick={() => drillTo('store', { store: s.id })}
+                        className={`flex items-center gap-1.5 text-[10px] px-2 py-1 rounded-lg transition-colors ${s.id === selectedStore ? 'bg-gray-700 text-white font-semibold' : 'text-gray-400 hover:text-white'}`}>
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: storeColorMap.get(s.id) ?? '#6b7280' }} />
+                        {s.address.split(' ').slice(0, 2).join(' ')}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
               <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
                 <div className="px-4 py-3 border-b border-gray-800">
-                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">{currentStore?.address}</p>
-                  <p className="text-[10px] text-gray-500">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: storeColorMap.get(selectedStore) ?? '#6b7280' }} />
+                    <p className="text-xs font-bold text-violet-400 uppercase tracking-widest">{currentStore?.address}</p>
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">
                     {storeEmployees.filter(e => {
                       const todaySchedHere = schedules.some(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id === e.id)
                       const todayShiftHere = shifts.some(s => {
@@ -685,7 +735,7 @@ export default function WorkforcePage() {
                         return s.store_id === selectedStore && sd === todayStr && s.user_id === e.id
                       })
                       return todaySchedHere || todayShiftHere
-                    }).length} today · {storeEmployees.length} this week
+                    }).length} here today · {storeEmployees.length} team total
                   </p>
                 </div>
                 <div className="overflow-x-auto">
@@ -707,8 +757,14 @@ export default function WorkforcePage() {
                             <p className="text-white font-medium text-xs">{emp.full_name}</p>
                           </td>
                           {days.map(day => {
-                            // Only show schedule/shifts AT THIS STORE for this day
-                            const sched = schedules.find(s => s.employee_id === emp.id && s.shift_date === day && s.store_id === selectedStore)
+                            // Check schedule at THIS store
+                            const schedHere = schedules.find(s => s.employee_id === emp.id && s.shift_date === day && s.store_id === selectedStore)
+                            // Check schedule at OTHER stores
+                            const schedElsewhere = schedules.find(s => s.employee_id === emp.id && s.shift_date === day && s.store_id && s.store_id !== selectedStore)
+                            const sched = schedHere || schedElsewhere
+                            const isElsewhere = !schedHere && !!schedElsewhere
+                            const elsewhereColor = isElsewhere && schedElsewhere?.store_id ? storeColorMap.get(schedElsewhere.store_id) : undefined
+                            // Shifts at this store
                             const dayShifts = shifts.filter(s => {
                               const sd = new Date(s.clock_in_at).toLocaleDateString('en-CA', { timeZone: CST })
                               return s.user_id === emp.id && sd === day && s.store_id === selectedStore
@@ -720,9 +776,15 @@ export default function WorkforcePage() {
                               <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''}`}>
                                 {sched && sched.start_time ? (
                                   <div>
-                                    <p className="text-[10px] text-gray-300">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
-                                    {worked && <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>}
-                                    {!worked && day <= todayStr && (
+                                    <div className="flex items-center justify-center gap-1">
+                                      {isElsewhere && elsewhereColor && (
+                                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: elsewhereColor }} title={schedElsewhere?.store_address ?? ''} />
+                                      )}
+                                      <p className={`text-[10px] ${isElsewhere ? 'text-gray-500' : 'text-gray-300'}`}>{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
+                                    </div>
+                                    {isElsewhere && <p className="text-[8px] text-gray-600 truncate">{schedElsewhere?.store_address?.split(' ').slice(0, 2).join(' ')}</p>}
+                                    {!isElsewhere && worked && <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>}
+                                    {!isElsewhere && !worked && day <= todayStr && (
                                       <div>
                                         <p className="text-[10px] text-red-400">No show</p>
                                         {canEdit && (
@@ -735,7 +797,7 @@ export default function WorkforcePage() {
                                 ) : worked ? (
                                   <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
                                 ) : (
-                                  <span className="text-gray-700 text-xs">Off</span>
+                                  <span className="text-gray-700 text-xs">—</span>
                                 )}
                               </td>
                             )
@@ -746,7 +808,9 @@ export default function WorkforcePage() {
                   </table>
                 </div>
               </div>
-            )}
+              </div>
+              )
+            })()}
 
             {/* ═══ EMPLOYEE LEVEL — Day-by-Day Detail ═══ */}
             {level === 'employee' && selectedEmployee && currentEmployee && (

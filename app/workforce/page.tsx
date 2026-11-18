@@ -799,20 +799,6 @@ export default function WorkforcePage() {
                     <p className="text-[10px] text-gray-500 mt-1">Your schedule</p>
                   )}
 
-                  {/* Scheduled today list for employees */}
-                  {session.role === 'employee' && (() => {
-                    const todaySchedNames = schedules
-                      .filter(s => s.store_id === selectedStore && s.shift_date === todayStr && s.employee_id !== session.id)
-                      .map(s => employees.find(e => e.id === s.employee_id)?.full_name)
-                      .filter(Boolean)
-                    if (todaySchedNames.length === 0) return null
-                    return (
-                      <div className="mt-2 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2">
-                        <p className="text-[10px] text-gray-400 font-semibold uppercase mb-1">Also Scheduled Today</p>
-                        <p className="text-xs text-gray-300">{todaySchedNames.join(', ')}</p>
-                      </div>
-                    )
-                  })()}
                   {/* Schedule actions */}
                   {canEdit && (
                     <div className="flex gap-2 mt-2">
@@ -840,8 +826,8 @@ export default function WorkforcePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(session.role === 'employee' ? storeEmployees.filter(e => e.id === session.id) : storeEmployees).map(emp => (
-                        <tr key={emp.id} className={`border-b border-gray-800/50 ${session.role !== 'employee' ? 'hover:bg-gray-800/30 cursor-pointer' : ''}`}
+                      {storeEmployees.map(emp => (
+                        <tr key={emp.id} className={`border-b border-gray-800/50 ${session.role !== 'employee' ? 'hover:bg-gray-800/30 cursor-pointer' : emp.id === session.id ? 'bg-violet-500/5' : ''}`}
                           onClick={() => { if (session.role !== 'employee' || emp.id === session.id) drillTo('employee', { employee: emp.id }) }}>
                           <td className="px-4 py-2 sticky left-0 bg-gray-900 z-10">
                             <p className="text-white font-medium text-xs">{emp.full_name}</p>
@@ -870,24 +856,32 @@ export default function WorkforcePage() {
                                     openCreateShift(emp.id, selectedStore, day)
                                   }
                                 }}>
-                                {sched && sched.start_time ? (
-                                  <div>
+                                {session.role === 'employee' ? (
+                                  /* Employee view: schedule times only, no worked hours or status */
+                                  sched && sched.start_time ? (
                                     <p className="text-[10px] text-gray-300">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
-                                    {worked && <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>}
-                                    {!worked && day <= todayStr && (
-                                      <div>
-                                        <p className="text-[10px] text-red-400">No show</p>
-                                        {canEdit && (
-                                          <button onClick={(e2) => { e2.stopPropagation(); openAddTime(emp.id, day) }}
-                                            className="text-[9px] text-violet-400 hover:text-violet-300">+ Add Time</button>
-                                        )}
-                                      </div>
-                                    )}
-                                  </div>
-                                ) : worked ? (
-                                  <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
+                                  ) : <span className="text-gray-700 text-xs">—</span>
                                 ) : (
-                                  <span className={`text-xs ${canEdit ? 'text-gray-600' : 'text-gray-700'}`}>{canEdit ? '+' : '—'}</span>
+                                  /* DM+ view: full detail with worked hours, status, edit */
+                                  sched && sched.start_time ? (
+                                    <div>
+                                      <p className="text-[10px] text-gray-300">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
+                                      {worked && <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>}
+                                      {!worked && day <= todayStr && (
+                                        <div>
+                                          <p className="text-[10px] text-red-400">No show</p>
+                                          {canEdit && (
+                                            <button onClick={(e2) => { e2.stopPropagation(); openAddTime(emp.id, day) }}
+                                              className="text-[9px] text-violet-400 hover:text-violet-300">+ Add Time</button>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : worked ? (
+                                    <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
+                                  ) : (
+                                    <span className={`text-xs ${canEdit ? 'text-gray-600' : 'text-gray-700'}`}>{canEdit ? '+' : '—'}</span>
+                                  )
                                 )}
                               </td>
                             )

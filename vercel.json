@@ -167,6 +167,10 @@
     {
       "path": "/api/cron/demo-reset",
       "schedule": "0 5 * * 0"
+    },
+    {
+      "path": "/api/cron/payroll-autolock",
+      "schedule": "0 1,2 * * 1"
     }
   ]
 }

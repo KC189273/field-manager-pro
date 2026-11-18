@@ -1,0 +1,209 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession, isManager } from '@/lib/auth'
+import { query } from '@/lib/db'
+import { getOrgFilter } from '@/lib/org'
+
+const CST = 'America/Chicago'
+const ALLOWED = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer', 'prospect']
+
+// Extract market (state) from store address
+function extractMarket(address: string): string {
+  const match = address.match(/\b(WI|IA|IL|MN|TX|OH|IN|MI)\b/i)
+  if (!match) return 'Other'
+  const st = match[1].toUpperCase()
+  const marketNames: Record<string, string> = {
+    WI: 'Milwaukee', IA: 'Iowa', IL: 'Illinois', MN: 'Minnesota',
+    TX: 'Texas', OH: 'Ohio', IN: 'Indiana', MI: 'Michigan',
+  }
+  return marketNames[st] ?? st
+}
+
+export async function GET(req: NextRequest) {
+  const session = await getSession()
+  if (!session || !ALLOWED.includes(session.role)) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const { searchParams } = new URL(req.url)
+  const weekStart = searchParams.get('weekStart') || getMonday()
+  const weekEnd = searchParams.get('weekEnd') || getSunday(weekStart)
+
+  const orgFilter = await getOrgFilter(session)
+  const orgWhere = orgFilter.filterByOrg && orgFilter.orgId
+    ? `AND u.org_id = '${(orgFilter.orgId as string).replace(/'/g, "''")}'`
+    : ''
+  const storeOrgWhere = orgFilter.filterByOrg && orgFilter.orgId
+    ? `AND sl.org_id = '${(orgFilter.orgId as string).replace(/'/g, "''")}'`
+    : ''
+
+  // DMs only see their own team
+  const dmWhere = session.role === 'manager'
+    ? `AND ms.manager_id = '${session.id.replace(/'/g, "''")}'`
+    : ''
+
+  try {
+    // Get all DMs with their stores
+    const dmStores = await query<{
+      dm_id: string; dm_name: string
+      store_id: string; store_address: string
+    }>(`
+      SELECT u.id as dm_id, u.full_name as dm_name,
+             sl.id as store_id, sl.address as store_address
+      FROM users u
+      JOIN dm_manager_stores ms ON ms.manager_id = u.id
+      JOIN dm_store_locations sl ON sl.id = ms.store_location_id
+      WHERE u.role = 'manager' AND u.is_active = TRUE AND sl.active = TRUE
+        AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)
+        ${orgWhere}
+        ${dmWhere}
+      ORDER BY u.full_name, sl.address
+    `)
+
+    // Get all employees with their managers
+    const employees = await query<{
+      id: string; full_name: string; role: string; username: string
+      manager_id: string | null; manager_name: string | null
+      is_floater: boolean
+    }>(`
+      SELECT u.id, u.full_name, u.role, u.username,
+             u.manager_id, m.full_name as manager_name,
+             COALESCE(u.is_floater, FALSE) as is_floater
+      FROM users u
+      LEFT JOIN users m ON m.id = u.manager_id
+      WHERE u.role = 'employee' AND u.is_active = TRUE
+        AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)
+        ${orgWhere}
+        ${session.role === 'manager' ? `AND u.manager_id = '${session.id.replace(/'/g, "''")}'` : ''}
+      ORDER BY u.full_name
+    `)
+
+    // Get scheduled shifts for the week
+    const schedules = await query<{
+      employee_id: string; store_id: string | null; store_address: string | null
+      shift_date: string; start_time: string | null; end_time: string | null
+      break_minutes: number | null
+    }>(`
+      SELECT ss.employee_id, ss.store_location_id as store_id,
+             sl.address as store_address,
+             ss.shift_date::text, ss.start_time::text, ss.end_time::text,
+             ss.break_minutes
+      FROM scheduled_shifts ss
+      LEFT JOIN dm_store_locations sl ON sl.id = ss.store_location_id
+      WHERE ss.shift_date >= $1::date AND ss.shift_date <= $2::date
+        ${storeOrgWhere.replace(/sl\./g, 'sl.')}
+      ORDER BY ss.shift_date, ss.start_time
+    `, [weekStart, weekEnd])
+
+    // Get actual shifts (clock in/out) for the week
+    const shifts = await query<{
+      id: string; user_id: string; store_id: string | null; store_address: string | null
+      clock_in_at: string; clock_out_at: string | null
+      is_manual: boolean; manual_note: string | null
+      duration_seconds: number
+    }>(`
+      SELECT s.id, s.user_id, s.store_location_id as store_id,
+             sl.address as store_address,
+             s.clock_in_at::text, s.clock_out_at::text,
+             s.is_manual, s.manual_note,
+             EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at))
+               - COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start)))
+                 FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0)
+               AS duration_seconds
+      FROM shifts s
+      LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
+      JOIN users u ON u.id = s.user_id
+      WHERE (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
+        AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
+        ${orgWhere.replace(/u\./g, 'u.')}
+        ${session.role === 'manager' ? `AND u.manager_id = '${session.id.replace(/'/g, "''")}'` : ''}
+      ORDER BY s.clock_in_at
+    `, [weekStart, weekEnd, CST])
+
+    // Get time exceptions (missed punches, no-shows, manual entries)
+    const exceptions = await query<{ user_id: string; count: string }>(`
+      SELECT s.user_id, COUNT(*)::text as count
+      FROM shifts s
+      JOIN users u ON u.id = s.user_id
+      WHERE (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
+        AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
+        AND s.is_manual = TRUE
+        ${orgWhere.replace(/u\./g, 'u.')}
+      GROUP BY s.user_id
+    `, [weekStart, weekEnd, CST])
+
+    // Store closures for the week
+    const closures = await query<{ store_id: string; closure_date: string }>(`
+      SELECT store_id, closure_date::text FROM store_closures
+      WHERE closure_date >= $1::date AND closure_date <= $2::date
+    `, [weekStart, weekEnd])
+
+    // Build market → DM → store hierarchy
+    const marketMap = new Map<string, {
+      name: string
+      dms: Map<string, {
+        id: string; name: string
+        stores: Array<{ id: string; address: string }>
+      }>
+    }>()
+
+    for (const ds of dmStores) {
+      const market = extractMarket(ds.store_address)
+      if (!marketMap.has(market)) {
+        marketMap.set(market, { name: market, dms: new Map() })
+      }
+      const mkt = marketMap.get(market)!
+      if (!mkt.dms.has(ds.dm_id)) {
+        mkt.dms.set(ds.dm_id, { id: ds.dm_id, name: ds.dm_name, stores: [] })
+      }
+      mkt.dms.get(ds.dm_id)!.stores.push({ id: ds.store_id, address: ds.store_address })
+    }
+
+    const markets = Array.from(marketMap.values()).map(m => ({
+      name: m.name,
+      dms: Array.from(m.dms.values()),
+    })).sort((a, b) => a.name.localeCompare(b.name))
+
+    // All stores flat list
+    const allStores = dmStores
+      .filter((s, i, arr) => arr.findIndex(x => x.store_id === s.store_id) === i)
+      .map(s => ({ id: s.store_id, address: s.store_address }))
+      .sort((a, b) => a.address.localeCompare(b.address))
+
+    // All DMs flat list
+    const allDms = dmStores
+      .filter((d, i, arr) => arr.findIndex(x => x.dm_id === d.dm_id) === i)
+      .map(d => ({ id: d.dm_id, name: d.dm_name }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+
+    return NextResponse.json({
+      markets,
+      allStores,
+      allDms,
+      employees,
+      schedules,
+      shifts,
+      exceptions: Object.fromEntries(exceptions.map(e => [e.user_id, parseInt(e.count)])),
+      closures,
+      weekStart,
+      weekEnd,
+    })
+  } catch (err) {
+    console.error('Workforce API error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
+}
+
+function getMonday(): string {
+  const now = new Date()
+  const cst = new Date(now.toLocaleString('en-US', { timeZone: CST }))
+  const day = cst.getDay()
+  const diff = day === 0 ? 6 : day - 1
+  cst.setDate(cst.getDate() - diff)
+  return cst.toLocaleDateString('en-CA')
+}
+
+function getSunday(monday: string): string {
+  const d = new Date(monday + 'T12:00:00')
+  d.setDate(d.getDate() + 6)
+  return d.toLocaleDateString('en-CA')
+}

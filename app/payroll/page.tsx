@@ -453,28 +453,19 @@ export default function PayrollPage() {
                           )}
 
                           {!myApproval && isClosed ? (
-                            <div className="space-y-3">
-                              <div className="bg-amber-900/20 border border-amber-800/40 rounded-xl px-4 py-3">
-                                <p className="text-amber-300 text-xs font-medium">
-                                  Review your team's hours above, then lock and submit. Once submitted, timecards are permanently locked.
-                                </p>
-                              </div>
-                              <button
-                                onClick={() => approve(period.id, 'dm')}
-                                disabled={approving === period.id + 'dm'}
-                                className="w-full py-3 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold text-sm transition-colors"
-                              >
-                                {approving === period.id + 'dm' ? 'Submitting…' : 'Lock & Submit Timecards'}
-                              </button>
+                            <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl px-4 py-3">
+                              <p className="text-blue-300 text-xs font-medium">
+                                Timecards will auto-lock Sunday at 8 PM CST. Review your team&apos;s hours before then.
+                              </p>
                             </div>
                           ) : !myApproval && !isClosed ? (
-                            <p className="text-xs text-gray-500 italic">Period closes {new Date(period.period_end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — submit your timecards after close.</p>
+                            <p className="text-xs text-gray-500 italic">Period closes {new Date(period.period_end + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} — timecards auto-lock Sunday 8 PM CST.</p>
                           ) : (
                             <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
                               <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                               </svg>
-                              Submitted and locked · {fmtDatetime(myApproval!.approved_at)}
+                              Locked · {fmtDatetime(myApproval!.approved_at)}
                             </div>
                           )}
                         </div>
@@ -555,6 +546,40 @@ export default function PayrollPage() {
                         <StatusBadge status={currentPeriod.status} />
                       </div>
 
+                      {/* Ops Manager lock controls */}
+                      {['ops_manager', 'owner', 'developer'].includes(role) && (
+                        <div className="flex gap-2 mb-3">
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Unlock ALL DM timecards for this period? DMs and managers will be able to edit.')) return
+                              await fetch('/api/payroll/lock', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ periodId: currentPeriod.id, action: 'unlock_all' }),
+                              })
+                              load()
+                            }}
+                            className="flex-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
+                          >
+                            Unlock All Timecards
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!confirm('Lock ALL DM timecards for this period?')) return
+                              await fetch('/api/payroll/lock', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ periodId: currentPeriod.id, action: 'lock_all' }),
+                              })
+                              load()
+                            }}
+                            className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold py-2 rounded-xl transition-colors"
+                          >
+                            Lock All Timecards
+                          </button>
+                        </div>
+                      )}
+
                       {/* DM rows */}
                       <DmReviewList
                         period={currentPeriod}
@@ -563,6 +588,14 @@ export default function PayrollPage() {
                         approving={approving}
                         onDownload={(dmId) => downloadDmCsv(dmId, currentPeriod.id, currentPeriod.period_start, currentPeriod.period_end)}
                         onApprove={(dmId) => approve(currentPeriod.id, 'sr_approve', dmId)}
+                        onToggleLock={async (dmId, action) => {
+                          await fetch('/api/payroll/lock', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ periodId: currentPeriod.id, dmId, action }),
+                          })
+                          load()
+                        }}
                         canSr={canSrApprove(role)}
                       />
 
@@ -821,10 +854,11 @@ interface DmReviewListProps {
   approving: string | null
   onDownload: (dmId: string) => Promise<void>
   onApprove: (dmId: string) => Promise<void>
+  onToggleLock?: (dmId: string, action: 'lock' | 'unlock') => Promise<void>
   canSr: boolean
 }
 
-function DmReviewList({ period, session, downloadedDms, approving, onDownload, onApprove, canSr }: DmReviewListProps) {
+function DmReviewList({ period, session, downloadedDms, approving, onDownload, onApprove, onToggleLock, canSr }: DmReviewListProps) {
   const [downloading, setDownloading] = useState<string | null>(null)
 
   // Build a full list: submitted DMs from dmApprovals, all else as pending
@@ -896,6 +930,16 @@ function DmReviewList({ period, session, downloadedDms, approving, onDownload, o
 
               {isApproved && srApproval?.sr_name && (
                 <span className="text-xs text-gray-500">by {srApproval.sr_name}</span>
+              )}
+
+              {/* Per-DM unlock button for ops_manager+ */}
+              {onToggleLock && ['ops_manager', 'owner', 'developer'].includes(session.role) && (
+                <button
+                  onClick={() => onToggleLock(dm.dm_id, 'unlock')}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-700/50 hover:bg-amber-700 text-amber-300 text-[10px] font-semibold transition-colors"
+                >
+                  Unlock
+                </button>
               )}
             </div>
           </div>

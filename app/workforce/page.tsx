@@ -80,6 +80,7 @@ export default function WorkforcePage() {
   const [shifts, setShifts] = useState<Shift[]>([])
   const [exceptions, setExceptions] = useState<Record<string, number>>({})
   const [closures, setClosures] = useState<Array<{ store_id: string; closure_date: string }>>([])
+  const [coveredStoreIds, setCoveredStoreIds] = useState<Set<string>>(new Set())
 
   // Navigation
   const [level, setLevel] = useState<Level>('org')
@@ -128,6 +129,7 @@ export default function WorkforcePage() {
       setShifts(d.shifts ?? [])
       setExceptions(d.exceptions ?? {})
       setClosures(d.closures ?? [])
+      setCoveredStoreIds(new Set(d.coveredStoreIds ?? []))
     } finally { setLoading(false) }
   }, [monday, sunday])
 
@@ -182,10 +184,10 @@ export default function WorkforcePage() {
       const dm = allDms.find(d => d.id === selectedDm)
       stores = dm ? dm.stores : []
     }
-    const storeIds = new Set(stores.map(s => s.id))
-    const closedToday = closures.filter(c => c.closure_date === todayStr && storeIds.has(c.store_id)).length
-    return { total: stores.length, open: stores.length - closedToday, closed: closedToday }
-  }, [allStores, selectedMarket, currentMarket, selectedDm, allDms, closures, todayStr])
+    const storeIds = stores.map(s => s.id)
+    const openCount = storeIds.filter(id => coveredStoreIds.has(id)).length
+    return { total: stores.length, open: openCount, unmanned: stores.length - openCount }
+  }, [allStores, selectedMarket, currentMarket, selectedDm, allDms, coveredStoreIds])
 
   const totalScheduledHours = useMemo(() => {
     let filteredSchedules = schedules
@@ -484,7 +486,7 @@ export default function WorkforcePage() {
               <button onClick={() => router.push('/store-locations')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stores Open</p>
                 <p className="text-xl font-bold text-white">{summaryStores.open} <span className="text-gray-500 text-sm font-normal">of {summaryStores.total}</span></p>
-                {summaryStores.closed > 0 && <p className="text-[10px] text-gray-500">{summaryStores.closed} closed today</p>}
+                {summaryStores.unmanned > 0 && <p className="text-[10px] text-red-400">{summaryStores.unmanned} no coverage</p>}
               </button>
               <button onClick={() => router.push('/staff-schedule')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Scheduled Hours</p>

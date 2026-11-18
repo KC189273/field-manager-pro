@@ -159,6 +159,15 @@ export async function GET(req: NextRequest) {
       WHERE closure_date >= $1::date AND closure_date <= $2::date
     `, [weekStart, weekEnd])
 
+    // Live coverage: stores with at least one person currently clocked in
+    const coveredStores = await query<{ store_id: string; clocked_in: string }>(`
+      SELECT s.store_location_id as store_id, COUNT(DISTINCT s.user_id)::text as clocked_in
+      FROM shifts s
+      WHERE s.clock_out_at IS NULL AND s.store_location_id IS NOT NULL
+      GROUP BY s.store_location_id
+    `).catch(() => [])
+    const coveredStoreIds = new Set(coveredStores.map(c => c.store_id))
+
     // Build DM → stores map (each DM appears ONCE with ALL their stores)
     const dmMap = new Map<string, { id: string; name: string; stores: Array<{ id: string; address: string; market: string }> }>()
     const storeMarketMap = new Map<string, string>() // store_id → market name
@@ -201,6 +210,7 @@ export async function GET(req: NextRequest) {
       shifts,
       exceptions,
       closures,
+      coveredStoreIds: Array.from(coveredStoreIds),
       weekStart,
       weekEnd,
     })

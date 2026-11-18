@@ -137,43 +137,38 @@ export async function GET(req: NextRequest) {
       WHERE closure_date >= $1::date AND closure_date <= $2::date
     `, [weekStart, weekEnd])
 
-    // Build market → DM → store hierarchy
-    const marketMap = new Map<string, {
-      name: string
-      dms: Map<string, {
-        id: string; name: string
-        stores: Array<{ id: string; address: string }>
-      }>
-    }>()
+    // Build DM → stores map (each DM appears ONCE with ALL their stores)
+    const dmMap = new Map<string, { id: string; name: string; stores: Array<{ id: string; address: string; market: string }> }>()
+    const storeMarketMap = new Map<string, string>() // store_id → market name
 
     for (const ds of dmStores) {
       const market = extractMarket(ds.store_address)
-      if (!marketMap.has(market)) {
-        marketMap.set(market, { name: market, dms: new Map() })
+      storeMarketMap.set(ds.store_id, market)
+      if (!dmMap.has(ds.dm_id)) {
+        dmMap.set(ds.dm_id, { id: ds.dm_id, name: ds.dm_name, stores: [] })
       }
-      const mkt = marketMap.get(market)!
-      if (!mkt.dms.has(ds.dm_id)) {
-        mkt.dms.set(ds.dm_id, { id: ds.dm_id, name: ds.dm_name, stores: [] })
+      const dm = dmMap.get(ds.dm_id)!
+      if (!dm.stores.find(s => s.id === ds.store_id)) {
+        dm.stores.push({ id: ds.store_id, address: ds.store_address, market })
       }
-      mkt.dms.get(ds.dm_id)!.stores.push({ id: ds.store_id, address: ds.store_address })
     }
 
-    const markets = Array.from(marketMap.values()).map(m => ({
-      name: m.name,
-      dms: Array.from(m.dms.values()),
-    })).sort((a, b) => a.name.localeCompare(b.name))
+    // Markets: unique list with store counts
+    const marketNames = new Set(dmStores.map(ds => extractMarket(ds.store_address)))
+    const markets = Array.from(marketNames).sort().map(name => ({
+      name,
+      storeIds: dmStores.filter(ds => extractMarket(ds.store_address) === name).map(ds => ds.store_id),
+      dmIds: Array.from(new Set(dmStores.filter(ds => extractMarket(ds.store_address) === name).map(ds => ds.dm_id))),
+    }))
+
+    // All DMs with all their stores (never duplicated)
+    const allDms = Array.from(dmMap.values()).sort((a, b) => a.name.localeCompare(b.name))
 
     // All stores flat list
     const allStores = dmStores
       .filter((s, i, arr) => arr.findIndex(x => x.store_id === s.store_id) === i)
-      .map(s => ({ id: s.store_id, address: s.store_address }))
+      .map(s => ({ id: s.store_id, address: s.store_address, market: extractMarket(s.store_address) }))
       .sort((a, b) => a.address.localeCompare(b.address))
-
-    // All DMs flat list
-    const allDms = dmStores
-      .filter((d, i, arr) => arr.findIndex(x => x.dm_id === d.dm_id) === i)
-      .map(d => ({ id: d.dm_id, name: d.dm_name }))
-      .sort((a, b) => a.name.localeCompare(b.name))
 
     return NextResponse.json({
       markets,

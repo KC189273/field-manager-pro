@@ -7,9 +7,9 @@ import NavBar from '@/components/NavBar'
 type Role = 'employee' | 'manager' | 'ops_field_leader' | 'ops_manager' | 'owner' | 'sales_director' | 'developer' | 'prospect'
 interface Session { id: string; fullName: string; role: Role; org_id?: string | null }
 
-interface DmStore { id: string; address: string }
+interface DmStore { id: string; address: string; market?: string }
 interface Dm { id: string; name: string; stores: DmStore[] }
-interface Market { name: string; dms: Dm[] }
+interface Market { name: string; storeIds: string[]; dmIds: string[] }
 
 interface Schedule {
   employee_id: string; store_id: string | null; store_address: string | null
@@ -67,7 +67,7 @@ export default function WorkforcePage() {
   // Data
   const [markets, setMarkets] = useState<Market[]>([])
   const [allStores, setAllStores] = useState<DmStore[]>([])
-  const [allDms, setAllDms] = useState<Array<{ id: string; name: string }>>([])
+  const [allDms, setAllDms] = useState<Dm[]>([])
   const [employees, setEmployees] = useState<Employee[]>([])
   const [schedules, setSchedules] = useState<Schedule[]>([])
   const [shifts, setShifts] = useState<Shift[]>([])
@@ -124,20 +124,26 @@ export default function WorkforcePage() {
 
   // Auto-set level for DMs
   useEffect(() => {
-    if (session?.role === 'manager' && markets.length > 0) {
+    if (session?.role === 'manager' && allDms.length > 0) {
       const myDm = allDms.find(d => d.id === session.id)
       if (myDm) {
         setSelectedDm(session.id)
         setLevel('dm')
       }
     }
-  }, [session, markets, allDms])
+  }, [session, allDms])
 
   // Filtered data based on current level
   const currentMarket = markets.find(m => m.name === selectedMarket)
   const currentDm = allDms.find(d => d.id === selectedDm)
   const currentStore = allStores.find(s => s.id === selectedStore)
   const currentEmployee = employees.find(e => e.id === selectedEmployee)
+
+  // DMs filtered by market (if selected)
+  const filteredDms = useMemo(() => {
+    if (!selectedMarket || !currentMarket) return allDms
+    return allDms.filter(d => currentMarket.dmIds.includes(d.id))
+  }, [selectedMarket, currentMarket, allDms])
 
   // Store employees for a DM
   const dmEmployees = useMemo(() => {
@@ -156,18 +162,17 @@ export default function WorkforcePage() {
   // Summary stats
   const summaryStores = useMemo(() => {
     let stores: DmStore[] = allStores
-    if (selectedMarket) {
-      const mkt = markets.find(m => m.name === selectedMarket)
-      stores = mkt ? mkt.dms.flatMap(d => d.stores) : []
+    if (selectedMarket && currentMarket) {
+      stores = allStores.filter(s => currentMarket.storeIds.includes(s.id))
     }
     if (selectedDm) {
-      const dm = markets.flatMap(m => m.dms).find(d => d.id === selectedDm)
+      const dm = allDms.find(d => d.id === selectedDm)
       stores = dm ? dm.stores : []
     }
     const storeIds = new Set(stores.map(s => s.id))
     const closedToday = closures.filter(c => c.closure_date === todayStr && storeIds.has(c.store_id)).length
     return { total: stores.length, open: stores.length - closedToday, closed: closedToday }
-  }, [allStores, selectedMarket, selectedDm, markets, closures, todayStr])
+  }, [allStores, selectedMarket, currentMarket, selectedDm, allDms, closures, todayStr])
 
   const totalScheduledHours = useMemo(() => {
     let filteredSchedules = schedules
@@ -336,11 +341,11 @@ export default function WorkforcePage() {
             </select>
             <select value={selectedDm} onChange={e => { drillTo(e.target.value ? 'dm' : (selectedMarket ? 'market' : 'org'), { dm: e.target.value, store: '', employee: '' }) }} className={inputCls}>
               <option value="">All DMs</option>
-              {(selectedMarket ? (currentMarket?.dms ?? []) : allDms).map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {filteredDms.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
             <select value={selectedStore} onChange={e => { drillTo(e.target.value ? 'store' : (selectedDm ? 'dm' : selectedMarket ? 'market' : 'org'), { store: e.target.value, employee: '' }) }} className={inputCls}>
               <option value="">All stores</option>
-              {(selectedDm ? (markets.flatMap(m => m.dms).find(d => d.id === selectedDm)?.stores ?? []) : allStores).map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
+              {(selectedDm ? (allDms.find(d => d.id === selectedDm)?.stores ?? []) : allStores).map(s => <option key={s.id} value={s.id}>{s.address}</option>)}
             </select>
             <select value={selectedEmployee} onChange={e => { if (e.target.value) drillTo('employee', { employee: e.target.value }); else drillTo(selectedStore ? 'store' : selectedDm ? 'dm' : selectedMarket ? 'market' : 'org', { employee: '' }) }} className={inputCls}>
               <option value="">All employees</option>
@@ -408,7 +413,7 @@ export default function WorkforcePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(selectedMarket ? (currentMarket?.dms ?? []) : markets.flatMap(m => m.dms)).map(dm => {
+                      {filteredDms.map(dm => {
                         const dmEmpIds = new Set(employees.filter(e => e.manager_id === dm.id).map(e => e.id))
                         return (
                           <tr key={dm.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer" onClick={() => drillTo('dm', { dm: dm.id })}>
@@ -466,7 +471,7 @@ export default function WorkforcePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {(markets.flatMap(m => m.dms).find(d => d.id === selectedDm)?.stores ?? []).map(store => (
+                      {(allDms.find(d => d.id === selectedDm)?.stores ?? []).map(store => (
                         <tr key={store.id} className="border-b border-gray-800/50 hover:bg-gray-800/30 cursor-pointer" onClick={() => drillTo('store', { store: store.id })}>
                           <td className="px-4 py-3 sticky left-0 bg-gray-900 z-10">
                             <p className="text-white font-medium text-sm truncate max-w-[200px]">{store.address.split(' ').slice(0, 3).join(' ')}</p>

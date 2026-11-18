@@ -101,6 +101,7 @@ export default function WorkforcePage() {
   const [editBreaksLoading, setEditBreaksLoading] = useState(false)
   const [editIsNew, setEditIsNew] = useState(false) // true = adding new shift, false = editing existing
   const [editStoreId, setEditStoreId] = useState('')
+  const [editScheduleInfo, setEditScheduleInfo] = useState<{ start: string; end: string; store: string } | null>(null)
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -251,13 +252,25 @@ export default function WorkforcePage() {
     setEditEmployeeId(empId)
     setEditShiftId(null)
     setEditIsNew(true)
-    setEditIn(day + 'T09:00')
-    setEditOut(day + 'T17:00')
     setEditNote('')
     setEditError('')
     setEditBreaks([])
     setEditBreaksLoading(false)
     setEditStoreId('')
+    // Look up schedule for this day
+    const sched = empScheduleForDay(empId, day)
+    if (sched && sched.start_time && sched.end_time) {
+      const [sh, sm] = sched.start_time.split(':').map(Number)
+      const [eh, em] = sched.end_time.split(':').map(Number)
+      setEditIn(`${day}T${String(sh).padStart(2,'0')}:${String(sm).padStart(2,'0')}`)
+      setEditOut(`${day}T${String(eh).padStart(2,'0')}:${String(em).padStart(2,'0')}`)
+      setEditScheduleInfo({ start: fmtSchedTime(sched.start_time), end: fmtSchedTime(sched.end_time), store: sched.store_address ?? '' })
+      if (sched.store_id) setEditStoreId(sched.store_id)
+    } else {
+      setEditIn(day + 'T09:00')
+      setEditOut(day + 'T17:00')
+      setEditScheduleInfo(null)
+    }
   }
 
   async function openTimeEdit(empId: string, shiftId: string, clockIn: string, clockOut: string | null) {
@@ -265,6 +278,14 @@ export default function WorkforcePage() {
     setEditShiftId(shiftId)
     setEditIsNew(false)
     setEditStoreId('')
+    // Look up schedule for this shift's day
+    const shiftDay = new Date(clockIn).toLocaleDateString('en-CA', { timeZone: CST })
+    const sched = empScheduleForDay(empId, shiftDay)
+    if (sched && sched.start_time) {
+      setEditScheduleInfo({ start: fmtSchedTime(sched.start_time), end: fmtSchedTime(sched.end_time), store: sched.store_address ?? '' })
+    } else {
+      setEditScheduleInfo(null)
+    }
     const inLocal = new Date(clockIn).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16)
     const outLocal = clockOut ? new Date(clockOut).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16) : ''
     setEditIn(inLocal)
@@ -783,7 +804,14 @@ export default function WorkforcePage() {
       {editEmployeeId && (editShiftId || editIsNew) && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setEditEmployeeId(null)}>
           <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">{editIsNew ? 'Add Time Entry' : 'Edit Time'}</h2>
+            <h2 className="text-lg font-bold text-white mb-2">{editIsNew ? 'Add Time Entry' : 'Edit Time'}</h2>
+            {editScheduleInfo && (
+              <div className="bg-blue-900/20 border border-blue-800/40 rounded-xl px-3 py-2 mb-4">
+                <p className="text-[10px] text-blue-400 uppercase font-semibold mb-0.5">Scheduled</p>
+                <p className="text-sm text-white font-medium">{editScheduleInfo.start}–{editScheduleInfo.end}</p>
+                {editScheduleInfo.store && <p className="text-[10px] text-gray-400 truncate">{editScheduleInfo.store}</p>}
+              </div>
+            )}
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Clock In</label>

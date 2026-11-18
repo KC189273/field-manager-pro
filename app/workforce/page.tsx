@@ -81,6 +81,7 @@ export default function WorkforcePage() {
   const [exceptions, setExceptions] = useState<Record<string, number>>({})
   const [closures, setClosures] = useState<Array<{ store_id: string; closure_date: string }>>([])
   const [coveredStoreIds, setCoveredStoreIds] = useState<Set<string>>(new Set())
+  const [showUnmanned, setShowUnmanned] = useState(false)
 
   // Navigation
   const [level, setLevel] = useState<Level>('org')
@@ -483,10 +484,10 @@ export default function WorkforcePage() {
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-3 gap-3 mb-5">
-              <button onClick={() => router.push('/store-locations')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
+              <button onClick={() => setShowUnmanned(v => !v)} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stores Open</p>
                 <p className="text-xl font-bold text-white">{summaryStores.open} <span className="text-gray-500 text-sm font-normal">of {summaryStores.total}</span></p>
-                {summaryStores.unmanned > 0 && <p className="text-[10px] text-red-400">{summaryStores.unmanned} no coverage</p>}
+                {summaryStores.unmanned > 0 && <p className="text-[10px] text-red-400">{summaryStores.unmanned} no coverage — tap to see</p>}
               </button>
               <button onClick={() => router.push('/staff-schedule')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Scheduled Hours</p>
@@ -499,6 +500,36 @@ export default function WorkforcePage() {
                 <p className="text-[10px] text-violet-400">Tap to review</p>
               </button>
             </div>
+
+            {/* Unmanned stores panel */}
+            {showUnmanned && summaryStores.unmanned > 0 && (() => {
+              let scopedStores: DmStore[] = allStores
+              if (selectedMarket && currentMarket) scopedStores = allStores.filter(s => currentMarket.storeIds.includes(s.id))
+              if (selectedDm) { const dm = allDms.find(d => d.id === selectedDm); scopedStores = dm ? dm.stores : [] }
+              const unmanned = scopedStores.filter(s => !coveredStoreIds.has(s.id))
+              return (
+                <div className="bg-red-900/20 border border-red-800/40 rounded-2xl p-4 mb-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-bold text-red-400 uppercase tracking-widest">No Coverage ({unmanned.length})</p>
+                    <button onClick={() => setShowUnmanned(false)} className="text-xs text-gray-500 hover:text-white">Close</button>
+                  </div>
+                  <div className="space-y-2">
+                    {unmanned.map(store => {
+                      const dm = allDms.find(d => d.stores.some(s => s.id === store.id))
+                      return (
+                        <div key={store.id} className="flex items-center justify-between bg-gray-900 rounded-xl px-3 py-2.5">
+                          <div className="min-w-0">
+                            <p className="text-sm text-white font-medium truncate">{store.address}</p>
+                            {dm && <p className="text-[10px] text-gray-500">DM: {dm.name}</p>}
+                          </div>
+                          <span className="text-[10px] font-bold text-red-400 bg-red-900/40 px-2 py-0.5 rounded-full shrink-0">UNMANNED</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* ═══ ORG / MARKET LEVEL — DM Table ═══ */}
             {(level === 'org' || level === 'market') && (

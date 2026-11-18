@@ -3,7 +3,7 @@ import { getSession } from '@/lib/auth'
 import { query, queryOne } from '@/lib/db'
 
 const CST = 'America/Chicago'
-const ALLOWED = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer', 'prospect']
+const ALLOWED = ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer', 'prospect']
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -56,19 +56,22 @@ export async function GET(req: NextRequest) {
     ORDER BY ss.shift_date
   `, [employeeId, weekStart, weekEnd])
 
-  // Actual shifts
+  // Actual shifts with breaks
   const shifts = await query<{
     id: string; store_id: string | null; store_address: string | null
     clock_in_at: string; clock_out_at: string | null
     is_manual: boolean; manual_note: string | null
     duration_seconds: number; break_seconds: number
+    breaks: Array<{ id: string; break_start: string; break_end: string | null }> | null
   }>(`
     SELECT s.id, s.store_location_id as store_id, sl.address as store_address,
            s.clock_in_at::text, s.clock_out_at::text,
            s.is_manual, s.manual_note,
            EXTRACT(EPOCH FROM (COALESCE(s.clock_out_at, NOW()) - s.clock_in_at)) as duration_seconds,
            COALESCE((SELECT SUM(EXTRACT(EPOCH FROM (b.break_end - b.break_start)))
-             FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds
+             FROM shift_breaks b WHERE b.shift_id = s.id AND b.break_end IS NOT NULL), 0) as break_seconds,
+           (SELECT json_agg(json_build_object('id', b.id, 'break_start', b.break_start, 'break_end', b.break_end) ORDER BY b.break_start)
+            FROM shift_breaks b WHERE b.shift_id = s.id) as breaks
     FROM shifts s
     LEFT JOIN dm_store_locations sl ON sl.id = s.store_location_id
     WHERE s.user_id = $1

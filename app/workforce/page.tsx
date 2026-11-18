@@ -52,6 +52,13 @@ function fmtShortDate(d: string): string {
 function fmtTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-US', { timeZone: CST, hour: 'numeric', minute: '2-digit', hour12: true })
 }
+function fmtSchedTime(time: string | null): string {
+  if (!time) return ''
+  const [h, m] = time.split(':').map(Number)
+  const ampm = h >= 12 ? 'p' : 'a'
+  const hr = h % 12 || 12
+  return m === 0 ? `${hr}${ampm}` : `${hr}:${String(m).padStart(2, '0')}${ampm}`
+}
 function fmtWeekLabel(start: string, end: string): string {
   return `${fmtShortDate(start)} – ${fmtShortDate(end)}, ${new Date(end + 'T12:00:00').getFullYear()}`
 }
@@ -88,6 +95,10 @@ export default function WorkforcePage() {
   const [editIn, setEditIn] = useState('')
   const [editOut, setEditOut] = useState('')
   const [editNote, setEditNote] = useState('')
+  const [editBreaks, setEditBreaks] = useState<Array<{ id: string; start: string; end: string }>>([])
+  const [editBreaksLoading, setEditBreaksLoading] = useState(false)
+  const [editIsNew, setEditIsNew] = useState(false) // true = adding new shift, false = editing existing
+  const [editStoreId, setEditStoreId] = useState('')
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -122,16 +133,18 @@ export default function WorkforcePage() {
 
   useEffect(() => { if (session) loadData() }, [session, loadData])
 
-  // Auto-set level for DMs
+  // Auto-set level for DMs and employees
   useEffect(() => {
-    if (session?.role === 'manager' && allDms.length > 0) {
+    if (!session || allDms.length === 0) return
+    if (session.role === 'manager') {
       const myDm = allDms.find(d => d.id === session.id)
-      if (myDm) {
-        setSelectedDm(session.id)
-        setLevel('dm')
-      }
+      if (myDm) { setSelectedDm(session.id); setLevel('dm') }
+    } else if (session.role === 'employee') {
+      // Employees see their DM's view — find which DM they're under
+      const myDm = allDms.find(d => employees.some(e => e.id === session.id && e.manager_id === d.id))
+      if (myDm) { setSelectedDm(myDm.id); setLevel('dm') }
     }
-  }, [session, allDms])
+  }, [session, allDms, employees])
 
   // Filtered data based on current level
   const currentMarket = markets.find(m => m.name === selectedMarket)
@@ -231,22 +244,84 @@ export default function WorkforcePage() {
   }
 
   // Time edit
-  function openTimeEdit(empId: string, shiftId: string, clockIn: string, clockOut: string | null) {
+  function openAddTime(empId: string, day: string) {
+    setEditEmployeeId(empId)
+    setEditShiftId(null)
+    setEditIsNew(true)
+    setEditIn(day + 'T09:00')
+    setEditOut(day + 'T17:00')
+    setEditNote('')
+    setEditError('')
+    setEditBreaks([])
+    setEditBreaksLoading(false)
+    setEditStoreId('')
+  }
+
+  async function openTimeEdit(empId: string, shiftId: string, clockIn: string, clockOut: string | null) {
     setEditEmployeeId(empId)
     setEditShiftId(shiftId)
+    setEditIsNew(false)
+    setEditStoreId('')
     const inLocal = new Date(clockIn).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16)
     const outLocal = clockOut ? new Date(clockOut).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16) : ''
     setEditIn(inLocal)
     setEditOut(outLocal)
     setEditNote('')
     setEditError('')
+    // Load breaks from the shift data we already have, or fetch if needed
+    setEditBreaks([])
+    setEditBreaksLoading(true)
+    try {
+      const res = await fetch(`/api/workforce/employee?id=${empId}&weekStart=${monday}&weekEnd=${sunday}`)
+      if (res.ok) {
+        const d = await res.json()
+        const shift = d.shifts?.find((s: { id: string }) => s.id === shiftId)
+        if (shift?.breaks) {
+          setEditBreaks(shift.breaks.map((b: { id: string; break_start: string; break_end: string | null }) => ({
+            id: b.id,
+            start: b.break_start ? new Date(b.break_start).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16) : '',
+            end: b.break_end ? new Date(b.break_end).toLocaleString('sv-SE', { timeZone: CST }).slice(0, 16) : '',
+          })))
+        }
+      }
+    } catch { /* ignore */ }
+    setEditBreaksLoading(false)
   }
 
   async function saveTimeEdit() {
-    if (!editShiftId || !editNote.trim()) { setEditError('Reason is required'); return }
+    if (!editNote.trim()) { setEditError('Reason is required'); return }
     setEditSaving(true)
     setEditError('')
     try {
+      if (editIsNew) {
+        // Create new shift
+        if (!editEmployeeId || !editIn) { setEditError('Clock in time is required'); setEditSaving(false); return }
+        const res = await fetch('/api/shifts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: editEmployeeId,
+            clockIn: new Date(editIn).toISOString(),
+            clockOut: editOut ? new Date(editOut).toISOString() : null,
+            note: editNote.trim(),
+            storeId: editStoreId || undefined,
+          }),
+        })
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}))
+          setEditError(d.error ?? 'Failed to add time entry')
+          setEditSaving(false)
+          return
+        }
+        setEditEmployeeId(null)
+        loadData()
+        setEditSaving(false)
+        return
+      }
+
+      if (!editShiftId) { setEditError('No shift selected'); setEditSaving(false); return }
+
+      // Save shift time edits
       const res = await fetch('/api/shifts', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -257,14 +332,39 @@ export default function WorkforcePage() {
           note: editNote.trim(),
         }),
       })
-      if (res.ok) {
-        setEditEmployeeId(null)
-        setEditShiftId(null)
-        loadData()
-      } else {
+      if (!res.ok) {
         const d = await res.json().catch(() => ({}))
         setEditError(d.error ?? 'Save failed')
+        return
       }
+
+      // Save break edits — delete existing + re-insert
+      for (const brk of editBreaks) {
+        if (!brk.id.startsWith('new_') && !brk.start) {
+          // Existing break removed — delete it
+          await fetch('/api/shifts/breaks', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ breakId: brk.id }),
+          }).catch(() => {})
+        } else if (brk.start) {
+          // Update or create break
+          await fetch('/api/shifts/breaks', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shiftId: editShiftId,
+              breakId: brk.id.startsWith('new_') ? undefined : brk.id,
+              breakStart: new Date(brk.start).toISOString(),
+              breakEnd: brk.end ? new Date(brk.end).toISOString() : null,
+            }),
+          }).catch(() => {})
+        }
+      }
+
+      setEditEmployeeId(null)
+      setEditShiftId(null)
+      loadData()
     } finally { setEditSaving(false) }
   }
 
@@ -333,7 +433,7 @@ export default function WorkforcePage() {
         </div>
 
         {/* Filter dropdowns */}
-        {session.role !== 'manager' && (
+        {session.role !== 'manager' && session.role !== 'employee' && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <select value={selectedMarket} onChange={e => { drillTo(e.target.value ? 'market' : 'org', { market: e.target.value, dm: '', store: '', employee: '' }) }} className={inputCls}>
               <option value="">All markets</option>
@@ -377,21 +477,21 @@ export default function WorkforcePage() {
           <>
             {/* Summary cards */}
             <div className="grid grid-cols-3 gap-3 mb-5">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
+              <button onClick={() => router.push('/store-locations')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Stores Open</p>
                 <p className="text-xl font-bold text-white">{summaryStores.open} <span className="text-gray-500 text-sm font-normal">of {summaryStores.total}</span></p>
                 {summaryStores.closed > 0 && <p className="text-[10px] text-gray-500">{summaryStores.closed} closed today</p>}
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
+              </button>
+              <button onClick={() => router.push('/staff-schedule')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Scheduled Hours</p>
                 <p className="text-xl font-bold text-white">{totalScheduledHours.toLocaleString()}</p>
                 <p className="text-[10px] text-gray-500">{totalEmployees} employees</p>
-              </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center">
+              </button>
+              <button onClick={() => router.push('/flags')} className="bg-gray-900 border border-gray-800 rounded-2xl p-3 text-center hover:border-violet-500/40 transition-colors">
                 <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Time Exceptions</p>
                 <p className="text-xl font-bold text-white">{totalExceptions}</p>
-                <p className="text-[10px] text-gray-500">manual entries</p>
-              </div>
+                <p className="text-[10px] text-violet-400">Tap to view</p>
+              </button>
             </div>
 
             {/* ═══ ORG / MARKET LEVEL — DM Table ═══ */}
@@ -537,9 +637,17 @@ export default function WorkforcePage() {
                               <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''}`}>
                                 {sched && sched.start_time ? (
                                   <div>
-                                    <p className="text-[10px] text-gray-300">{sched.start_time.slice(0, 5)}–{sched.end_time?.slice(0, 5)}</p>
+                                    <p className="text-[10px] text-gray-300">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
                                     {worked && <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>}
-                                    {!worked && day <= todayStr && <p className="text-[10px] text-red-400">No show</p>}
+                                    {!worked && day <= todayStr && (
+                                      <div>
+                                        <p className="text-[10px] text-red-400">No show</p>
+                                        {canEdit && (
+                                          <button onClick={(e) => { e.stopPropagation(); openAddTime(emp.id, day) }}
+                                            className="text-[9px] text-violet-400 hover:text-violet-300">+ Add</button>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 ) : worked ? (
                                   <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
@@ -596,10 +704,20 @@ export default function WorkforcePage() {
                         {sched && sched.start_time ? (
                           <div>
                             <p className="text-xs text-gray-500 uppercase mb-0.5">Scheduled</p>
-                            <p className="text-sm font-semibold text-white">{sched.start_time.slice(0, 5)}–{sched.end_time?.slice(0, 5)}</p>
+                            <p className="text-sm font-semibold text-white">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
                             {sched.store_address && <p className="text-[10px] text-gray-500 truncate">{sched.store_address.split(' ').slice(0, 3).join(' ')}</p>}
                           </div>
-                        ) : <p className="text-xs text-gray-600">Off</p>}
+                        ) : (
+                          <div>
+                            <p className="text-xs text-gray-600">Off</p>
+                            {canEdit && day <= todayStr && (
+                              <button onClick={(e) => { e.stopPropagation(); openAddTime(selectedEmployee, day) }}
+                                className="mt-1 text-[10px] text-violet-400 hover:text-violet-300 font-semibold">
+                                + Add Time
+                              </button>
+                            )}
+                          </div>
+                        )}
                         {dayShifts.map(sh => (
                           <div key={sh.id} className="mt-2 pt-2 border-t border-gray-800">
                             <p className="text-xs text-gray-500 uppercase mb-0.5">Worked</p>
@@ -625,10 +743,10 @@ export default function WorkforcePage() {
       </div>
 
       {/* Time Edit Modal */}
-      {editEmployeeId && editShiftId && (
+      {editEmployeeId && (editShiftId || editIsNew) && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setEditEmployeeId(null)}>
           <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-md border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-bold text-white mb-4">Edit Time</h2>
+            <h2 className="text-lg font-bold text-white mb-4">{editIsNew ? 'Add Time Entry' : 'Edit Time'}</h2>
             <div className="space-y-3">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Clock In</label>
@@ -638,6 +756,53 @@ export default function WorkforcePage() {
                 <label className="block text-xs text-gray-500 mb-1">Clock Out</label>
                 <input type="datetime-local" value={editOut} onChange={e => setEditOut(e.target.value)} className={`w-full ${inputCls}`} />
               </div>
+              {/* Store (for new entries) */}
+              {editIsNew && allStores.length > 0 && (
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Store</label>
+                  <select value={editStoreId} onChange={e => setEditStoreId(e.target.value)} className={`w-full ${inputCls}`}>
+                    <option value="">Select store</option>
+                    {(selectedDm ? (allDms.find(d => d.id === selectedDm)?.stores ?? allStores) : allStores).map(s => (
+                      <option key={s.id} value={s.id}>{s.address}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Breaks */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs text-gray-500">Breaks</label>
+                  <button type="button" onClick={() => setEditBreaks(prev => [...prev, { id: `new_${Date.now()}`, start: '', end: '' }])}
+                    className="text-[10px] text-violet-400 hover:text-violet-300 font-semibold">+ Add Break</button>
+                </div>
+                {editBreaksLoading ? (
+                  <p className="text-xs text-gray-600">Loading breaks...</p>
+                ) : editBreaks.length === 0 ? (
+                  <p className="text-xs text-gray-600">No breaks recorded</p>
+                ) : (
+                  <div className="space-y-2">
+                    {editBreaks.map((brk, i) => (
+                      <div key={brk.id} className="flex items-center gap-2">
+                        <div className="flex-1">
+                          <input type="datetime-local" value={brk.start}
+                            onChange={e => setEditBreaks(prev => prev.map((b, j) => j === i ? { ...b, start: e.target.value } : b))}
+                            className={`w-full ${inputCls} text-xs`} placeholder="Break start" />
+                        </div>
+                        <span className="text-gray-600 text-xs">to</span>
+                        <div className="flex-1">
+                          <input type="datetime-local" value={brk.end}
+                            onChange={e => setEditBreaks(prev => prev.map((b, j) => j === i ? { ...b, end: e.target.value } : b))}
+                            className={`w-full ${inputCls} text-xs`} placeholder="Break end" />
+                        </div>
+                        <button type="button" onClick={() => setEditBreaks(prev => prev.filter((_, j) => j !== i))}
+                          className="text-red-400 hover:text-red-300 text-xs shrink-0">Remove</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Reason <span className="text-red-400">*</span></label>
                 <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2} placeholder="Required — reason for edit"

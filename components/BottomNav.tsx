@@ -47,7 +47,7 @@ const ALL_FEATURES: Feature[] = [
   { href: '/my-schedule',     label: 'My Schedule',      short: 'Schedule',  Icon: ScheduleIcon,       show: isProspectOrRetail },
   { href: '/staff-schedule',  label: 'Store Schedule',   short: 'Shifts',    Icon: StaffSchedIcon,     show: r => isProspectOrRetail(r) && r !== 'employee' },
   { href: '/tasks',           label: 'Tasks',            short: 'Tasks',     Icon: TasksIcon,          show: isProspectOrRetail },
-  { href: '/workforce',       label: 'Workforce',         short: 'Workforce', Icon: TeamIcon,           show: r => isProspectOrRetail(r) && r !== 'employee' },
+  { href: '/workforce',       label: 'Workforce',         short: 'Workforce', Icon: TeamIcon,           show: isProspectOrRetail },
   { href: '/coverage',        label: 'Live Coverage',     short: 'Coverage',  Icon: TeamIcon,           show: r => isProspectOrRetail(r) && r !== 'employee' },
   { href: '/checklist',       label: 'Checklist',        short: 'Checklist', Icon: ChecklistIcon,      show: isProspectOrRetail },
   { href: '/map',             label: 'Live Map',         short: 'Map',       Icon: MapIcon,            show: r => r === 'sales_director' || r === 'owner' || r === 'developer' || r === 'prospect' },

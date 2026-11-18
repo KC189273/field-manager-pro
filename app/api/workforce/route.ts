@@ -4,7 +4,7 @@ import { query } from '@/lib/db'
 import { getOrgFilter } from '@/lib/org'
 
 const CST = 'America/Chicago'
-const ALLOWED = ['manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer', 'prospect']
+const ALLOWED = ['employee', 'manager', 'ops_field_leader', 'ops_manager', 'owner', 'sales_director', 'developer', 'prospect']
 
 // Extract market (state) from store address
 function extractMarket(address: string): string {
@@ -36,9 +36,16 @@ export async function GET(req: NextRequest) {
     ? `AND sl.org_id = '${(orgFilter.orgId as string).replace(/'/g, "''")}'`
     : ''
 
-  // DMs only see their own team
-  const dmWhere = session.role === 'manager'
-    ? `AND ms.manager_id = '${session.id.replace(/'/g, "''")}'`
+  // DMs see their own team, employees see their DM's team
+  let dmScopeId: string | null = null
+  if (session.role === 'manager') {
+    dmScopeId = session.id
+  } else if (session.role === 'employee') {
+    const emp = await query<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [session.id])
+    dmScopeId = emp[0]?.manager_id ?? null
+  }
+  const dmWhere = dmScopeId
+    ? `AND ms.manager_id = '${dmScopeId.replace(/'/g, "''")}'`
     : ''
 
   try {
@@ -73,7 +80,7 @@ export async function GET(req: NextRequest) {
       WHERE u.role = 'employee' AND u.is_active = TRUE
         AND (u.is_hidden = FALSE OR u.is_hidden IS NULL)
         ${orgWhere}
-        ${session.role === 'manager' ? `AND u.manager_id = '${session.id.replace(/'/g, "''")}'` : ''}
+        ${dmScopeId ? `AND u.manager_id = '${dmScopeId.replace(/'/g, "''")}'` : ''}
       ORDER BY u.full_name
     `)
 
@@ -115,7 +122,7 @@ export async function GET(req: NextRequest) {
       WHERE (s.clock_in_at AT TIME ZONE $3)::date >= $1::date
         AND (s.clock_in_at AT TIME ZONE $3)::date <= $2::date
         ${orgWhere.replace(/u\./g, 'u.')}
-        ${session.role === 'manager' ? `AND u.manager_id = '${session.id.replace(/'/g, "''")}'` : ''}
+        ${dmScopeId ? `AND u.manager_id = '${dmScopeId.replace(/'/g, "''")}'` : ''}
       ORDER BY s.clock_in_at
     `, [weekStart, weekEnd, CST])
 

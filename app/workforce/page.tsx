@@ -12,8 +12,9 @@ interface Dm { id: string; name: string; stores: DmStore[] }
 interface Market { name: string; storeIds: string[]; dmIds: string[] }
 
 interface Schedule {
-  employee_id: string; store_id: string | null; store_address: string | null
+  id?: string; employee_id: string; store_id: string | null; store_address: string | null
   shift_date: string; start_time: string | null; end_time: string | null
+  break_minutes?: number | null
 }
 interface Shift {
   id: string; user_id: string; store_id: string | null; store_address: string | null
@@ -118,6 +119,16 @@ export default function WorkforcePage() {
   const [editIsNew, setEditIsNew] = useState(false) // true = adding new shift, false = editing existing
   const [editStoreId, setEditStoreId] = useState('')
   const [editScheduleInfo, setEditScheduleInfo] = useState<{ start: string; end: string; store: string } | null>(null)
+
+  // Schedule editing modal
+  const [schedModal, setSchedModal] = useState<{
+    mode: 'create' | 'edit'; shiftId?: string
+    employeeId: string; storeId: string; date: string
+    startTime: string; endTime: string; breakMin: string
+  } | null>(null)
+  const [schedSaving, setSchedSaving] = useState(false)
+  const [schedError, setSchedError] = useState('')
+  const [publishing, setPublishing] = useState(false)
   const [editSaving, setEditSaving] = useState(false)
   const [editError, setEditError] = useState('')
 
@@ -262,6 +273,74 @@ export default function WorkforcePage() {
   }, [search, employees, allStores, allDms])
 
   // Navigation helpers
+  // Schedule CRUD
+  function openCreateShift(empId: string, storeId: string, day: string) {
+    setSchedModal({ mode: 'create', employeeId: empId, storeId, date: day, startTime: '09:00', endTime: '17:00', breakMin: '0' })
+    setSchedError('')
+  }
+  function openEditShift(shiftId: string, empId: string, storeId: string, day: string, start: string, end: string, breakMin: number) {
+    setSchedModal({ mode: 'edit', shiftId, employeeId: empId, storeId, date: day, startTime: start.slice(0, 5), endTime: end.slice(0, 5), breakMin: String(breakMin || 0) })
+    setSchedError('')
+  }
+  async function saveSchedule() {
+    if (!schedModal) return
+    setSchedSaving(true); setSchedError('')
+    try {
+      if (schedModal.mode === 'create') {
+        const res = await fetch('/api/staff-schedule', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            storeId: schedModal.storeId, employeeId: schedModal.employeeId,
+            shiftDate: schedModal.date, startTime: schedModal.startTime, endTime: schedModal.endTime,
+            breakMinutes: parseInt(schedModal.breakMin) || 0,
+          }),
+        })
+        if (!res.ok) { const d = await res.json().catch(() => ({})); setSchedError(d.error ?? 'Failed'); setSchedSaving(false); return }
+      } else if (schedModal.shiftId) {
+        const res = await fetch('/api/staff-schedule', {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shiftId: schedModal.shiftId,
+            startTime: schedModal.startTime, endTime: schedModal.endTime,
+            breakMinutes: parseInt(schedModal.breakMin) || 0,
+          }),
+        })
+        if (!res.ok) { const d = await res.json().catch(() => ({})); setSchedError(d.error ?? 'Failed'); setSchedSaving(false); return }
+      }
+      setSchedModal(null); loadData()
+    } finally { setSchedSaving(false) }
+  }
+  async function deleteSchedule() {
+    if (!schedModal?.shiftId) return
+    if (!confirm('Delete this scheduled shift?')) return
+    setSchedSaving(true)
+    await fetch('/api/staff-schedule', {
+      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ shiftId: schedModal.shiftId }),
+    })
+    setSchedModal(null); loadData(); setSchedSaving(false)
+  }
+  async function publishWeek() {
+    if (!selectedStore) return
+    if (!confirm(`Publish this week's schedule for ${currentStore?.address}? Employees will be notified.`)) return
+    setPublishing(true)
+    const res = await fetch('/api/staff-schedule/publish', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: selectedStore, weekStart: monday }),
+    })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error ?? 'Publish failed') }
+    setPublishing(false); loadData()
+  }
+  async function copyPrevWeek() {
+    if (!selectedStore) return
+    if (!confirm('Copy last week\'s schedule to this week? Existing shifts won\'t be affected.')) return
+    await fetch('/api/staff-schedule/copy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ storeId: selectedStore, targetWeekStart: monday }),
+    })
+    loadData()
+  }
+
   function drillTo(newLevel: Level, opts: { market?: string; dm?: string; store?: string; employee?: string } = {}) {
     if (opts.market !== undefined) setSelectedMarket(opts.market)
     if (opts.dm !== undefined) setSelectedDm(opts.dm)
@@ -706,6 +785,19 @@ export default function WorkforcePage() {
                       return todaySchedHere || todayShiftHere
                     }).length} here today · {storeEmployees.length} team total
                   </p>
+                  {/* Schedule actions */}
+                  {canEdit && (
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={publishWeek} disabled={publishing}
+                        className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white transition-colors">
+                        {publishing ? 'Publishing…' : 'Publish Week'}
+                      </button>
+                      <button onClick={copyPrevWeek}
+                        className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors">
+                        Copy Last Week
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -735,8 +827,20 @@ export default function WorkforcePage() {
                             const worked = dayShifts.length > 0
                             const hours = dayShifts.reduce((s, sh) => s + sh.duration_seconds / 3600, 0)
                             const isActive = dayShifts.some(s => !s.clock_out_at)
+                            const schedId = sched?.id
                             return (
-                              <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''}`}>
+                              <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''} ${canEdit ? 'cursor-pointer hover:bg-gray-800/50' : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (!canEdit) return
+                                  if (sched && sched.start_time) {
+                                    // Edit existing schedule
+                                    openEditShift(schedId ?? '', emp.id, selectedStore, day, sched.start_time, sched.end_time ?? '', sched.break_minutes ?? 0)
+                                  } else {
+                                    // Create new schedule
+                                    openCreateShift(emp.id, selectedStore, day)
+                                  }
+                                }}>
                                 {sched && sched.start_time ? (
                                   <div>
                                     <p className="text-[10px] text-gray-300">{fmtSchedTime(sched.start_time)}–{fmtSchedTime(sched.end_time)}</p>
@@ -745,8 +849,8 @@ export default function WorkforcePage() {
                                       <div>
                                         <p className="text-[10px] text-red-400">No show</p>
                                         {canEdit && (
-                                          <button onClick={(e) => { e.stopPropagation(); openAddTime(emp.id, day) }}
-                                            className="text-[9px] text-violet-400 hover:text-violet-300">+ Add</button>
+                                          <button onClick={(e2) => { e2.stopPropagation(); openAddTime(emp.id, day) }}
+                                            className="text-[9px] text-violet-400 hover:text-violet-300">+ Add Time</button>
                                         )}
                                       </div>
                                     )}
@@ -754,7 +858,7 @@ export default function WorkforcePage() {
                                 ) : worked ? (
                                   <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
                                 ) : (
-                                  <span className="text-gray-700 text-xs">—</span>
+                                  <span className={`text-xs ${canEdit ? 'text-gray-600' : 'text-gray-700'}`}>{canEdit ? '+' : '—'}</span>
                                 )}
                               </td>
                             )
@@ -928,6 +1032,57 @@ export default function WorkforcePage() {
               </button>
               <button onClick={() => setEditEmployeeId(null)}
                 className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold py-2.5 rounded-xl text-sm">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule Edit Modal */}
+      {schedModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end sm:items-center justify-center p-0 sm:p-4" onClick={() => setSchedModal(null)}>
+          <div className="bg-gray-900 rounded-t-3xl sm:rounded-2xl w-full sm:max-w-sm border border-gray-800 p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-bold text-white mb-1">{schedModal.mode === 'create' ? 'Add Shift' : 'Edit Shift'}</h2>
+            <p className="text-xs text-gray-500 mb-4">
+              {employees.find(e => e.id === schedModal.employeeId)?.full_name} · {new Date(schedModal.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+            </p>
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Start Time</label>
+                  <input type="time" value={schedModal.startTime}
+                    onChange={e => setSchedModal(m => m ? { ...m, startTime: e.target.value } : m)}
+                    className={inputCls + ' w-full'} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">End Time</label>
+                  <input type="time" value={schedModal.endTime}
+                    onChange={e => setSchedModal(m => m ? { ...m, endTime: e.target.value } : m)}
+                    className={inputCls + ' w-full'} />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Break (minutes)</label>
+                <input type="number" min="0" value={schedModal.breakMin}
+                  onChange={e => setSchedModal(m => m ? { ...m, breakMin: e.target.value } : m)}
+                  className={inputCls + ' w-full'} placeholder="0" />
+              </div>
+              {schedError && <p className="text-xs text-red-400">{schedError}</p>}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={saveSchedule} disabled={schedSaving}
+                className="flex-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-semibold py-2.5 rounded-xl text-sm">
+                {schedSaving ? 'Saving…' : schedModal.mode === 'create' ? 'Add Shift' : 'Save Changes'}
+              </button>
+              {schedModal.mode === 'edit' && schedModal.shiftId && (
+                <button onClick={deleteSchedule} disabled={schedSaving}
+                  className="px-4 py-2.5 bg-red-900/40 hover:bg-red-900/60 border border-red-700/50 text-red-400 font-semibold rounded-xl text-sm">
+                  Delete
+                </button>
+              )}
+              <button onClick={() => setSchedModal(null)}
+                className="px-4 py-2.5 bg-gray-800 hover:bg-gray-700 text-gray-300 font-semibold rounded-xl text-sm">
                 Cancel
               </button>
             </div>

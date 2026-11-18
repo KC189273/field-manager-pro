@@ -86,11 +86,11 @@ export async function GET(req: NextRequest) {
 
     // Get scheduled shifts for the week
     const schedules = await query<{
-      employee_id: string; store_id: string | null; store_address: string | null
+      id: string; employee_id: string; store_id: string | null; store_address: string | null
       shift_date: string; start_time: string | null; end_time: string | null
       break_minutes: number | null
     }>(`
-      SELECT ss.employee_id, ss.store_location_id as store_id,
+      SELECT ss.id, ss.employee_id, ss.store_location_id as store_id,
              sl.address as store_address,
              ss.shift_date::text, ss.start_time::text, ss.end_time::text,
              ss.break_minutes

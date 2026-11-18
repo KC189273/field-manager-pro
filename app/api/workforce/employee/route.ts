@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'id, weekStart, weekEnd required' }, { status: 400 })
   }
 
+  try {
   // DMs can only view their direct reports
   if (session.role === 'manager') {
     const emp = await queryOne<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [employeeId])
@@ -85,9 +86,9 @@ export async function GET(req: NextRequest) {
       SELECT DISTINCT u.full_name FROM shifts s
       JOIN users u ON u.id = s.user_id
       WHERE s.store_location_id = $1 AND s.user_id != $2
-        AND (s.clock_in_at AT TIME ZONE $5)::date = $3::date
+        AND (s.clock_in_at AT TIME ZONE $4)::date = $3::date
       ORDER BY u.full_name LIMIT 5
-    `, [shift.store_id, employeeId, shiftDate, employeeId, CST])
+    `, [shift.store_id, employeeId, shiftDate, CST])
     coworkersByDay.set(shiftDate, coworkers.map(c => c.full_name))
   }
 
@@ -97,4 +98,8 @@ export async function GET(req: NextRequest) {
     shifts,
     coworkers: Object.fromEntries(coworkersByDay),
   })
+  } catch (err) {
+    console.error('Workforce employee error:', err)
+    return NextResponse.json({ error: String(err) }, { status: 500 })
+  }
 }

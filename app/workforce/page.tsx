@@ -164,14 +164,10 @@ export default function WorkforcePage() {
 
   useEffect(() => { if (session) loadData() }, [session, loadData])
 
-  // Auto-set level for DMs and employees
+  // Auto-set level for employees only (DMs see full org)
   useEffect(() => {
     if (!session || allDms.length === 0) return
-    if (session.role === 'manager') {
-      const myDm = allDms.find(d => d.id === session.id)
-      if (myDm) { setSelectedDm(session.id); setLevel('dm') }
-    } else if (session.role === 'employee') {
-      // Employees see their DM's view — find which DM they're under
+    if (session.role === 'employee') {
       const myDm = allDms.find(d => employees.some(e => e.id === session.id && e.manager_id === d.id))
       if (myDm) { setSelectedDm(myDm.id); setLevel('dm') }
     }
@@ -497,7 +493,20 @@ export default function WorkforcePage() {
 
   if (!session) return null
 
-  const canEdit = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(session.role)
+  const role = session.role
+  const sessionId = session.id
+  const isEditRole = ['manager', 'ops_manager', 'ops_field_leader', 'owner', 'sales_director', 'developer'].includes(role)
+  // DMs can only edit employees at their own stores
+  const myStoreIds = role === 'manager' ? new Set((allDms.find(d => d.id === sessionId)?.stores ?? []).map(s => s.id)) : null
+  const myEmployeeIds = role === 'manager' ? new Set(employees.filter(e => e.manager_id === sessionId).map(e => e.id)) : null
+  function canEdit(storeId?: string, empId?: string): boolean {
+    if (!isEditRole) return false
+    if (role !== 'manager') return true // ops+ can edit everything
+    // DMs: check if it's their store and their employee
+    if (storeId && myStoreIds && !myStoreIds.has(storeId)) return false
+    if (empId && myEmployeeIds && !myEmployeeIds.has(empId)) return false
+    return true
+  }
 
   // Helper: get shifts for an employee on a day
   function empShiftsForDay(empId: string, day: string): Shift[] {
@@ -560,7 +569,7 @@ export default function WorkforcePage() {
         </div>
 
         {/* Filter dropdowns */}
-        {session.role !== 'manager' && session.role !== 'employee' && (
+        {session.role !== 'employee' && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
             <button onClick={() => { drillTo('org', { market: '', dm: '', store: '', employee: '' }); setWeekOffset(0) }}
               className="bg-gray-800 border border-gray-700 hover:border-violet-500/40 rounded-xl px-3 py-2 text-xs text-gray-400 hover:text-white font-medium transition-colors col-span-2 sm:col-span-1">
@@ -800,7 +809,7 @@ export default function WorkforcePage() {
                   )}
 
                   {/* Schedule actions */}
-                  {canEdit && (
+                  {canEdit(selectedStore) && (
                     <div className="flex gap-2 mt-2">
                       <button onClick={publishWeek} disabled={publishing}
                         className="text-[10px] font-semibold px-2.5 py-1 rounded-lg bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white transition-colors">
@@ -844,10 +853,10 @@ export default function WorkforcePage() {
                             const isActive = dayShifts.some(s => !s.clock_out_at)
                             const schedId = sched?.id
                             return (
-                              <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''} ${canEdit ? 'cursor-pointer hover:bg-gray-800/50' : ''}`}
+                              <td key={day} className={`text-center px-2 py-2 ${day === todayStr ? 'bg-violet-500/5' : ''} ${canEdit(selectedStore, emp.id) ? 'cursor-pointer hover:bg-gray-800/50' : ''}`}
                                 onClick={(e) => {
                                   e.stopPropagation()
-                                  if (!canEdit) return
+                                  if (!canEdit(selectedStore, emp.id)) return
                                   if (sched && sched.start_time) {
                                     // Edit existing schedule
                                     openEditShift(schedId ?? '', emp.id, selectedStore, day, sched.start_time, sched.end_time ?? '', sched.break_minutes ?? 0)
@@ -870,7 +879,7 @@ export default function WorkforcePage() {
                                       {!worked && day <= todayStr && (
                                         <div>
                                           <p className="text-[10px] text-red-400">No show</p>
-                                          {canEdit && (
+                                          {canEdit(selectedStore, emp.id) && (
                                             <button onClick={(e2) => { e2.stopPropagation(); openAddTime(emp.id, day) }}
                                               className="text-[9px] text-violet-400 hover:text-violet-300">+ Add Time</button>
                                           )}
@@ -880,7 +889,7 @@ export default function WorkforcePage() {
                                   ) : worked ? (
                                     <p className="text-[10px] text-green-400">{hours.toFixed(1)}h{isActive ? ' ●' : ''}</p>
                                   ) : (
-                                    <span className={`text-xs ${canEdit ? 'text-gray-600' : 'text-gray-700'}`}>{canEdit ? '+' : '—'}</span>
+                                    <span className={`text-xs ${canEdit(selectedStore, emp.id) ? 'text-gray-600' : 'text-gray-700'}`}>{canEdit(selectedStore, emp.id) ? '+' : '—'}</span>
                                   )
                                 )}
                               </td>
@@ -941,7 +950,7 @@ export default function WorkforcePage() {
                         ) : (
                           <div>
                             <p className="text-xs text-gray-600">Off</p>
-                            {canEdit && day <= todayStr && (
+                            {canEdit(undefined, selectedEmployee) && day <= todayStr && (
                               <button onClick={(e) => { e.stopPropagation(); openAddTime(selectedEmployee, day) }}
                                 className="mt-1 text-[10px] text-violet-400 hover:text-violet-300 font-semibold">
                                 + Add Time
@@ -955,7 +964,7 @@ export default function WorkforcePage() {
                             <p className="text-xs text-white">In: <span className="font-semibold">{fmtTime(sh.clock_in_at)}</span></p>
                             <p className="text-xs text-white">Out: <span className="font-semibold">{sh.clock_out_at ? fmtTime(sh.clock_out_at) : 'On shift'}</span></p>
                             <p className="text-[10px] text-gray-500">{(sh.duration_seconds / 3600).toFixed(1)}h</p>
-                            {canEdit && (
+                            {canEdit(sh.store_id ?? undefined, selectedEmployee) && (
                               <button onClick={(e) => { e.stopPropagation(); openTimeEdit(selectedEmployee, sh.id, sh.clock_in_at, sh.clock_out_at) }}
                                 className="mt-1 text-[10px] text-violet-400 hover:text-violet-300 font-semibold">
                                 Edit Time

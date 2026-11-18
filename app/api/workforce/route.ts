@@ -36,11 +36,10 @@ export async function GET(req: NextRequest) {
     ? `AND sl.org_id = '${(orgFilter.orgId as string).replace(/'/g, "''")}'`
     : ''
 
-  // DMs see their own team, employees see their DM's team
+  // DMs see all org data (can only EDIT their own district)
+  // Employees see only their DM's team
   let dmScopeId: string | null = null
-  if (session.role === 'manager') {
-    dmScopeId = session.id
-  } else if (session.role === 'employee') {
+  if (session.role === 'employee') {
     const emp = await query<{ manager_id: string | null }>(`SELECT manager_id FROM users WHERE id = $1`, [session.id])
     dmScopeId = emp[0]?.manager_id ?? null
   }

@@ -99,6 +99,10 @@ export default function WorkforcePage() {
   const [closures, setClosures] = useState<Array<{ store_id: string; closure_date: string }>>([])
   const [coveredStoreIds, setCoveredStoreIds] = useState<Set<string>>(new Set())
   const [showUnmanned, setShowUnmanned] = useState(false)
+  const [currentPeriodId, setCurrentPeriodId] = useState<string | null>(null)
+  const [lockCount, setLockCount] = useState(0)
+  const [totalDmCount, setTotalDmCount] = useState(0)
+  const [locking, setLocking] = useState(false)
 
   // Navigation
   const [level, setLevel] = useState<Level>('org')
@@ -159,6 +163,17 @@ export default function WorkforcePage() {
       setExceptions(d.exceptions ?? {})
       setClosures(d.closures ?? [])
       setCoveredStoreIds(new Set(d.coveredStoreIds ?? []))
+      // Load payroll lock status
+      if (['ops_manager', 'owner', 'developer'].includes(session?.role ?? '')) {
+        fetch('/api/payroll').then(r => r.json()).then(pd => {
+          const periods = pd.periods ?? []
+          if (periods.length > 0) {
+            setCurrentPeriodId(periods[0].id)
+            setLockCount(periods[0].dmApprovals?.length ?? 0)
+            setTotalDmCount(periods[0].totalDMs ?? 0)
+          }
+        }).catch(() => {})
+      }
     } finally { setLoading(false) }
   }, [monday, sunday])
 
@@ -270,6 +285,23 @@ export default function WorkforcePage() {
 
   // Navigation helpers
   // Schedule CRUD
+  async function toggleLockAll(action: 'lock_all' | 'unlock_all') {
+    if (!currentPeriodId) return
+    const label = action === 'lock_all' ? 'Lock' : 'Unlock'
+    if (!confirm(`${label} ALL DM timecards for this period?`)) return
+    setLocking(true)
+    await fetch('/api/payroll/lock', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ periodId: currentPeriodId, action }),
+    })
+    // Refresh lock count
+    const pd = await fetch('/api/payroll').then(r => r.json())
+    if (pd.periods?.[0]) {
+      setLockCount(pd.periods[0].dmApprovals?.length ?? 0)
+    }
+    setLocking(false)
+  }
+
   function openCreateShift(empId: string, storeId: string, day: string) {
     setSchedModal({ mode: 'create', employeeId: empId, storeId, date: day, startTime: '09:00', endTime: '17:00', breakMin: '0' })
     setSchedError('')
@@ -639,6 +671,23 @@ export default function WorkforcePage() {
                 <p className="text-[10px] text-violet-400">Tap to review</p>
               </button>
             </div>}
+
+            {/* Timecard lock controls — ops_manager+ */}
+            {['ops_manager', 'owner', 'developer'].includes(role) && currentPeriodId && (
+              <div className="flex items-center gap-2 mb-5">
+                <div className="flex-1 text-xs text-gray-500">
+                  Timecards: <span className={lockCount > 0 ? 'text-green-400 font-semibold' : 'text-amber-400'}>{lockCount} of {totalDmCount} locked</span>
+                </div>
+                <button onClick={() => toggleLockAll('unlock_all')} disabled={locking}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-700/50 hover:bg-amber-700 disabled:opacity-50 text-amber-300 transition-colors">
+                  {locking ? '...' : 'Unlock All'}
+                </button>
+                <button onClick={() => toggleLockAll('lock_all')} disabled={locking}
+                  className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-300 transition-colors">
+                  {locking ? '...' : 'Lock All'}
+                </button>
+              </div>
+            )}
 
             {/* Unmanned stores panel */}
             {showUnmanned && summaryStores.unmanned > 0 && (() => {

@@ -97,6 +97,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN dm_store_locations sl ON sl.id = ss.store_location_id
       WHERE ss.shift_date >= $1::date AND ss.shift_date <= $2::date
         ${storeOrgWhere.replace(/sl\./g, 'sl.')}
+        ${session.role === 'employee' ? `AND EXISTS (SELECT 1 FROM scheduled_shifts_publish ssp WHERE ssp.store_location_id = ss.store_location_id AND ssp.week_start BETWEEN ($1::date - 6) AND ($2::date))` : ''}
       ORDER BY ss.shift_date, ss.start_time
     `, [weekStart, weekEnd])
 

@@ -345,18 +345,24 @@ export async function PATCH(req: NextRequest) {
       oldBreakMinutes: oldShift.break_minutes, newBreakMinutes: breakMinutes ?? oldShift.break_minutes,
     })
 
-    // Notify employee if their shift time changed
+    // Notify employee if their shift time changed — ONLY if schedule is already published
     const targetEmp = employeeId ?? oldShift.employee_id
     if (targetEmp && (startTime || endTime || shiftDate)) {
-      const newDate = shiftDate ?? oldShift.shift_date
-      const dayName = new Date(newDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
-      const fmtT = (t: string) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}` }
-      const newStart = fmtT(startTime ?? oldShift.start_time)
-      const newEnd = fmtT(endTime ?? oldShift.end_time)
-      sendPushToUser(targetEmp, 'Schedule Changed',
-        `${dayName}: ${newStart} – ${newEnd} at ${storeRow?.address?.split(',')[0] || 'your store'}`,
-        'schedule_changed'
-      ).catch(() => {})
+      const shiftWeekDate = shiftDate ?? oldShift.shift_date
+      const weekDay = new Date(shiftWeekDate + 'T12:00:00').getDay()
+      const mondayOffset = weekDay === 0 ? 6 : weekDay - 1
+      const weekMonday = new Date(new Date(shiftWeekDate + 'T12:00:00').getTime() - mondayOffset * 86400000).toLocaleDateString('en-CA')
+      const isPublished = await queryOne(`SELECT 1 FROM scheduled_shifts_publish WHERE store_location_id = $1 AND week_start = $2`, [oldShift.store_location_id, weekMonday])
+      if (isPublished) {
+        const dayName = new Date(shiftWeekDate + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+        const fmtT = (t: string) => { const [h, m] = t.split(':').map(Number); return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}` }
+        const newStart = fmtT(startTime ?? oldShift.start_time)
+        const newEnd = fmtT(endTime ?? oldShift.end_time)
+        sendPushToUser(targetEmp, 'Schedule Changed',
+          `${dayName}: ${newStart} – ${newEnd} at ${storeRow?.address?.split(',')[0] || 'your store'}`,
+          'schedule_changed'
+        ).catch(() => {})
+      }
     }
   }
 
